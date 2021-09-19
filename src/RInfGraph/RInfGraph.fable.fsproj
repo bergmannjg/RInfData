@@ -1,0 +1,19 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Fable.Core" Version="3.3.0" />
+    <PackageReference Include="Fable.Promise" Version="2.0.0" />
+    <PackageReference Include="FSharpx.Collections" Version="2.1.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="Dijkstra.fs" />
+    <Compile Include="Graph.fs" />
+    <Compile Include="Main.fs" />
+  </ItemGroup>
+
+</Project>
