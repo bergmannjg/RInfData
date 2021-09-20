@@ -13,7 +13,6 @@
   <ItemGroup>
     <Compile Include="Dijkstra.fs" />
     <Compile Include="Graph.fs" />
-    <Compile Include="Main.fs" />
   </ItemGroup>
 
 </Project>

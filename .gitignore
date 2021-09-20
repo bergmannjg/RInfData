@@ -13,7 +13,10 @@ bin/
 obj/
 output/
 tmp/
+bundle/
 gh-pages/
+
+package-lock.json
 
 [xyz].json
 [xyz].txt
