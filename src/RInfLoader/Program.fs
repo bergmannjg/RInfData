@@ -65,57 +65,75 @@ let build (ops: OperationalPoint []) (sols: SectionOfLine []) (trackParams: SOLT
     let findOp opId =
         ops |> Array.tryFind (fun op -> op.ID = opId)
 
-    let getMaxSpeed (sol: SectionOfLine) =
-        let trackIds =
-            sol.SOLTracks
-            |> Array.map (fun tracks -> tracks.TrackID)
-
-        trackParams
-        |> Array.filter
-            (fun param ->
-                trackIds
-                |> Array.exists (fun t -> t = param.TrackID))
+    let getMaxSpeed (trackParamsOfSol: SOLTrackParameter []) =
+        trackParamsOfSol
         |> Array.tryFind
             (fun param ->
                 param.ID = "IPP_MaxSpeed"
                 && not (isNull param.Value))
         |> Option.map (fun param -> int param.Value)
 
-    let getCost (sol: SectionOfLine) =
-        let maxSpeed =
-            match getMaxSpeed sol with
-            | Some maxSpeed -> maxSpeed
-            | None ->
-                fprintfn stderr "sol %s, maxspeed not found" sol.solName
-                100
+    let travelTime (length: float) (maxSpeed: int) =
+        int ((length * 3600.0) / (float maxSpeed))
 
-        int ((sol.Length * 3600.0) / (float maxSpeed))
+    let getCost (sol: SectionOfLine) (trackParamsOfSol: SOLTrackParameter []) =
+        match getMaxSpeed trackParamsOfSol with
+        | Some maxSpeed -> Some(travelTime sol.Length maxSpeed)
+        | None ->
+            if trackParamsOfSol.Length > 0 then
+                fprintfn stderr "sol %s, maxspeed not found" sol.solName
+                Some(travelTime sol.Length 100)
+            else
+                None
+
+    let passengersLineCats = [| "10"; "20"; "30"; "40"; "50"; "60" |]
+
+    let hasPassengerLineCat (trackParamsOfSol: SOLTrackParameter []) =
+        trackParamsOfSol
+        |> Array.exists
+            (fun param ->
+                param.ID = "IPP_LineCat"
+                && passengersLineCats |> Array.contains (param.Value))
 
     let addSol (sol: SectionOfLine) =
         match findOp sol.OPStartID, findOp sol.OPEndID with
         | Some (opStart), Some (opEnd) ->
-            let cost = getCost sol
+            let trackIds =
+                sol.SOLTracks
+                |> Array.map (fun tracks -> tracks.TrackID)
+                |> Array.distinct
 
-            graph <-
-                graph.Add(
-                    opStart.UOPID,
-                    { Node = opEnd.UOPID
-                      Cost = cost
-                      Line = sol.LineIdentification
-                      Length = sol.Length }
-                    :: graph.[opStart.UOPID]
-                )
+            let trackParamsOfSol =
+                trackParams
+                |> Array.filter
+                    (fun param ->
+                        trackIds
+                        |> Array.exists (fun t -> t = param.TrackID))
 
-            graph <-
-                graph.Add(
-                    opEnd.UOPID,
-                    { Node = opStart.UOPID
-                      Cost = cost
-                      Line = sol.LineIdentification
-                      Length = sol.Length }
-                    :: graph.[opEnd.UOPID]
-                )
+            if (hasPassengerLineCat trackParamsOfSol) then
 
+                match getCost sol trackParamsOfSol with
+                | Some cost ->
+                    graph <-
+                        graph.Add(
+                            opStart.UOPID,
+                            { Node = opEnd.UOPID
+                              Cost = cost
+                              Line = sol.LineIdentification
+                              Length = sol.Length }
+                            :: graph.[opStart.UOPID]
+                        )
+
+                    graph <-
+                        graph.Add(
+                            opEnd.UOPID,
+                            { Node = opStart.UOPID
+                              Cost = cost
+                              Line = sol.LineIdentification
+                              Length = sol.Length }
+                            :: graph.[opEnd.UOPID]
+                        )
+                | None -> ()
         | _ -> fprintfn stderr "not found, %A or %A" sol.OPStartID sol.OPEndID
 
     ops |> Array.iter addOp
