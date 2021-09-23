@@ -2,17 +2,27 @@ namespace RInfGraph
 
 open FSharpx.Collections
 
+type OpInfo =
+    { UOPID: string
+      Name: string
+      Latitude: float
+      Longitude: float }
+
+type LineInfo =
+    { Line: string
+      Name: string
+      Length: float
+      StartKm: float
+      EndKm: float
+      UOPIDs: string [] }
+
 type GraphEdge =
     { Node: string
       Cost: int
       Line: string
       Length: float }
 
-type GraphNode =
-    { Node: string
-      Latitude: float
-      Longitude: float
-      Edges: GraphEdge [] }
+type GraphNode = { Node: string; Edges: GraphEdge [] }
 
 module Graph =
     let private toVertex (node: GraphNode) =
@@ -42,8 +52,6 @@ module Graph =
                 |> Option.defaultValue ("", 0.0)
 
             { Node = n1
-              Latitude = node1.Latitude
-              Longitude = node1.Longitude
               Edges =
                   [| { Node = n2
                        Cost = 0
@@ -84,7 +92,13 @@ module Graph =
     let getShortestPath (g: GraphNode []) (ids: string []) =
         getShortestPathFromGraph g (toGraph g) ids
 
-    let printShortestPath (nodes: array<GraphNode>) =
+    let getPathOfLineFromGraph (g: GraphNode []) (graph: Map<string, Dijkstra.Vertex>) (line: LineInfo) =
+        getShortestPathFromGraph g graph line.UOPIDs
+
+    let getPathOfLine (g: GraphNode []) (line: LineInfo) =
+        getPathOfLineFromGraph g (toGraph g) line
+
+    let printPath (nodes: GraphNode []) =
         nodes
         |> Array.iter
             (fun node ->
@@ -95,11 +109,11 @@ module Graph =
             (nodes
              |> Array.sumBy (fun node -> node.Edges.[0].Length))
 
-    let printBRouterUrl (g: GraphNode []) (nodes: array<GraphNode>) =
+    let printBRouterUrl (g: GraphNode []) (opInfos: Map<string, OpInfo>) (nodes: GraphNode []) =
         if nodes.Length > 0 then
             let lonlats =
                 nodes
-                |> Array.map (fun node -> sprintf "%f,%f" node.Longitude node.Latitude)
+                |> Array.map (fun node -> sprintf "%f,%f" opInfos.[node.Node].Longitude opInfos.[node.Node].Latitude)
                 |> String.concat ";"
 
             let lastLonlat =
@@ -110,11 +124,11 @@ module Graph =
                         g
                         |> Array.find (fun n -> n.Node = node.Edges.[0].Node)
 
-                    sprintf "%f,%f" nodeOfEdge.Longitude nodeOfEdge.Latitude
+                    sprintf "%f,%f" opInfos.[nodeOfEdge.Node].Longitude opInfos.[nodeOfEdge.Node].Latitude
 
             let (midLon, midLat) =
                 nodes.[nodes.Length / 2]
-                |> fun node -> (sprintf "%f" node.Longitude, sprintf "%f" node.Latitude)
+                |> fun node -> (sprintf "%f" opInfos.[node.Node].Longitude, sprintf "%f" opInfos.[node.Node].Latitude)
 
             sprintf
                 "https://brouter.de/brouter-web/#map=10/%s/%s/osm-mapnik-german_style&lonlats=%s&profile=rail"
