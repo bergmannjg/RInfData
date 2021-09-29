@@ -1,0 +1,14 @@
+{
+  "name": "rinf-data",
+  "version": "1.0.2",
+  "description": "RInf data graph library",
+  "main": "rinfgraph.bundle.js",
+  "types": "rinfgraph.bundle.d.ts",
+  "files": [
+		"rinfgraph.bundle.js",
+		"rinfgraph.bundle.d.ts",
+    "data"
+	],
+  "author": "Jürgen Bergmann",
+  "license": "ISC"
+}

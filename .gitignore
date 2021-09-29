@@ -13,8 +13,12 @@ bin/
 obj/
 output/
 tmp/
-bundle/
+
 gh-pages/
+
+*.bundle.js
+*.bundle.js.map
+*.tgz
 
 package-lock.json
 

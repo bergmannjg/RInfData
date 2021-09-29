@@ -1,6 +1,7 @@
 open System
 open System.IO
 open System.Text.Json
+open System.Collections.Generic
 
 open RInf
 open RInfGraph
@@ -15,6 +16,38 @@ let country =
     match Environment.GetEnvironmentVariable "RINF_COUNTRY" with
     | null -> "Germany"
     | v -> v
+
+let printHelp () =
+    """
+USAGE: RInfLoader.exe
+               [--help] [--DatasetImports] [--SectionsOfLines] [--OperationalPoints]
+               [--SOLTrackParameters <sol file>] [--OpInfo.Build <dataDir>]
+               [--LineInfo.Build <dataDir>] [--Graph.Build <dataDir>]
+               [--Graph.Route <dataDir> <ops>] [--Graph.Line <dataDir> <line>]
+
+OPTIONS:
+
+    --DatasetImports      load DatasetImports (assumes env vars RINF_USERNAME and RINF_PASSWORD).
+    --SectionsOfLines     load SectionsOfLines (assumes env vars RINF_USERNAME and RINF_PASSWORD).
+    --OperationalPoints   load OperationalPoints (assumes env vars RINF_USERNAME and RINF_PASSWORD).
+    --SOLTrackParameters <SectionsOfLines file>
+                          load SOLTrackParameters for all SectionsOfLines
+                          (assumes env vars RINF_USERNAME and RINF_PASSWORD).
+    --OpInfo.Build <dataDir>
+                          build OpInfos from file OperationalPoints.json in <dataDir>.
+    --LineInfo.Build <dataDir>
+                          build LineInfos from files SectionsOfLines.json and OperationalPoints.json in <dataDir>.
+    --Graph.Build <dataDir>
+                          build graph of OperationalPoints and SectionsOfLines from files SectionsOfLines.json,
+                          OperationalPoints.json and SOLTrackParameters.json in <dataDir>.
+    --Graph.Route <dataDir> <opIds>
+                          get path of route from <opIds>, ex. "DE   HH;DE   BL"
+                          (assumes Graph.json and OpInfos.json in <dataDir>).
+    --Graph.Line <dataDir> <line>
+                          get path of line
+                          (assumes Graph.json, LineInfos.json and OpInfos.json in <dataDir>).
+    --help                display this list of options.
+"""
 
 let getSectionsOfLines (ids: (int * int) []) =
     async {
@@ -54,21 +87,22 @@ let getSectionsOfLinesWithRetry ids =
 let readFile<'a> path name =
     JsonSerializer.Deserialize<'a>(File.ReadAllText(path + name))
 
-let getLineInfo ops (solsOfLine: SectionOfLine list) line =
-    let findOp ops opId =
-        ops |> Array.find (fun op -> op.ID = opId)
+let kilometerOfLine (op: OperationalPoint) (line: string) =
+    op.RailwayLocations
+    |> Array.tryFind (fun loc -> loc.NationalIdentNum = line)
+    |> Option.map (fun loc -> loc.Kilometer)
+    |> Option.defaultValue 0.0
+
+let findOp ops opId =
+    ops |> Array.find (fun op -> op.ID = opId)
+
+let getLineInfo (name: string) ops (solsOfLine: SectionOfLine list) line =
 
     let firstOp =
         findOp ops (solsOfLine |> List.head).OPStartID
 
     let lastOp =
         findOp ops (solsOfLine |> List.last).OPEndID
-
-    let kilometerOfLine (op: OperationalPoint) (line: string) =
-        op.RailwayLocations
-        |> Array.tryFind (fun loc -> loc.NationalIdentNum = line)
-        |> Option.map (fun loc -> loc.Kilometer)
-        |> Option.defaultValue 0.0
 
     let uOPIDs =
         solsOfLine
@@ -77,7 +111,7 @@ let getLineInfo ops (solsOfLine: SectionOfLine list) line =
         |> List.toArray
 
     { Line = line
-      Name = firstOp.Name + " - " + lastOp.Name
+      Name = name
       Length =
           solsOfLine
           |> List.sumBy (fun sol -> sol.Length)
@@ -87,7 +121,7 @@ let getLineInfo ops (solsOfLine: SectionOfLine list) line =
       EndKm = kilometerOfLine lastOp line
       UOPIDs = uOPIDs }
 
-let getLine (ops: OperationalPoint []) (sols: SectionOfLine []) (line: string) : LineInfo [] =
+let buildLineInfo (ops: OperationalPoint []) (sols: SectionOfLine []) (line: string) : LineInfo [] =
     let solsOfLine =
         sols
         |> Array.filter (fun sol -> sol.LineIdentification = line)
@@ -125,23 +159,35 @@ let getLine (ops: OperationalPoint []) (sols: SectionOfLine []) (line: string) :
         solsOfLine
         |> Array.iter (fun sol -> fprintfn stderr "sol %s" sol.solName)
 
-    firstNodes
-    |> Array.map
-        (fun firstNode ->
-            let nextNodes =
-                getNextNodes solsOfLine firstNode [ firstNode ]
+    let nextNodesLists =
+        firstNodes
+        |> Array.map (fun firstNode -> getNextNodes solsOfLine firstNode [ firstNode ])
 
-            getLineInfo ops nextNodes line)
+    if nextNodesLists.Length > 0 then
+        let firstOp =
+            findOp ops nextNodesLists.[0].Head.OPStartID
+
+        let lastElem =
+            nextNodesLists.[nextNodesLists.Length - 1]
+            |> List.toArray
+
+        let lastOp =
+            findOp ops lastElem.[lastElem.Length - 1].OPEndID
 
 
-let getLines (ops: OperationalPoint []) (sols: SectionOfLine []) : LineInfo [] =
+        nextNodesLists
+        |> Array.map (fun nextNodes -> getLineInfo (firstOp.Name + " - " + lastOp.Name) ops nextNodes line)
+    else
+        [||]
+
+let buildLineInfos (ops: OperationalPoint []) (sols: SectionOfLine []) : LineInfo [] =
     sols
     |> Array.map (fun sol -> sol.LineIdentification)
     |> Array.distinct
-    |> Array.collect (fun line -> getLine ops sols line)
+    |> Array.collect (buildLineInfo ops sols)
     |> Array.sortBy (fun line -> int line.Line)
 
-let build (ops: OperationalPoint []) (sols: SectionOfLine []) (trackParams: SOLTrackParameter []) =
+let buildGraph (ops: OperationalPoint []) (sols: SectionOfLine []) (trackParams: SOLTrackParameter []) =
     let mutable graph = Map.empty
 
     let addOp (op: OperationalPoint) =
@@ -151,26 +197,33 @@ let build (ops: OperationalPoint []) (sols: SectionOfLine []) (trackParams: SOLT
     let findOp opId =
         ops |> Array.tryFind (fun op -> op.ID = opId)
 
-    let getMaxSpeed (trackParamsOfSol: SOLTrackParameter []) =
+    let getMaxSpeed (sol: SectionOfLine) (trackParamsOfSol: SOLTrackParameter []) =
         trackParamsOfSol
         |> Array.tryFind
             (fun param ->
                 param.ID = "IPP_MaxSpeed"
                 && not (isNull param.Value))
-        |> Option.map (fun param -> int param.Value)
+        |> (fun param ->
+            match param with
+            | Some param -> int param.Value
+            | None ->
+                fprintfn stderr "sol %s, maxspeed not found" sol.solName
+                100)
+
+    let scale (maxSpeed: int) =
+        if maxSpeed >= 250 then 1.4
+        else if maxSpeed >= 200 then 1.2
+        else if maxSpeed >= 160 then 1.1
+        else 1.0
 
     let travelTime (length: float) (maxSpeed: int) =
-        int ((length * 3600.0) / (float maxSpeed))
+        length / (float (maxSpeed) * (scale maxSpeed))
 
-    let getCost (sol: SectionOfLine) (trackParamsOfSol: SOLTrackParameter []) =
-        match getMaxSpeed trackParamsOfSol with
-        | Some maxSpeed -> Some(travelTime sol.Length maxSpeed)
-        | None ->
-            if trackParamsOfSol.Length > 0 then
-                fprintfn stderr "sol %s, maxspeed not found" sol.solName
-                Some(travelTime sol.Length 100)
-            else
-                None
+    let getCost (sol: SectionOfLine) (maxSpeed: int) =
+        let cost =
+            int (10000.0 * (travelTime sol.Length maxSpeed))
+
+        if (cost <= 0) then 1 else cost
 
     let passengersLineCats = [| "10"; "20"; "30"; "40"; "50"; "60" |]
 
@@ -197,29 +250,34 @@ let build (ops: OperationalPoint []) (sols: SectionOfLine []) (trackParams: SOLT
                         |> Array.exists (fun t -> t = param.TrackID))
 
             if (hasPassengerLineCat trackParamsOfSol) then
+                let maxSpeed = getMaxSpeed sol trackParamsOfSol
+                let cost = getCost sol maxSpeed
 
-                match getCost sol trackParamsOfSol with
-                | Some cost ->
-                    graph <-
-                        graph.Add(
-                            opStart.UOPID,
-                            { Node = opEnd.UOPID
-                              Cost = cost
-                              Line = sol.LineIdentification
-                              Length = sol.Length }
-                            :: graph.[opStart.UOPID]
-                        )
+                graph <-
+                    graph.Add(
+                        opStart.UOPID,
+                        { Node = opEnd.UOPID
+                          Cost = cost
+                          Line = sol.LineIdentification
+                          MaxSpeed = maxSpeed
+                          StartKm = kilometerOfLine opStart sol.LineIdentification
+                          EndKm = kilometerOfLine opEnd sol.LineIdentification
+                          Length = sol.Length }
+                        :: graph.[opStart.UOPID]
+                    )
 
-                    graph <-
-                        graph.Add(
-                            opEnd.UOPID,
-                            { Node = opStart.UOPID
-                              Cost = cost
-                              Line = sol.LineIdentification
-                              Length = sol.Length }
-                            :: graph.[opEnd.UOPID]
-                        )
-                | None -> ()
+                graph <-
+                    graph.Add(
+                        opEnd.UOPID,
+                        { Node = opStart.UOPID
+                          Cost = cost
+                          Line = sol.LineIdentification
+                          MaxSpeed = maxSpeed
+                          StartKm = kilometerOfLine opEnd sol.LineIdentification
+                          EndKm = kilometerOfLine opStart sol.LineIdentification
+                          Length = sol.Length }
+                        :: graph.[opEnd.UOPID]
+                    )
         | _ -> fprintfn stderr "not found, %A or %A" sol.OPStartID sol.OPEndID
 
     ops |> Array.iter addOp
@@ -238,6 +296,16 @@ let build (ops: OperationalPoint []) (sols: SectionOfLine []) (trackParams: SOLT
               Edges = graph.[kv.Key] |> List.toArray })
     |> Seq.toArray
 
+let toMap (opInfos: OpInfo []) =
+    opInfos
+    |> Array.fold
+        (fun (m: Dictionary<string, OpInfo>) op ->
+            if not (m.ContainsKey op.UOPID) then
+                m.Add(op.UOPID, op)
+
+            m)
+        (Dictionary<string, OpInfo>())
+
 [<EntryPoint>]
 let main argv =
     try
@@ -245,7 +313,7 @@ let main argv =
             new Api.Client(username, password, country)
 
         if argv.Length = 0 then
-            async { return "no arg" }
+            async { return printHelp () }
         else if argv.[0] = "--DatasetImports" then
             async {
                 let! response = client.GetDatasetImports()
@@ -324,11 +392,8 @@ let main argv =
             }
         else if argv.[0] = "--Graph.Build" && argv.Length > 1 then
             async {
-                let now = System.DateTime.Now
-
                 let ops =
                     readFile<OperationalPoint []> argv.[1] "OperationalPoints.json"
-                    |> Array.filter (fun op -> op.ValidityDateStart < now)
 
                 let sols =
                     readFile<SectionOfLine []> argv.[1] "SectionsOfLines.json"
@@ -336,7 +401,7 @@ let main argv =
                 let trackParams =
                     readFile<SOLTrackParameter []> argv.[1] "SOLTrackParameters.json"
 
-                let g = build ops sols trackParams
+                let g = buildGraph ops sols trackParams
 
                 return JsonSerializer.Serialize g
             }
@@ -346,7 +411,7 @@ let main argv =
 
                 let ops =
                     readFile<OperationalPoint []> argv.[1] "OperationalPoints.json"
-                    |> Array.filter (fun op -> op.ValidityDateStart < now)
+                    |> Array.filter (fun op -> now < op.ValidityDateEnd)
                     |> Array.map
                         (fun op ->
                             { UOPID = op.UOPID
@@ -362,12 +427,12 @@ let main argv =
 
                 let ops =
                     readFile<OperationalPoint []> argv.[1] "OperationalPoints.json"
-                    |> Array.filter (fun op -> op.ValidityDateStart < now)
 
                 let sols =
                     readFile<SectionOfLine []> argv.[1] "SectionsOfLines.json"
+                    |> Array.filter (fun sol -> now < sol.ValidityDateEnd)
 
-                let lineInfos = getLines ops sols
+                let lineInfos = buildLineInfos ops sols
 
                 return JsonSerializer.Serialize lineInfos
             }
@@ -378,7 +443,7 @@ let main argv =
 
                 let map =
                     readFile<OpInfo []> argv.[1] "OpInfos.json"
-                    |> Array.fold (fun (m: Map<string, OpInfo>) op -> m.Add(op.UOPID, op)) Map.empty
+                    |> toMap
 
                 let graph = Graph.toGraph g
 
@@ -389,12 +454,13 @@ let main argv =
                     (fun lineInfo ->
                         printfn "%s, StartKm: %.1f, EndKm: %.1f" lineInfo.Name lineInfo.StartKm lineInfo.EndKm
 
-                        let nodes =
+                        let path =
                             Graph.getPathOfLineFromGraph g graph lineInfo
 
-                        Graph.printPath nodes |> printfn "%s"
+                        Graph.printPath path
 
-                        Graph.printBRouterUrl g map nodes |> printfn "%s")
+                        Graph.getBRouterUrl (Graph.getLocationsOfPath g map path)
+                        |> printfn "%s")
 
                 return ""
             }
@@ -403,37 +469,26 @@ let main argv =
                 let g =
                     readFile<GraphNode []> argv.[1] "Graph.json"
 
-                fprintfn stderr "Nodes: %i, Edges total: %i" g.Length (g |> Seq.sumBy (fun item -> item.Edges.Length))
+                let map =
+                    readFile<OpInfo []> argv.[1] "OpInfos.json"
+                    |> toMap
 
                 let args = argv.[2].Split ";"
 
-                Graph.getShortestPath g args
-                |> Graph.printPath
+                let path = Graph.getShortestPath g args
+
+                printfn "Path:"
+                Graph.printPath path
+                printfn "compact Path:"
+                Graph.printPath (Graph.getCompactPath path)
+
+                Graph.getBRouterUrl (Graph.getLocationsOfPath g map path)
                 |> printfn "%s"
 
                 return ""
             }
-        else if argv.[0] = "--Graph.Route.Op" && argv.Length = 3 then
-            async {
-                let g =
-                    readFile<GraphNode []> argv.[1] "Graph.json"
-
-                let map =
-                    readFile<OpInfo []> argv.[1] "OpInfos.json"
-                    |> Array.fold (fun (m: Map<string, OpInfo>) op -> m.Add(op.UOPID, op)) Map.empty
-
-                let args = argv.[2].Split ";"
-
-                let nodes = Graph.getShortestPath g args
-
-                Graph.printPath nodes |> printfn "%s"
-
-                Graph.printBRouterUrl g map nodes |> printfn "%s"
-
-                return ""
-            }
         else
-            async { return "unkown arg" }
+            async { return printHelp () }
         |> Async.RunSynchronously
         |> fprintfn stdout "%s"
 

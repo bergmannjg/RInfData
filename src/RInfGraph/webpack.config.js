@@ -22,9 +22,9 @@ module.exports = {
   },
   entry: './build/Graph.js',
   output: {
-    path: path.join(__dirname, "./bundle"),
-    filename: 'RInfGraph.bundle.js',
-    library:"RInfGraph",
+    path: path.join(__dirname, "./rinf-data"),
+    filename: 'rinfgraph.bundle.js',
+    library:"rinfgraph",
     libraryTarget: 'commonjs'
   },
   plugins: [ ],

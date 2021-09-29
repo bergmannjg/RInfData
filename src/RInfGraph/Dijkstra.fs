@@ -31,7 +31,7 @@ type Vertex =
 
     override x.GetHashCode() = hash x.Id
 
-type Path<'a when 'a: equality> = { Nodes: 'a list; Cost: int }
+type Path = { Nodes: string list; Cost: int }
 
 let addEdge vertex e =
     { vertex with
