@@ -11,7 +11,7 @@ The path actually taken by a train may be slightly different.
 * add fable directory to FSharpx.Collections nuget package till version 3.0.0 is released
 * build prod: dotnet fable RInfGraph.fable.fsproj -o build --run webpack --mode production --no-devtool --config ./webpack.config.js
 * build dev: dotnet fable RInfGraph.fable.fsproj -o build --run webpack --mode development --devtool source-map --config ./webpack.config.js
-* usage: node index.js path-to-graph-file "DE   HH;DE   BL"
+* usage: node index.js rinf-data/data/Graph.json "DE   HH;DE   BL"
 
 ## Build rinf-data module
 

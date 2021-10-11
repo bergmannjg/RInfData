@@ -29,6 +29,17 @@ type GraphEdge =
 
 type GraphNode = { Node: string; Edges: GraphEdge [] }
 
+type PathElement =
+    { From: string
+      FromOPID: string
+      To: string
+      ToOPID: string
+      Line: string
+      LineText: string
+      StartKm: float
+      EndKm: float
+      MaxSpeed: int }
+
 module Graph =
     let private toVertex (node: GraphNode) =
         (node.Node,
@@ -128,7 +139,7 @@ module Graph =
         let edge1 = n1.Edges.[0]
         let edge2 = n2.Edges.[0]
 
-        if edge1.Line = edge2.Line then
+        if edge1.Line = edge2.Line && n1.Node <> edge2.Node then
 
             let edge =
                 { Node = edge2.Node
@@ -164,7 +175,9 @@ module Graph =
                     | _ -> { Node = Some p; Nodes = s.Nodes })
                 { Node = None; Nodes = [] }
 
-        (s.Node.Value :: s.Nodes)
+        match s.Node with
+        | Some node -> (node :: s.Nodes)
+        | None -> s.Nodes
         |> List.rev
         |> List.toArray
 
@@ -187,7 +200,23 @@ module Graph =
             (path
              |> Array.sumBy (fun node -> node.Edges.[0].Length))
 
-    let getLocationsOfPath
+    let isWalkingPath (node: GraphNode) = node.Edges.[0].Line.StartsWith("99")
+
+    let splitNodes (cond: GraphNode -> bool) (path: GraphNode []) =
+        Array.foldBack
+            (fun x (s: (GraphNode list) list) ->
+                let headList = s.Head
+
+                if cond x then
+                    [] :: s
+                else
+                    ((x :: headList) :: s.Tail))
+            path
+            [ [] ]
+        |> List.map List.toArray
+        |> List.toArray
+
+    let private getLocationsOfSolPath
         (g: GraphNode [])
         (opInfos: System.Collections.Generic.Dictionary<string, OpInfo>)
         (path: GraphNode [])
@@ -212,9 +241,35 @@ module Graph =
                         { Longitude = opInfos.[node.Node].Longitude
                           Latitude = opInfos.[node.Node].Latitude })
 
-            Array.concat (seq [ lonlats; [| lastLonlat |] ])
+            Array.append lonlats [| lastLonlat |]
         else
             [||]
+
+    let getLocationsOfPath
+        (g: GraphNode [])
+        (opInfos: System.Collections.Generic.Dictionary<string, OpInfo>)
+        (path: GraphNode [])
+        =
+        splitNodes isWalkingPath path
+        |> Array.map (getLocationsOfSolPath g opInfos)
+        |> Array.filter (fun l -> l.Length > 0)
+
+    let toPathElement
+        (opInfos: System.Collections.Generic.Dictionary<string, OpInfo>)
+        (lineInfos: System.Collections.Generic.Dictionary<string, LineInfo>)
+        (n: GraphNode)
+        : PathElement =
+        let edge = n.Edges.[0]
+
+        { From = opInfos.[n.Node].Name
+          FromOPID = n.Node
+          To = opInfos.[edge.Node].Name
+          ToOPID = edge.Node
+          Line = edge.Line
+          LineText = lineInfos.[edge.Line].Name
+          StartKm = edge.StartKm
+          EndKm = edge.EndKm
+          MaxSpeed = edge.MaxSpeed }
 
     let getBRouterUrl (locations: Location []) =
         if locations.Length > 0 then

@@ -1,6 +1,6 @@
 {
   "name": "rinf-data",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "RInf data graph library",
   "main": "rinfgraph.bundle.js",
   "types": "rinfgraph.bundle.d.ts",

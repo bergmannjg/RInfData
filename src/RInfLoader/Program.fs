@@ -96,55 +96,69 @@ let kilometerOfLine (op: OperationalPoint) (line: string) =
 let findOp ops opId =
     ops |> Array.find (fun op -> op.ID = opId)
 
-let getLineInfo (name: string) ops (solsOfLine: SectionOfLine list) line =
+let findOpByOPID (ops: OperationalPoint []) opId =
+    ops |> Array.find (fun op -> op.UOPID = opId)
+
+let getLineInfo (name: string) ops (solsOfLine: GraphNode list) line =
 
     let firstOp =
-        findOp ops (solsOfLine |> List.head).OPStartID
+        findOpByOPID ops (solsOfLine |> List.head).Node
 
     let lastOp =
-        findOp ops (solsOfLine |> List.last).OPEndID
+        findOpByOPID ops (solsOfLine |> List.last).Node
 
     let uOPIDs =
         solsOfLine
         |> List.rev
-        |> List.fold (fun (s: string list) sol -> ((findOp ops sol.OPStartID).UOPID :: s)) [ lastOp.UOPID ]
+        |> List.fold (fun (s: string list) sol -> ((findOpByOPID ops sol.Node).UOPID :: s)) [ lastOp.UOPID ]
         |> List.toArray
 
     { Line = line
       Name = name
       Length =
           solsOfLine
-          |> List.sumBy (fun sol -> sol.Length)
+          |> List.sumBy
+              (fun sol ->
+                  if sol.Edges.Length > 0 then
+                      sol.Edges.[0].Length
+                  else
+                      0.0)
           |> sprintf "%.1f"
           |> Double.Parse
       StartKm = kilometerOfLine firstOp line
       EndKm = kilometerOfLine lastOp line
       UOPIDs = uOPIDs }
 
-let buildLineInfo (ops: OperationalPoint []) (sols: SectionOfLine []) (line: string) : LineInfo [] =
+let buildLineInfo (ops: OperationalPoint []) (sols: GraphNode []) (line: string) : LineInfo [] =
     let solsOfLine =
         sols
-        |> Array.filter (fun sol -> sol.LineIdentification = line)
+        |> Array.filter
+            (fun sol ->
+                sol.Edges
+                |> Array.exists (fun e -> e.Line = line && e.StartKm < e.EndKm))
+        |> Array.map
+            (fun sol ->
+                { sol with
+                      Edges =
+                          sol.Edges
+                          |> Array.filter (fun e -> e.Line = line && e.StartKm < e.EndKm) })
+        |> Array.sortBy (fun n -> n.Edges.[0].StartKm)
 
-    let getFirstNodes (solsOfLine: SectionOfLine []) =
+    let getFirstNodes (solsOfLine: GraphNode []) =
         solsOfLine
         |> Array.filter
             (fun solX ->
                 not (
                     solsOfLine
-                    |> Array.exists (fun solY -> solX.OPStartID = solY.OPEndID)
+                    |> Array.exists (fun solY -> solX.Node = solY.Edges.[0].Node)
                 ))
 
     let firstNodes = getFirstNodes solsOfLine
 
-    let rec getNextNodes
-        (solsOfLine: SectionOfLine [])
-        (startSol: SectionOfLine)
-        (nextNodes: SectionOfLine list)
-        : SectionOfLine list =
+    let rec getNextNodes (solsOfLine: GraphNode []) (startSol: GraphNode) (nextNodes: GraphNode list) : GraphNode list =
         let nextNode =
             solsOfLine
-            |> Array.tryFind (fun sol -> sol.OPStartID = startSol.OPEndID)
+            |> Array.tryFind (fun sol -> sol.Node = startSol.Edges.[0].Node)
 
         match nextNode with
         | Some nextNode -> getNextNodes solsOfLine nextNode (nextNode :: nextNodes)
@@ -154,10 +168,10 @@ let buildLineInfo (ops: OperationalPoint []) (sols: SectionOfLine []) (line: str
         fprintfn stderr "line %s, %d sols" line solsOfLine.Length
 
         firstNodes
-        |> Array.iter (fun sol -> fprintfn stderr "first %s" sol.solName)
+        |> Array.iter (fun sol -> fprintfn stderr "first %s" sol.Node)
 
-        solsOfLine
-        |> Array.iter (fun sol -> fprintfn stderr "sol %s" sol.solName)
+    // solsOfLine
+    // |> Array.iter (fun sol -> fprintfn stderr "sol %s %s" sol.Node sol.Edges.[0].Node)
 
     let nextNodesLists =
         firstNodes
@@ -165,14 +179,14 @@ let buildLineInfo (ops: OperationalPoint []) (sols: SectionOfLine []) (line: str
 
     if nextNodesLists.Length > 0 then
         let firstOp =
-            findOp ops nextNodesLists.[0].Head.OPStartID
+            findOpByOPID ops nextNodesLists.[0].Head.Node
 
         let lastElem =
             nextNodesLists.[nextNodesLists.Length - 1]
             |> List.toArray
 
         let lastOp =
-            findOp ops lastElem.[lastElem.Length - 1].OPEndID
+            findOpByOPID ops lastElem.[lastElem.Length - 1].Node
 
 
         nextNodesLists
@@ -180,14 +194,88 @@ let buildLineInfo (ops: OperationalPoint []) (sols: SectionOfLine []) (line: str
     else
         [||]
 
-let buildLineInfos (ops: OperationalPoint []) (sols: SectionOfLine []) : LineInfo [] =
+let NatureWalking = "Walking"
+
+let addEdge
+    (opidFrom: string)
+    (opidTo: string)
+    (line: string)
+    (cost: int)
+    (maxSpeed: int)
+    (startKm: float)
+    (endKm: float)
+    (length: float)
+    (graph: Map<string, GraphEdge list>)
+    =
+    let createMissingEdge
+        (opEndId: string)
+        (line: string)
+        (cost: int)
+        (maxSpeed: int)
+        (startKm: float)
+        (endKm: float)
+        (length: float)
+        : GraphEdge =
+        { Node = opEndId
+          Cost = cost
+          Line = line
+          MaxSpeed = maxSpeed
+          StartKm = startKm
+          EndKm = endKm
+          Length = length }
+
+    let edges1 =
+        match graph |> Map.tryFind opidFrom with
+        | Some edges -> edges
+        | None -> []
+
+    let edges2 =
+        match graph |> Map.tryFind opidTo with
+        | Some edges -> edges
+        | None -> []
+
+    graph
+        .Add(
+            opidFrom,
+            (createMissingEdge opidTo line cost maxSpeed startKm endKm length)
+            :: edges1
+        )
+        .Add(
+            opidTo,
+            (createMissingEdge opidFrom line cost maxSpeed endKm startKm length)
+            :: edges2
+        )
+
+let addMissingEdges (graph: Map<string, GraphEdge list>) =
+    graph
+    // missing SoL 6100 Berlin-Spandau Mitte - Berlin-Spandau, length 1.0
+    |> addEdge "DEBSPDM" "DE BSPD" "6100" 60 160 11.4 12.428 1.0
+
+let addWalkingEdge (opidFrom: string) (opidTo: string) (line: string) (graph: Map<string, GraphEdge list>) =
+    graph
+    |> addEdge opidFrom opidTo line 1 10 0.0 0.1 0.1
+
+let addWalkingEdges (graph: Map<string, GraphEdge list>) =
+    graph
+    // Berlin Hauptbahnhof-Lehrter Bf  (Stadtb) to Berlin Hauptbahnhof - Lehrter Bahnhof
+    |> addWalkingEdge "DE   BL" "DE  BLS" "9901"
+
+let addExtraEdges (graph: Map<string, GraphEdge list>) =
+    graph |> addWalkingEdges |> addMissingEdges
+
+let buildLineInfos (ops: OperationalPoint []) (sols: GraphNode []) : LineInfo [] =
     sols
-    |> Array.map (fun sol -> sol.LineIdentification)
+    |> Array.collect (fun sol -> sol.Edges |> Array.map (fun e -> e.Line))
     |> Array.distinct
     |> Array.collect (buildLineInfo ops sols)
     |> Array.sortBy (fun line -> int line.Line)
 
-let buildGraph (ops: OperationalPoint []) (sols: SectionOfLine []) (trackParams: SOLTrackParameter []) =
+let buildGraph
+    (ops: OperationalPoint [])
+    (sols: SectionOfLine [])
+    (trackParams: SOLTrackParameter [])
+    (extraEdges: bool)
+    =
     let mutable graph = Map.empty
 
     let addOp (op: OperationalPoint) =
@@ -249,7 +337,8 @@ let buildGraph (ops: OperationalPoint []) (sols: SectionOfLine []) (trackParams:
                         trackIds
                         |> Array.exists (fun t -> t = param.TrackID))
 
-            if (hasPassengerLineCat trackParamsOfSol) then
+            if sol.Nature = NatureWalking
+               || (hasPassengerLineCat trackParamsOfSol) then
                 let maxSpeed = getMaxSpeed sol trackParamsOfSol
                 let cost = getCost sol maxSpeed
 
@@ -286,12 +375,12 @@ let buildGraph (ops: OperationalPoint []) (sols: SectionOfLine []) (trackParams:
 
     fprintfn stderr "Nodes: %i, Edges: %i" graph.Count (graph |> Seq.sumBy (fun item -> item.Value.Length))
 
+    if extraEdges then
+        graph <- addExtraEdges graph
+
     graph
     |> Seq.map
         (fun kv ->
-            let op =
-                ops |> Array.find (fun op -> op.UOPID = kv.Key)
-
             { Node = kv.Key
               Edges = graph.[kv.Key] |> List.toArray })
     |> Seq.toArray
@@ -401,7 +490,11 @@ let main argv =
                 let trackParams =
                     readFile<SOLTrackParameter []> argv.[1] "SOLTrackParameters.json"
 
-                let g = buildGraph ops sols trackParams
+                let extraEdges =
+                    not (argv.Length > 2 && argv.[2] = "--noExtraEdges")
+
+                let g =
+                    buildGraph ops sols trackParams extraEdges
 
                 return JsonSerializer.Serialize g
             }
@@ -423,14 +516,11 @@ let main argv =
             }
         else if argv.[0] = "--LineInfo.Build" && argv.Length > 1 then
             async {
-                let now = System.DateTime.Now
-
                 let ops =
                     readFile<OperationalPoint []> argv.[1] "OperationalPoints.json"
 
                 let sols =
-                    readFile<SectionOfLine []> argv.[1] "SectionsOfLines.json"
-                    |> Array.filter (fun sol -> now < sol.ValidityDateEnd)
+                    readFile<GraphNode []> argv.[1] "Graph.json"
 
                 let lineInfos = buildLineInfos ops sols
 
@@ -459,8 +549,8 @@ let main argv =
 
                         Graph.printPath path
 
-                        Graph.getBRouterUrl (Graph.getLocationsOfPath g map path)
-                        |> printfn "%s")
+                        Graph.getLocationsOfPath g map path
+                        |> Array.iter (Graph.getBRouterUrl >> printfn "%s"))
 
                 return ""
             }
@@ -482,8 +572,8 @@ let main argv =
                 printfn "compact Path:"
                 Graph.printPath (Graph.getCompactPath path)
 
-                Graph.getBRouterUrl (Graph.getLocationsOfPath g map path)
-                |> printfn "%s"
+                Graph.getLocationsOfPath g map path
+                |> Array.iter (Graph.getBRouterUrl >> printfn "%s")
 
                 return ""
             }

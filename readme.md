@@ -8,5 +8,5 @@ F# program to access the Register of Railway Infrastructure database.
 ## Program
 
 * RInfApi: implements the API
-* RInfGraph: finds shortest path between operation points
+* RInfGraph: finds shortest path between operational points
 * RInfLoader: loads the data.

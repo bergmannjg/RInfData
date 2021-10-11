@@ -33,6 +33,18 @@ export interface GraphEdge {
     Length: number;
 }
 
+export interface PathElement {
+    From: string;
+    FromOPID: string;
+    To: string;
+    ToOPID: string
+    Line: string;
+    LineText: string;
+    StartKm: number;
+    EndKm: number;
+    MaxSpeed: number;
+}
+
 export interface GraphNode {
     Node: string;
     Edges: Array<GraphEdge>;
@@ -46,5 +58,7 @@ export interface RInfGraph {
     Graph_getCompactPath: (path: Array<GraphNode>) => Array<GraphNode>
     Graph_getPathOfLine: (g: Array<GraphNode>, line: LineInfo) => Array<GraphNode>
     Graph_printPath: (path: Array<GraphNode>) => void
-    Graph_getLocationsOfPath: (g: Array<GraphNode>, opInfos: Map<string, OpInfo>, path: Array<GraphNode>) => Array<Location>
+    Graph_getLocationsOfPath: (g: Array<GraphNode>, opInfos: Map<string, OpInfo>, path: Array<GraphNode>) => Array<Array<Location>>
+    Graph_toPathElement: (opInfos: Map<string, OpInfo>, lineInfos: Map<string, LineInfo>, node: GraphNode) => PathElement
+    Graph_isWalkingPath: (node: GraphNode) => boolean
 }

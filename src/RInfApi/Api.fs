@@ -253,5 +253,9 @@ module Api =
                 if defaultArg logJson false then
                     printfn "%s" response
 
-                return JsonSerializer.Deserialize<Route> response
+                return
+                    if response = "\"Sequence contains no matching element\"" then
+                        { Nodes = [||]; Edges = [||] }
+                    else
+                        JsonSerializer.Deserialize<Route> response
             }
