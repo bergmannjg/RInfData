@@ -22,8 +22,8 @@ let printHelp () =
 USAGE: RInfLoader.exe
                [--help] [--DatasetImports] [--SectionsOfLines] [--OperationalPoints]
                [--SOLTrackParameters <sol file>] [--OpInfo.Build <dataDir>]
-               [--LineInfo.Build <dataDir>] [--Graph.Build <dataDir>]
-               [--Graph.Route <dataDir> <ops>] [--Graph.Line <dataDir> <line>]
+               [--LineInfo.Build <dataDir>] [--OperationalPoints.Line <dataDir> <line>]
+               [--Graph.Build <dataDir>] [--Graph.Route <dataDir> <ops>] [--Graph.Line <dataDir> <line>]
 
 OPTIONS:
 
@@ -37,6 +37,8 @@ OPTIONS:
                           build OpInfos from file OperationalPoints.json in <dataDir>.
     --LineInfo.Build <dataDir>
                           build LineInfos from files SectionsOfLines.json and OperationalPoints.json in <dataDir>.
+    --OperationalPoints.Line <dataDir> <line>
+                          get OperationalPoints of line from file OperationalPoints.json in <dataDir>.
     --Graph.Build <dataDir>
                           build graph of OperationalPoints and SectionsOfLines from files SectionsOfLines.json,
                           OperationalPoints.json and SOLTrackParameters.json in <dataDir>.
@@ -105,7 +107,7 @@ let getLineInfo (name: string) ops (solsOfLine: GraphNode list) line =
         findOpByOPID ops (solsOfLine |> List.head).Node
 
     let lastOp =
-        findOpByOPID ops (solsOfLine |> List.last).Node
+        findOpByOPID ops (solsOfLine |> List.last).Edges.[0].Node
 
     let uOPIDs =
         solsOfLine
@@ -186,82 +188,13 @@ let buildLineInfo (ops: OperationalPoint []) (sols: GraphNode []) (line: string)
             |> List.toArray
 
         let lastOp =
-            findOpByOPID ops lastElem.[lastElem.Length - 1].Node
+            findOpByOPID ops lastElem.[lastElem.Length - 1].Edges.[0].Node
 
 
         nextNodesLists
         |> Array.map (fun nextNodes -> getLineInfo (firstOp.Name + " - " + lastOp.Name) ops nextNodes line)
     else
         [||]
-
-let NatureWalking = "Walking"
-
-let addEdge
-    (opidFrom: string)
-    (opidTo: string)
-    (line: string)
-    (cost: int)
-    (maxSpeed: int)
-    (startKm: float)
-    (endKm: float)
-    (length: float)
-    (graph: Map<string, GraphEdge list>)
-    =
-    let createMissingEdge
-        (opEndId: string)
-        (line: string)
-        (cost: int)
-        (maxSpeed: int)
-        (startKm: float)
-        (endKm: float)
-        (length: float)
-        : GraphEdge =
-        { Node = opEndId
-          Cost = cost
-          Line = line
-          MaxSpeed = maxSpeed
-          StartKm = startKm
-          EndKm = endKm
-          Length = length }
-
-    let edges1 =
-        match graph |> Map.tryFind opidFrom with
-        | Some edges -> edges
-        | None -> []
-
-    let edges2 =
-        match graph |> Map.tryFind opidTo with
-        | Some edges -> edges
-        | None -> []
-
-    graph
-        .Add(
-            opidFrom,
-            (createMissingEdge opidTo line cost maxSpeed startKm endKm length)
-            :: edges1
-        )
-        .Add(
-            opidTo,
-            (createMissingEdge opidFrom line cost maxSpeed endKm startKm length)
-            :: edges2
-        )
-
-let addMissingEdges (graph: Map<string, GraphEdge list>) =
-    graph
-    // missing SoL 6100 Berlin-Spandau Mitte - Berlin-Spandau, length 1.0
-    |> addEdge "DEBSPDM" "DE BSPD" "6100" 60 160 11.4 12.428 1.0
-
-let addWalkingEdge (opidFrom: string) (opidTo: string) (line: string) (graph: Map<string, GraphEdge list>) =
-    graph
-    |> addEdge opidFrom opidTo line 1 10 0.0 0.1 0.1
-
-let addWalkingEdges (graph: Map<string, GraphEdge list>) =
-    graph
-    // Berlin Hauptbahnhof-Lehrter Bf  (Stadtb) to Berlin Hauptbahnhof - Lehrter Bahnhof
-    |> addWalkingEdge "DE   BL" "DE  BLS" "9901"
-
-let addExtraEdges (graph: Map<string, GraphEdge list>) =
-    graph |> addWalkingEdges |> addMissingEdges
 
 let buildLineInfos (ops: OperationalPoint []) (sols: GraphNode []) : LineInfo [] =
     sols
@@ -337,8 +270,7 @@ let buildGraph
                         trackIds
                         |> Array.exists (fun t -> t = param.TrackID))
 
-            if sol.Nature = NatureWalking
-               || (hasPassengerLineCat trackParamsOfSol) then
+            if hasPassengerLineCat trackParamsOfSol then
                 let maxSpeed = getMaxSpeed sol trackParamsOfSol
                 let cost = getCost sol maxSpeed
 
@@ -376,7 +308,7 @@ let buildGraph
     fprintfn stderr "Nodes: %i, Edges: %i" graph.Count (graph |> Seq.sumBy (fun item -> item.Value.Length))
 
     if extraEdges then
-        graph <- addExtraEdges graph
+        graph <- ExtraEdges.addExtraEdges graph
 
     graph
     |> Seq.map
@@ -525,6 +457,45 @@ let main argv =
                 let lineInfos = buildLineInfos ops sols
 
                 return JsonSerializer.Serialize lineInfos
+            }
+        else if argv.[0] = "--OperationalPoints.Line"
+                && argv.Length > 2 then
+            async {
+                let ops =
+                    readFile<OperationalPoint []> argv.[1] "OperationalPoints.json"
+
+                let opsOfLine =
+                    ops
+                    |> Array.filter
+                        (fun op ->
+                            op.RailwayLocations
+                            |> Array.exists (fun loc -> argv.[2] = loc.NationalIdentNum))
+                    |> Array.map
+                        (fun op ->
+                            let loc =
+                                op.RailwayLocations
+                                |> Array.find (fun loc -> argv.[2] = loc.NationalIdentNum)
+
+                            ({ UOPID = op.UOPID
+                               Name = op.Name
+                               Latitude = op.Latitude
+                               Longitude = op.Longitude },
+                             loc.Kilometer))
+                    |> Array.sortBy (fun (_, km) -> km)
+                    |> Array.distinct
+
+                opsOfLine
+                |> Array.iter (fun (op, km) -> printfn "%s, %s, Km: %.1f" op.Name op.UOPID km)
+
+                opsOfLine
+                |> Array.map
+                    (fun (op, _) ->
+                        { Latitude = op.Latitude
+                          Longitude = op.Longitude })
+                |> Graph.getBRouterUrl
+                |> printfn "%s"
+
+                return ""
             }
         else if argv.[0] = "--Graph.Line" && argv.Length > 2 then
             async {

@@ -48,6 +48,56 @@ module Graph =
          |> Array.toList)
         |> fun (n, l) -> Dijkstra.makeVertex n l
 
+    let addEdge
+        (opidFrom: string)
+        (opidTo: string)
+        (line: string)
+        (cost: int)
+        (maxSpeed: int)
+        (startKm: float)
+        (endKm: float)
+        (length: float)
+        (graph: Map<string, GraphEdge list>)
+        =
+        let createEdge
+            (opEndId: string)
+            (line: string)
+            (cost: int)
+            (maxSpeed: int)
+            (startKm: float)
+            (endKm: float)
+            (length: float)
+            : GraphEdge =
+            { Node = opEndId
+              Cost = cost
+              Line = line
+              MaxSpeed = maxSpeed
+              StartKm = startKm
+              EndKm = endKm
+              Length = length }
+
+        let edges1 =
+            match graph |> Map.tryFind opidFrom with
+            | Some edges -> edges
+            | None -> []
+
+        let edges2 =
+            match graph |> Map.tryFind opidTo with
+            | Some edges -> edges
+            | None -> []
+
+        graph
+            .Add(
+                opidFrom,
+                (createEdge opidTo line cost maxSpeed startKm endKm length)
+                :: edges1
+            )
+            .Add(
+                opidTo,
+                (createEdge opidFrom line cost maxSpeed endKm startKm length)
+                :: edges2
+            )
+
     let toGraph (g: GraphNode []) =
         g
         |> Array.fold
