@@ -1,0 +1,16 @@
+[timeout:900][out:json];
+/*
+area[boundary=administrative][name='Deutschland'];
+*/
+way
+  ["public_transport"~"^station|^stop|^halt"]
+  ["railway"="rail"]
+  ["railway:ref"];
+  (
+      ._;>;
+  );
+  (
+    ._;
+    node(r);
+  );
+out;

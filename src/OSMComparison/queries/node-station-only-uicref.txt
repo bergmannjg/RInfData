@@ -1,0 +1,10 @@
+[timeout:900][out:json];
+node
+  ["name"!="Dachsen"] /* Suisse */
+  ["name"!="Rekingen"] /* Suisse */
+  [!"light_rail"]
+  [!"subway"]
+  ["railway"~"^station|^stop|^halt"]
+  [!"railway:ref"]
+  ["uic_ref"];
+out;

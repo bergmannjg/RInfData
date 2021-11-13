@@ -5,6 +5,8 @@ open System
 open Microsoft.FSharp.Core
 open FSharpx.Collections
 
+#if FABLE_COMPILER
+
 type Edge =
     { DestinationVertexId: string
       Cost: int }
@@ -103,3 +105,107 @@ let shortestPath (graph: Map<string, Vertex>) (sourceId: string) (destinationId:
         | None -> None
 
     result
+
+#else
+
+type Edge<'a> = { DestinationVertexId: 'a; Cost: int }
+
+[<CustomComparison; CustomEquality>]
+type Vertex<'a when 'a: equality> =
+    { Id: 'a
+      Cost: int
+      Edges: Edge<'a> list
+      Path: 'a list }
+    interface IComparable<Vertex<'a>> with
+        member this.CompareTo other = compare this.Cost other.Cost
+
+    interface IComparable with
+        member this.CompareTo(obj: obj) =
+            match obj with
+            | :? Vertex<'a> -> compare this.Cost (unbox<Vertex<'a>> obj).Cost
+            | _ -> invalidArg "obj" "Must be of type Vertex"
+
+    override x.Equals(yobj) =
+        match yobj with
+        | :? Vertex<'a> as y -> (x.Id = y.Id && x.Edges = y.Edges)
+        | _ -> false
+
+    override x.GetHashCode() = hash x.Id
+
+type Path<'a> = { Nodes: 'a list; Cost: int }
+
+let addEdge vertex e =
+    { vertex with Edges = e :: vertex.Edges }
+
+type Vertex<'a when 'a: equality> with
+    member this.AddEdge = addEdge this
+
+let makeEdge (distance, destVertexId) =
+    { DestinationVertexId = destVertexId
+      Cost = distance }
+
+let makeVertex vertexId edges =
+    { Id = vertexId
+      Cost = Int32.MaxValue
+      Edges = edges |> List.map makeEdge
+      Path = [] }
+
+let shortestPath<'a when 'a: equality and 'a: comparison>
+    (graph: Map<'a, Vertex<'a>>)
+    (sourceId: 'a)
+    (destinationId: 'a)
+    =
+
+    let mutable graph0 = graph.Add(sourceId, { graph.[sourceId] with Cost = 0 })
+
+    let mutable pq = PriorityQueue.empty false
+    pq <- pq.Insert(graph0.[sourceId])
+
+    let mutable dest = Option<Vertex<'a>>.None
+    let mutable visited = Map.empty
+
+    while not pq.IsEmpty && dest.IsNone do
+        let vertex, newpq = pq.Pop()
+        pq <- newpq
+
+        if
+            vertex.Cost <> Int32.MaxValue
+            && not (visited.ContainsKey(vertex.Id))
+        then
+            if vertex.Id = destinationId then
+                dest <- Some(vertex)
+
+            for edge in vertex.Edges do
+                let destinationId = edge.DestinationVertexId
+
+                if not (visited.ContainsKey(destinationId)) then
+                    let newDistance = edge.Cost + vertex.Cost
+                    let destination = graph.[destinationId]
+
+                    if newDistance < destination.Cost then
+                        let newDestination =
+                            { destination with
+                                Cost = newDistance
+                                Path = destination.Id :: vertex.Path }
+
+                        pq <- pq.Insert newDestination
+                        graph0 <- graph0.Add(destinationId, newDestination)
+                    else
+                        ()
+                else
+                    ()
+
+            visited <- visited.Add(vertex.Id, vertex)
+
+    let result =
+        match dest with
+        | Some dest ->
+            { Nodes = dest.Path |> List.rev |> fun l -> sourceId :: l
+              Cost = dest.Cost }
+            |> Some
+        | None -> None
+
+    result
+
+#endif
+

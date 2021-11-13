@@ -1,0 +1,15 @@
+[timeout:900][out:json];
+/*
+area[boundary=administrative][name='Deutschland'];
+*/
+way
+  ["railway"="rail"]
+  ["ref"=5021];
+  (
+      ._;>;
+  );
+  (
+    ._;
+    node(r);
+  );
+out;

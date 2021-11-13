@@ -1,0 +1,9 @@
+[timeout:900][out:json];
+/*
+area[boundary=administrative][name='Deutschland'];
+*/
+rel
+  [route=tracks]
+  [ref]
+  [type=route];
+out;

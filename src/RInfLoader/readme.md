@@ -9,6 +9,7 @@ USAGE: RInfLoader
                [--help] [--DatasetImports] [--SectionsOfLines] [--OperationalPoints]
                [--SOLTrackParameters <sol file>] [--OpInfo.Build <dataDir>]
                [--LineInfo.Build <dataDir>] [--Graph.Build <dataDir>] 
+               [--Compare.Line <line>] [--Compare.Line.Remote <line>]  [--Compare.Lines <maxlines>]
                [--Graph.Route <dataDir> <ops>] [--Graph.Line <dataDir> <line>]
 
 OPTIONS:
@@ -32,6 +33,11 @@ OPTIONS:
     --Graph.Line <dataDir> <line>
                           get path of line 
                           (assumes Graph.json, LineInfos.json and OpInfos.json in <dataDir>).
+    --Compare.Line <line> compare local RInf and local OSM data of line.
+    --Compare.Line.Remote <line>  
+                          compare local RInf and remote OSM data of line.
+    --Compare.Lines <maxlines>    
+                          compare local RInf and local OSM data of max lines.
     --help                display this list of options.
 ```
 

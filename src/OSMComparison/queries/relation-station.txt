@@ -1,0 +1,13 @@
+[timeout:900][out:json];
+rel
+  ["type"="public_transport"]
+  ["public_transport"="stop_area"]
+  ["railway:ref"];
+  (
+      ._;>;
+  );
+  (
+    ._;
+    node(r)["public_transport"="stop_position"];
+  );
+out;

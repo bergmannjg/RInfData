@@ -2,13 +2,14 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net5.0</TargetFramework>
+    <TargetFramework>net6.0</TargetFramework>
     <WarnOn>3390;$(WarnOn)</WarnOn>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="../RInfApi/RInfApi.fsproj"/>
     <ProjectReference Include="../RInfGraph/RInfGraph.fsproj"/>
+    <ProjectReference Include="../OSMComparison/OSMComparison.fsproj"/>
   </ItemGroup>
 
   <ItemGroup>

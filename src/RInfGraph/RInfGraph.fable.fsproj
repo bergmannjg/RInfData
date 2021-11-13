@@ -10,6 +10,10 @@
     <PackageReference Include="FSharpx.Collections" Version="3.0.1" />
   </ItemGroup>
 
+  <PropertyGroup>
+    <DefineConstants>FABLE_COMPILER</DefineConstants>
+  </PropertyGroup>
+  
   <ItemGroup>
     <Compile Include="Dijkstra.fs" />
     <Compile Include="Graph.fs" />

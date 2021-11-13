@@ -101,7 +101,12 @@ module Graph =
     let toGraph (g: GraphNode []) =
         g
         |> Array.fold
-            (fun (graph: Map<string, Dijkstra.Vertex>) n ->
+            (fun (graph: Map<string, 
+#if FABLE_COMPILER
+            Dijkstra.Vertex>) n ->
+#else
+            Dijkstra.Vertex<string>>) n ->
+#endif            
                 let v = toVertex n
                 graph.Add(v.Id, v))
             (Map.empty)
@@ -139,7 +144,12 @@ module Graph =
             |> Some
         | _ -> None
 
-    let private toGraphNodes (g: GraphNode []) (line: string option) (path: Dijkstra.Path option) =
+    let private toGraphNodes (g: GraphNode []) (line: string option) 
+#if FABLE_COMPILER
+                (path: Dijkstra.Path option) =
+#else
+                (path: Dijkstra.Path<string> option) =
+#endif             
         match path with
         | Some path ->
             path.Nodes
@@ -151,7 +161,11 @@ module Graph =
 
     let private getShortestPathFromGraphWithCond
         (g: GraphNode [])
+#if FABLE_COMPILER
         (graph: Map<string, Dijkstra.Vertex>)
+#else
+        (graph: Map<string, Dijkstra.Vertex<string>>)
+#endif             
         (ids: string [])
         (line: string option)
         =
@@ -173,13 +187,25 @@ module Graph =
             printfn "nodes not found"
             Array.empty
 
-    let getShortestPathFromGraph (g: GraphNode []) (graph: Map<string, Dijkstra.Vertex>) (ids: string []) =
+    let getShortestPathFromGraph (g: GraphNode []) 
+#if FABLE_COMPILER
+                (graph: Map<string, Dijkstra.Vertex>)
+#else
+                (graph: Map<string, Dijkstra.Vertex<string>>)
+#endif  
+                (ids: string []) =              
         getShortestPathFromGraphWithCond g graph ids None
 
     let getShortestPath (g: GraphNode []) (ids: string []) =
         getShortestPathFromGraph g (toGraph g) ids
 
-    let getPathOfLineFromGraph (g: GraphNode []) (graph: Map<string, Dijkstra.Vertex>) (line: LineInfo) =
+    let getPathOfLineFromGraph (g: GraphNode []) 
+#if FABLE_COMPILER
+                            (graph: Map<string, Dijkstra.Vertex>) 
+#else
+                            (graph: Map<string, Dijkstra.Vertex<string>>) 
+#endif                
+                            (line: LineInfo) =
         getShortestPathFromGraphWithCond g graph line.UOPIDs (Some line.Line)
 
     let getPathOfLine (g: GraphNode []) (line: LineInfo) =
