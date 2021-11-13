@@ -90,7 +90,23 @@ let private getOperationalPointsMatchings
         | None -> None)
     |> Array.choose id
 
-let private getSoLsMatchings (opMatchings: OpMatching []) (rinfGraph: GraphNode []) (osmSols: OsmSectionOfLine []) =
+let private getRInfShortestPathOnLine (line: int) (rinfGraph: GraphNode []) (opStart: string) (opEnd: string) =
+    let path = Graph.getShortestPath rinfGraph [| opStart; opEnd |]
+
+    if (path
+        |> Array.exists (fun p ->
+            p.Edges
+            |> Array.exists (fun e -> e.Line <> line.ToString()))) then
+        [||]
+    else
+        path
+
+let private getSoLsMatchings
+    (line: int)
+    (opMatchings: OpMatching [])
+    (rinfGraph: GraphNode [])
+    (osmSols: OsmSectionOfLine [])
+    =
     osmSols
     |> Array.map (fun osmSoL ->
         let opMatchingStart =
@@ -103,11 +119,7 @@ let private getSoLsMatchings (opMatchings: OpMatching []) (rinfGraph: GraphNode 
 
         { opStart = opMatchingStart
           opEnd = opMatchingEnd
-          rinfPath =
-            Graph.getShortestPath
-                rinfGraph
-                [| opMatchingStart.op.UOPID
-                   opMatchingEnd.op.UOPID |]
+          rinfPath = getRInfShortestPathOnLine line rinfGraph opMatchingStart.op.UOPID opMatchingEnd.op.UOPID
           osmSol = osmSoL })
 
 let private rinfGetMaxSpeeds (path: GraphNode []) =
@@ -152,7 +164,7 @@ let private getRInfOsmMatching
 
     let osmSols = Transform.SoL.getOsmSectionsOfLine line matchedOsmOps elementsOfLine
 
-    let solMatchings = getSoLsMatchings opMatchings rinfGraph osmSols
+    let solMatchings = getSoLsMatchings line opMatchings rinfGraph osmSols
 
     (stopsOfLine, opMatchings, solMatchings)
 

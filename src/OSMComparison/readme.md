@@ -82,6 +82,6 @@ More than 1 osm operational point was found for 680 railway lines.
 
 Section of line data was found for 557 railway lines.
 
-Maxspeed data was found for 484 railway lines.
+Maxspeed data was found for 460 railway lines.
 
-Maxspeed data differs in 71 railway lines more than 50 km.
+Maxspeed data differs in 47 railway lines more than 50 km.
