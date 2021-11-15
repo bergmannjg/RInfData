@@ -13,10 +13,11 @@ Short summary of basic concepts.
 
 ### RInf concepts
 
-See also [specifications of the register of Infrastructure](https://www.era.europa.eu/sites/default/files/registers/docs/rinf_application_guide_for_register_en.pdf).
+See also [specifications of the register of Infrastructure](https://www.era.europa.eu/sites/default/files/registers/docs/rinf_application_guide_for_register_en.pdf) and ERA [vocabulary](http://era.ilabt.imec.be/era-vocabulary/index-en.html).
 
-* **Operational Point** with type station, passenger terminal, junction, switch etc. OPs have a unique OPID, a location and a list of NationalIdentNum as parameters.
-* **Section of line** is the connection between two adjacent OPs consisting of tracks of the same line with parameter SOLLineIdentification as the National line identification.
+* **Operational Point** is a location for train service operations with type station, passenger terminal, junction, switch etc. OPs have a unique OPID, a location and a list of NationalIdentNum as parameters.
+* **Section of Line** is the connection between two adjacent OPs consisting of tracks of the same line with parameter SOLLineIdentification as the National line identification.
+* **National Railway Line** is a Railway line within a member state.
 
 ### OSM Railway concepts
 
