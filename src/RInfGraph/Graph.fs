@@ -269,7 +269,7 @@ module Graph =
                     node.Edges.[0].StartKm
                     node.Edges.[0].EndKm
                     node.Edges.[0].Length
-                    node.Edges.[0].Cost)
+                    node.Edges.[0].MaxSpeed)
 
         printfn
             "%.1f"

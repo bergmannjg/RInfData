@@ -34,18 +34,24 @@ type OSMJson = { elements: Element [] }
 [<RequireQualifiedAccess>]
 module Data =
 
-    let getTagValue (key: string) (tags: Map<string, string> option) =
-        match tags with
+    let getTags (e: Element) =
+        match e with
+        | Node v -> v.tags
+        | Way v -> v.tags
+        | Relation v -> v.tags
+
+    let getTagValue (key: string) (e: Element) =
+        match getTags e with
         | Some tags -> tags.TryFind key
         | None -> None
 
-    let hasTagWithValue (key: string) (value: string) (tags: Map<string, string> option) =
-        match getTagValue key tags with
+    let hasTagWithValue (key: string) (value: string) (e: Element) =
+        match getTagValue key e with
         | Some v -> v = value
         | None -> false
 
-    let existsTag (key: string) (tags: Map<string, string> option) =
-        match tags with
+    let existsTag (key: string) (e: Element) =
+        match getTags e with
         | Some tags -> tags.ContainsKey key
         | None -> false
 
@@ -83,50 +89,50 @@ module Data =
         | Some e -> asWay e
         | None -> None
 
-    let getRelationOfMemberId (id: int64) (elements: Element []) =
+    let getRelationOf (e: Element) (elements: Element []) =
         elements
-        |> Array.tryFind (fun e ->
-            match e with
-            | Relation r -> r.members |> Array.exists (fun m -> m.ref = id)
+        |> Array.tryFind (fun x ->
+            match x with
+            | Relation r ->
+                r.members
+                |> Array.exists (fun m -> m.ref = idOf e)
             | _ -> false)
         |> fun e ->
             match e with
             | Some (Relation r) -> Some r
             | _ -> None
 
-    let getWaysOfNodeId (nodeId: int64) (filter: Way -> bool) (elements: Element []) =
+    let getWaysOfId (x: int64) (filter: Way -> bool) (elements: Element []) =
         elements
         |> Array.filter (fun e ->
             match e with
-            | Way w ->
-                filter w
-                && w.nodes |> Array.exists (fun n -> n = nodeId)
+            | Way w -> filter w && w.nodes |> Array.contains x
             | _ -> false)
-        |> Array.map (fun e ->
-            match e with
-            | Way w -> Some w.id
-            | _ -> None)
-        |> Array.choose id
+        |> Array.choose asWay
 
-    let getWayOfNodeId (id: int64) (filter: Way -> bool) (elements: Element []) =
+    let getWaysOfMember (m: Member) (filter: Way -> bool) (elements: Element []) = getWaysOfId m.ref filter elements
+
+    let getWaysOfElement (e: Element) (filter: Way -> bool) (elements: Element []) =
+        getWaysOfId (idOf e) filter elements
+
+    let getWayOf (node: Node) (filter: Way -> bool) (elements: Element []) =
         elements
         |> Array.tryFind (fun e ->
             match e with
-            | Way w ->
-                filter w
-                && w.nodes |> Array.exists (fun n -> n = id)
+            | Way w -> filter w && w.nodes |> Array.contains node.id
             | _ -> false)
         |> fun e ->
             match e with
             | Some (Way w) -> Some w
             | _ -> None
 
-    let hasWayOfId (id: int64) (filter: Way -> bool) (elements: Element []) =
-        getWayOfNodeId id filter elements |> Option.isSome
+    let hasWayOf (node: Node) (filter: Way -> bool) (elements: Element []) =
+        getWayOf node filter elements |> Option.isSome
 
-    let getMembersOfRelation (id: int64) (``type``: string) (role: string) (elements: Element []) =
-        match tryGetElement id elements with
-        | Some (Relation r) ->
-            r.members
-            |> Array.filter (fun e -> e.``type`` = ``type`` && e.role = role)
-        | _ -> [||]
+    let getMembers (r: Relation) (``type``: string) (role: string) =
+        r.members
+        |> Array.filter (fun e -> e.``type`` = ``type`` && e.role = role)
+
+    let getWaysOfMembers (r: Relation) (``type``: string) (role: string) (filter: Way -> bool) (elements: Element []) =
+        getMembers r ``type`` role
+        |> Array.collect (fun m -> getWaysOfMember m filter elements)

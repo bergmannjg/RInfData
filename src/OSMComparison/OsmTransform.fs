@@ -18,7 +18,7 @@ type OsmWay =
 type OsmSectionOfLine =
     { OsmOpStart: OsmOperationalPoint
       OsmOpEnd: OsmOperationalPoint
-      Ways: OsmWay [] }
+      Ways: Way [] }
 
 [<RequireQualifiedAccess>]
 module Tag =
@@ -62,23 +62,19 @@ module Transform =
             | None -> false
 
         let private isRailWayElement (t: System.Type) (e: Element) =
-            let tags =
-                match e with
-                | Node v when t = typeof<Node> -> v.tags
-                | Way v when t = typeof<Way> -> v.tags
-                | Relation v when t = typeof<Relation> -> v.tags
-                | _ -> None
-
             match e with
-            | Node _
-            | Way _ ->
-                OSM.Data.existsTag Tag.RailwayRef tags
-                && (isStop (OSM.Data.getTagValue Tag.Railway tags))
-            | Relation r ->
-                OSM.Data.existsTag Tag.RailwayRef r.tags
-                && OSM.Data.hasTagWithValue Tag.Publictransport "stop_area" r.tags
+            | Node _ when t = typeof<Node> ->
+                OSM.Data.existsTag Tag.RailwayRef e
+                && (isStop (OSM.Data.getTagValue Tag.Railway e))
+            | Way _ when t = typeof<Way> ->
+                OSM.Data.existsTag Tag.RailwayRef e
+                && (isStop (OSM.Data.getTagValue Tag.Railway e))
+            | Relation r when t = typeof<Relation> ->
+                OSM.Data.existsTag Tag.RailwayRef e
+                && OSM.Data.hasTagWithValue Tag.Publictransport "stop_area" e
                 && (r.members
                     |> Array.exists (fun m -> m.``type`` = "node" && m.role = "stop"))
+            | _ -> false
 
         let private asRailWayElement<'a> (choose: Element -> 'a option) (e: Element) =
             if isRailWayElement typeof<'a> e then
@@ -86,14 +82,14 @@ module Transform =
             else
                 None
 
-        let private makeOsmOperationalPoint (element: Element) (n: Node) (tags: Map<string, string> option) =
+        let private makeOsmOperationalPoint (e: Element) (n: Node) (tags: Map<string, string> option) =
             let tagValue key =
-                match OSM.Data.getTagValue key tags with
+                match OSM.Data.getTagValue key e with
                 | Some v -> v
                 | None -> ""
 
             Some
-                { Element = element
+                { Element = e
                   Name = tagValue Tag.Name
                   Type = tagValue Tag.Railway
                   Latitude = n.lat
@@ -103,18 +99,17 @@ module Transform =
         let wayStopsToOsmOperationalPoints (elements: Element []) =
             elements
             |> Array.choose (asRailWayElement Data.asWay)
-            |> Array.map (fun w ->
+            |> Array.choose (fun w ->
                 match elements
                       |> Array.tryFind (fun x -> OSM.Data.idOf x = w.nodes.[0])
                     with
                 | Some (Node n) -> makeOsmOperationalPoint (Way w) n w.tags
                 | _ -> None)
-            |> Array.choose id
 
         let relationStopsToOsmOperationalPoints (elements: Element []) =
             elements
             |> Array.choose (asRailWayElement Data.asRelation)
-            |> Array.map (fun r ->
+            |> Array.choose (fun r ->
                 let nodeMember =
                     r.members
                     |> Array.find (fun m -> m.``type`` = "node" && m.role = "stop")
@@ -124,14 +119,12 @@ module Transform =
                     with
                 | Some (Node n) -> makeOsmOperationalPoint (Relation r) n r.tags
                 | _ -> None)
-            |> Array.choose id
 
         let nodeStopsToOsmOperationalPoints (elements: Element []) =
             elements
             |> Array.choose (asRailWayElement Data.asNode)
-            |> Array.distinctBy (fun n -> OSM.Data.getTagValue Tag.RailwayRef n.tags)
-            |> Array.map (fun n -> makeOsmOperationalPoint (Node n) n n.tags)
-            |> Array.choose id
+            |> Array.distinctBy (fun n -> OSM.Data.getTagValue Tag.RailwayRef (Node n))
+            |> Array.choose (fun n -> makeOsmOperationalPoint (Node n) n n.tags)
 
     module SoL =
         open System
@@ -160,8 +153,7 @@ module Transform =
 
         let private getMinDistanceToWayNodes (node: Node) (way: Way) (elements: Element []) =
             way.nodes
-            |> Array.map (fun n -> Data.nodeOf n elements)
-            |> Array.choose id
+            |> Array.choose (fun n -> Data.nodeOf n elements)
             |> Array.map (fun nodeOnWay -> ``calculate distance`` (node.lat, node.lon) (nodeOnWay.lat, nodeOnWay.lon))
             |> fun arr ->
                 if arr.Length > 0 then
@@ -169,72 +161,65 @@ module Transform =
                 else
                     System.Double.MaxValue
 
-        let private getWaysWithDistance (node: Node) (relation: Relation) (elements: Element []) =
-
-            let members = Data.getMembersOfRelation relation.id "way" "" elements
-
-            members
-            |> Array.map (fun m -> OSM.Data.wayOf m.ref elements)
-            |> Array.choose id
-            |> Array.map ((fun w -> (w, getMinDistanceToWayNodes node w elements)))
-            |> Array.sortBy (fun (_, d) -> d)
-
-        let private filterNearestWays (ways: (Way * float) []) =
+        let private filterNearestWays (dist: float) (ways: (Way * float) []) =
             if ways.Length > 1 then
                 let (way1, d1) = ways.[0]
                 let (way2, d2) = ways.[1]
 
-                if d1 < 1.0 && d2 < 1.0 then
-                    [| way1.id; way2.id |]
+                if d1 < dist && d2 < dist then
+                    [| way1; way2 |]
                 else
                     [||]
             else
                 [||]
 
+        let private getWaysAround (node: Node) (relation: Relation) (dist: float) (elements: Element []) =
+            OSM.Data.getMembers relation "way" ""
+            |> Array.choose (fun m -> OSM.Data.wayOf m.ref elements)
+            |> Array.map ((fun w -> (w, getMinDistanceToWayNodes node w elements)))
+            |> Array.sortBy (fun (_, d) -> d)
+            |> filterNearestWays dist
+
         /// <summary>
         /// get ways on relation of line related to node with id stationId,
         /// corresponding overpass query:
         /// <code>
-        /// node(stationId);rel(bn)[route=tracks];way(r)[ref=line];
+        /// node(stationId);rel(bn)[route=tracks];node(stationId);way(around:1000)[ref=line];
         /// or node(stationId);rel(bn)[type=public_transport];node(r);way(bn)[railway=rail][ref=line];
         /// or node(stationId);way(bn)[railway=rail][ref=line];
+        /// or rel(stationId);node(r);way(bn)[railway=rail][ref=line];
         /// </code>
         /// </summary>
-        let private getWaysRelatedToStation (station: Element) (line: int) (elements: Element []) =
+        let private getWaysRelatedToStation (station: Element) (line: int) (elements: Element []) : Way [] =
             match station with
             | Node node ->
-                let stationId = node.id
-
-                match elements
-                      |> OSM.Data.getRelationOfMemberId stationId
-                    with
+                match elements |> OSM.Data.getRelationOf station with
                 | Some relation ->
-                    if OSM.Data.hasTagWithValue Tag.Route "tracks" relation.tags then
-                        match OSM.Data.nodeOf stationId elements with
-                        | Some node ->
-                            getWaysWithDistance node relation elements
-                            |> filterNearestWays
-                        | None -> [||]
-                    else if OSM.Data.hasTagWithValue Tag.Type "public_transport" relation.tags then
-                        OSM.Data.getMembersOfRelation relation.id "node" "stop" elements
-                        |> Array.collect (fun m ->
-                            OSM.Data.getWaysOfNodeId
-                                m.ref
-                                (fun w -> Data.hasTagWithValue Tag.Railway "rail" w.tags)
-                                elements)
-                        |> Array.distinct
+                    if OSM.Data.hasTagWithValue Tag.Route "tracks" (Relation relation) then
+                        getWaysAround node relation 1.0 elements
+                    else if OSM.Data.hasTagWithValue Tag.Type "public_transport" (Relation relation) then
+                        OSM.Data.getWaysOfMembers
+                            relation
+                            "node"
+                            "stop"
+                            (fun w -> Data.hasTagWithValue Tag.Railway "rail" (Way w))
+                            elements
+                        |> Array.distinctBy (fun w -> w.id)
                     else
                         [||]
                 | None ->
                     elements
-                    |> OSM.Data.getWaysOfNodeId stationId (fun w ->
-                        OSM.Data.hasTagWithValue Tag.Railway "rail" w.tags
-                        && OSM.Data.hasTagWithValue Tag.Ref (line.ToString()) w.tags)
+                    |> OSM.Data.getWaysOfElement station (fun w ->
+                        OSM.Data.hasTagWithValue Tag.Railway "rail" (Way w)
+                        && OSM.Data.hasTagWithValue Tag.Ref (line.ToString()) (Way w))
             | Way way -> [||]
             | Relation relation ->
-                OSM.Data.getMembersOfRelation relation.id "node" "stop" elements
-                |> Array.collect (fun m ->
-                    OSM.Data.getWaysOfNodeId m.ref (fun w -> Data.hasTagWithValue Tag.Railway "rail" w.tags) elements)
+                OSM.Data.getWaysOfMembers
+                    relation
+                    "node"
+                    "stop"
+                    (fun w -> Data.hasTagWithValue Tag.Railway "rail" (Way w))
+                    elements
                 |> Array.distinct
 
         let private getPairs (arr: 'a []) =
@@ -246,7 +231,7 @@ module Transform =
                 |> Array.mapi (fun i a -> (arr.[i], arr.[i + 1]))
 
         type private WayCache =
-            { way: int64
+            { way: Way
               tags: Map<string, string> option
               nodes: int64 []
               firstNode: int64
@@ -255,7 +240,7 @@ module Transform =
         let private getWayCache (members: Member []) (elements: Element []) =
             members
             |> Array.filter (fun m -> m.``type`` = "way")
-            |> Array.map (fun m ->
+            |> Array.choose (fun m ->
                 match Data.tryGetElement m.ref elements with
                 | Some (Way way) ->
                     match Data.tryGetElement way.nodes.[0] elements,
@@ -263,14 +248,13 @@ module Transform =
                         with
                     | Some firstNode, Some lastNode ->
                         Some
-                            { way = way.id
+                            { way = way
                               tags = way.tags
                               nodes = way.nodes
                               firstNode = OSM.Data.idOf firstNode
                               lastNode = OSM.Data.idOf lastNode }
                     | _ -> None
                 | _ -> None)
-            |> Array.choose id
 
         let private isConnectedWay (way1: WayCache) (way2: WayCache) =
             way1.way <> way2.way
@@ -286,15 +270,14 @@ module Transform =
                 (fun (graph: Map<int64, Dijkstra.Vertex<int64>>) w ->
                     let edges =
                         waysCache
-                        |> Array.map (fun x ->
+                        |> Array.choose (fun x ->
                             if isConnectedWay x w then
-                                Some(1, x.way)
+                                Some(1, x.way.id)
                             else
                                 None)
-                        |> Array.choose id
                         |> Array.toList
 
-                    graph.Add(w.way, (Dijkstra.makeVertex w.way edges)))
+                    graph.Add(w.way.id, (Dijkstra.makeVertex w.way.id edges)))
                 Map.empty
 
         let private getRouteOfWays
@@ -304,10 +287,10 @@ module Transform =
             (graph: Map<int64, Dijkstra.Vertex<int64>>)
             =
 
-            match Dijkstra.shortestPath graph fromWay.way toWay.way with
+            match Dijkstra.shortestPath graph fromWay.way.id toWay.way.id with
             | Some path ->
                 path.Nodes
-                |> List.map (fun p -> waysCache |> Array.find (fun w -> w.way = p))
+                |> List.map (fun p -> waysCache |> Array.find (fun w -> w.way.id = p))
                 |> List.toArray
             | None -> [||]
 
@@ -328,12 +311,12 @@ module Transform =
             |> Option.defaultValue [||]
 
         let private getAnyWaysFromTo
-            (fromIds: int64 [])
-            (toIds: int64 [])
+            (fromIds: Way [])
+            (toIds: Way [])
             (waysCache: WayCache [])
             (graph: Map<int64, Dijkstra.Vertex<int64>>)
             =
-            let getWays (ids: int64 []) =
+            let getWays (ids: Way []) =
                 waysCache
                 |> Array.filter (fun x -> ids |> Array.contains x.way)
 
@@ -355,15 +338,15 @@ module Transform =
               OsmOpEnd = op2
               Ways =
                 getAnyWaysFromTo ids1 ids2 waysCache graph
-                |> Array.map (fun w -> { ID = w.way; Tags = w.tags }) }
+                |> Array.map (fun w -> w.way) }
 
         let private getRelationOfRailwayLine (line: int) (elements: Element []) =
             elements
             |> Array.tryFind (fun e ->
                 match e with
                 | Relation r ->
-                    OSM.Data.hasTagWithValue Tag.Route "tracks" r.tags
-                    && OSM.Data.hasTagWithValue Tag.Ref (line.ToString()) r.tags
+                    OSM.Data.hasTagWithValue Tag.Route "tracks" (Relation r)
+                    && OSM.Data.hasTagWithValue Tag.Ref (line.ToString()) (Relation r)
                 | _ -> false)
             |> fun e ->
                 match e with
@@ -385,12 +368,11 @@ module Transform =
 
         let getMaxSpeeds (sol: OsmSectionOfLine) =
             sol.Ways
-            |> Array.map (fun w ->
-                match OSM.Data.getTagValue Tag.Maxspeed w.Tags with
+            |> Array.choose (fun w ->
+                match OSM.Data.getTagValue Tag.Maxspeed (Way w) with
                 | Some speed ->
                     match System.Int32.TryParse speed with
                     | true, int -> Some int
                     | _ -> None
                 | None -> None)
-            |> Array.choose id
             |> Array.distinct

@@ -75,7 +75,7 @@ let private getOperationalPointsMatchings
     let stops = Array.append allStops stopsOfLine
 
     ops
-    |> Array.map (fun op ->
+    |> Array.choose (fun op ->
         match stops |> Array.tryFind (matchOPID op) with
         | Some stop ->
             let dist =
@@ -88,7 +88,6 @@ let private getOperationalPointsMatchings
                   stopIsRelatedToLine = stopsOfLine |> Array.exists (matchOPID op) }
             )
         | None -> None)
-    |> Array.choose id
 
 let private getRInfShortestPathOnLine (line: int) (rinfGraph: GraphNode []) (opStart: string) (opEnd: string) =
     let path = Graph.getShortestPath rinfGraph [| opStart; opEnd |]
