@@ -1,0 +1,14 @@
+[timeout:900][out:json];
+(
+node(47.55799, 8.28232, 47.87214, 8.86185)
+  [!"light_rail"]
+  [!"subway"]
+  ["railway"~"^station|^stop|^halt|^service_station"]
+  ["railway:ref"];
+node(47.55799, 8.28232, 47.87214, 8.86185)
+  [!"light_rail"]
+  [!"subway"]
+  ["railway"~"^station|^stop|^halt|^service_station"]
+  ["railway:ref:DBAG"];
+);
+out;

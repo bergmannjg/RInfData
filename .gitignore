@@ -6,6 +6,7 @@
 .fsdocs/
 
 data/
+db-data/
 osm-data/
 node_modules/
 private_modules/

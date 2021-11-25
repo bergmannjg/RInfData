@@ -2,57 +2,79 @@
 /*
 area[boundary=administrative][name='Deutschland'];
 */
-rel
-  [route=tracks]
-  [ref=3501]
-  [type=route];
 (
-  ._;>;
-);
-(
-  ._;
-  way(r);
-  node(w)["public_transport"=stop_position];
-  relation(bn)[public_transport=stop_area];
-  node(r)["railway:ref"];
-);
-(
-  ._;
-  way(r);
-  node(w)["public_transport"=stop_position];
-  relation(bn)[public_transport=stop_area]["railway:ref"];
-);
-(
-  ._;
-  way(r);
-  node(w)["public_transport"=stop_position];
-  relation(bn)[public_transport=stop_area];
-  way(r)["railway:ref"];
-  node(w);
-);
-(
-  ._;
-  way(r);
-  node(w)["railway"=stop];
-  relation(bn)[public_transport=stop_area];
-  node(r)["railway:ref"];
-);
-(
-  ._;
-  way(r);
-  node(w)["railway"=switch];
-);
-(
-  ._;
-  way(r);
-  node(w)["railway"=switch];
-  way(bn)["railway"="rail"][!"railway:ref"]["service"="siding"];
-  node(w)["public_transport"=stop_position];
-  relation(bn)[public_transport=stop_area];
-  node(r)["railway:ref"];
-);
-(
-  ._;
-  node(r)["uic_ref"];
+  (
+    rel
+      [route=tracks]
+      [ref=xxxx]
+      [type=route];
+    (
+      ._;>;
+    );
+    (
+      ._;
+      way(r);
+      node(w)["public_transport"=stop_position];
+      relation(bn)[public_transport=stop_area];
+      node(r)["railway:ref"];
+    );
+    (
+      ._;
+      way(r);
+      node(w)["public_transport"=stop_position];
+      relation(bn)[public_transport=stop_area]["railway:ref"];
+    );
+    (
+      ._;
+      way(r);
+      node(w)["public_transport"=stop_position];
+      relation(bn)[public_transport=stop_area]["uic_ref"];
+    );
+    (
+      ._;
+      way(r);
+      node(w)["public_transport"=stop_position];
+      relation(bn)[public_transport=stop_area];
+      way(r)["railway:ref"];
+      node(w);
+    );
+    (
+      ._;
+      way(r);
+      node(w)["public_transport"=stop_position];
+      relation(bn)[public_transport=stop_area];
+      way(r)[!"railway:ref"]["uic_ref"];
+      node(w);
+    );
+    (
+      ._;
+      way(r);
+      node(w)["railway"=stop];
+      relation(bn)[public_transport=stop_area];
+      node(r)["railway:ref"];
+    );
+    (
+      ._;
+      way(r);
+      node(w)["railway"=switch];
+    );
+    (
+      ._;
+      way(r);
+      node(w)["railway"=switch];
+      way(bn)["railway"="rail"][!"railway:ref"]["service"="siding"];
+      node(w)["public_transport"=stop_position];
+      relation(bn)[public_transport=stop_area];
+      node(r)["railway:ref"];
+    );
+    (
+      ._;
+      node(r)["uic_ref"];
+    );
+  );
+  (
+    way["ref"=xxxx]["railway"="rail"];
+    node(w);
+  );
 );
 out;

@@ -13,11 +13,8 @@ let loadRInfGraph (rinfDataDir) =
     readFile<GraphNode []> rinfDataDir "Graph.json"
 
 let loadRInfLines (rinfDataDir) =
-    readFile<OperationalPoint []> rinfDataDir "OperationalPoints.json"
-    |> Array.filter (fun op -> op.Type <> "junction" && op.Type <> "switch")
-    |> Array.collect (fun op ->
-        op.RailwayLocations
-        |> Array.map (fun loc -> int loc.NationalIdentNum))
+    readFile<LineInfo []> rinfDataDir "LineInfos.json"
+    |> Array.map (fun li -> int li.Line)
     |> Array.distinct
     |> Array.sort
 
@@ -28,6 +25,7 @@ let loadRInfOperationalPoints (line: int) rinfDataDir =
     |> Array.filter (fun op ->
         op.Type <> "junction"
         && op.Type <> "switch"
+        && op.Type <> "domestic border point"
         && op.RailwayLocations
            |> Array.exists (fun loc -> loc.NationalIdentNum = line.ToString()))
     |> Array.groupBy (fun op -> op.UOPID)

@@ -2,9 +2,9 @@
 /*
 area[boundary=administrative][name='Deutschland'];
 */
+(
 way
-  ["public_transport"~"^station|^stop|^halt"]
-  ["railway"="rail"]
+  ["railway"]
   ["railway:ref"];
   (
       ._;>;
@@ -13,4 +13,26 @@ way
     ._;
     node(r);
   );
+way
+  ["railway"]
+  ["ref:IFOPT"];
+  (
+      ._;>;
+  );
+  (
+    ._;
+    node(r);
+  );
+way
+  ["railway"="platform"]
+  ["public_transport"="platform"]
+  ["ref"];
+  (
+      ._;>;
+  );
+  (
+    ._;
+    node(r);
+  );
+);
 out;

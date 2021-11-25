@@ -1,6 +1,12 @@
 /// transform OSM data to OsmOperationalPoint and OsmSectionOfLine
 namespace OSM
 
+type RailwayRefContent =
+    | NotFound
+    | FromOpId
+    | FromRelation
+    | FromUicRef
+
 type OsmOperationalPoint =
     { /// corresponding OSM element
       Element: Element
@@ -8,7 +14,11 @@ type OsmOperationalPoint =
       Type: string
       Latitude: float
       Longitude: float
-      RailwayRef: string }
+      RailwayRef: string
+      RailwayRefParent: string
+      RailwayRefsUicRef: string []
+      UicRef: int
+      RailwayRefContent: RailwayRefContent }
 
 type OsmWay =
     { ID: int64
@@ -30,6 +40,9 @@ module Tag =
     let Name = "name"
 
     [<Literal>]
+    let NameDE = "name:de"
+
+    [<Literal>]
     let Type = "type"
 
     [<Literal>]
@@ -47,6 +60,21 @@ module Tag =
     [<Literal>]
     let RailwayRef = "railway:ref"
 
+    [<Literal>]
+    let RailwayRefDBAG = "railway:ref:DBAG"
+
+    [<Literal>]
+    let RailwayRefParent = "railway:ref:parent"
+
+    [<Literal>]
+    let RefIFOPT = "ref:IFOPT"
+
+    [<Literal>]
+    let UicRef = "uic_ref"
+
+    [<Literal>]
+    let Usage = "usage"
+
 [<RequireQualifiedAccess>]
 module Transform =
 
@@ -58,55 +86,140 @@ module Transform =
                 t = "station"
                 || t = "stop"
                 || t = "halt"
+                || t = "platform"
                 || t = "service_station"
+                || t = "yard"
             | None -> false
 
         let private isRailWayElement (t: System.Type) (e: Element) =
             match e with
-            | Node _ when t = typeof<Node> ->
-                OSM.Data.existsTag Tag.RailwayRef e
-                && (isStop (OSM.Data.getTagValue Tag.Railway e))
-            | Way _ when t = typeof<Way> ->
-                OSM.Data.existsTag Tag.RailwayRef e
-                && (isStop (OSM.Data.getTagValue Tag.Railway e))
+            | Node n when t = typeof<Node> -> isStop (OSM.Data.getTagValue Tag.Railway e)
+            | Way _ when t = typeof<Way> -> isStop (OSM.Data.getTagValue Tag.Railway e)
             | Relation r when t = typeof<Relation> ->
-                OSM.Data.existsTag Tag.RailwayRef e
+                (OSM.Data.existsTag Tag.RailwayRef e
+                 || OSM.Data.existsTag Tag.UicRef e)
                 && OSM.Data.hasTagWithValue Tag.Publictransport "stop_area" e
                 && (r.members
                     |> Array.exists (fun m -> m.``type`` = "node" && m.role = "stop"))
             | _ -> false
 
-        let private asRailWayElement<'a> (choose: Element -> 'a option) (e: Element) =
+        let asRailWayElement<'a> (choose: Element -> 'a option) (e: Element) =
             if isRailWayElement typeof<'a> e then
                 choose e
             else
                 None
 
-        let private makeOsmOperationalPoint (e: Element) (n: Node) (tags: Map<string, string> option) =
+        let private makeOsmOperationalPoint
+            (e: Element)
+            (n: Node)
+            (uicRefMappings: DB.UicRefMapping [])
+            (elements: Element [])
+            =
             let tagValue key =
                 match OSM.Data.getTagValue key e with
                 | Some v -> v
                 | None -> ""
 
+            let otherTagValue key value =
+                if value = "" then
+                    match OSM.Data.getTagValue key e with
+                    | Some v -> v
+                    | None -> ""
+                else
+                    value
+
+            let toInt (s: string) =
+                match System.Int32.TryParse s with
+                | true, int -> int
+                | _ -> 0
+
+            let getRailwayRefFromRelation (railwayRef: string) (e: Element) =
+                if railwayRef = "" then
+                    match OSM.Data.getRelationOf e elements with
+                    | Some r ->
+                        if OSM.Data.hasTagWithValue Tag.Publictransport "stop_area" (Relation r) then
+                            match OSM.Data.getTagValue Tag.RailwayRef (Relation r) with
+                            | Some ref -> ref
+                            | None -> ""
+                        else
+                            ""
+                    | None -> ""
+                else
+                    railwayRef
+
+            let getRailwayRefFromIFOPT (railwayRef: string) (ifopt: string) =
+                if railwayRef = "" && ifopt <> "" then
+
+                    let m = System.Text.RegularExpressions.Regex.Match(ifopt, "^(de:[0-9]+:[0-9]+).*")
+
+                    if m.Success then
+                        let ifopt = m.Groups.[1].Value
+
+                        match uicRefMappings
+                              |> Array.tryFind (fun s -> s.IFOPT = ifopt)
+                            with
+                        | Some s -> s.DS100
+                        | None -> ""
+                    else
+                        ""
+                else
+                    railwayRef
+
+            let getRailwayRefFromUicRef (railwayRef: string) (uicRef: int) =
+                if railwayRef = "" && uicRef > 0 then
+                    match uicRefMappings
+                          |> Array.tryFind (fun s -> s.EVA_NR = uicRef)
+                        with
+                    | Some s -> s.DS100
+                    | None -> ""
+                else
+                    railwayRef
+
+            let railwayRefStep0 = tagValue Tag.RailwayRef
+            let railwayRefStep1 = otherTagValue Tag.RailwayRefDBAG railwayRefStep0
+            let railwayRefStep2 = getRailwayRefFromRelation railwayRefStep1 e
+
+            let uicRef = tagValue Tag.UicRef |> toInt
+            let railwayRefsUicRefStep0 = getRailwayRefFromUicRef "" uicRef
+
+            let railwayRefsUicRefStep1 =
+                getRailwayRefFromIFOPT railwayRefsUicRefStep0 (tagValue Tag.RefIFOPT)
+
+            let nameStep0 = tagValue Tag.NameDE
+            let nameStep1 = otherTagValue Tag.Name nameStep0
+
             Some
                 { Element = e
-                  Name = tagValue Tag.Name
+                  Name = nameStep1
                   Type = tagValue Tag.Railway
                   Latitude = n.lat
                   Longitude = n.lon
-                  RailwayRef = tagValue Tag.RailwayRef }
+                  RailwayRef = railwayRefStep2
+                  RailwayRefParent = tagValue Tag.RailwayRefParent
+                  RailwayRefsUicRef = railwayRefsUicRefStep1.Split [| ',' |]
+                  UicRef = uicRef
+                  RailwayRefContent =
+                    if railwayRefStep0 <> "" then
+                        RailwayRefContent.FromOpId
+                    else if railwayRefStep0 = "" && railwayRefStep2 <> "" then
+                        RailwayRefContent.FromRelation
+                    else if railwayRefStep2 = ""
+                            && railwayRefsUicRefStep1 <> "" then
+                        RailwayRefContent.FromUicRef
+                    else
+                        RailwayRefContent.NotFound }
 
-        let wayStopsToOsmOperationalPoints (elements: Element []) =
+        let wayStopsToOsmOperationalPoints (uicRefMappings: DB.UicRefMapping []) (elements: Element []) =
             elements
             |> Array.choose (asRailWayElement Data.asWay)
             |> Array.choose (fun w ->
                 match elements
                       |> Array.tryFind (fun x -> OSM.Data.idOf x = w.nodes.[0])
                     with
-                | Some (Node n) -> makeOsmOperationalPoint (Way w) n w.tags
+                | Some (Node n) -> makeOsmOperationalPoint (Way w) n uicRefMappings elements
                 | _ -> None)
 
-        let relationStopsToOsmOperationalPoints (elements: Element []) =
+        let relationStopsToOsmOperationalPoints (uicRefMappings: DB.UicRefMapping []) (elements: Element []) =
             elements
             |> Array.choose (asRailWayElement Data.asRelation)
             |> Array.choose (fun r ->
@@ -117,14 +230,19 @@ module Transform =
                 match elements
                       |> Array.tryFind (fun x -> OSM.Data.idOf x = nodeMember.ref)
                     with
-                | Some (Node n) -> makeOsmOperationalPoint (Relation r) n r.tags
+                | Some (Node n) -> makeOsmOperationalPoint (Relation r) n uicRefMappings elements
                 | _ -> None)
 
-        let nodeStopsToOsmOperationalPoints (elements: Element []) =
+        let nodeStopsToOsmOperationalPoints (uicRefMappings: DB.UicRefMapping []) (elements: Element []) =
             elements
             |> Array.choose (asRailWayElement Data.asNode)
-            |> Array.distinctBy (fun n -> OSM.Data.getTagValue Tag.RailwayRef (Node n))
-            |> Array.choose (fun n -> makeOsmOperationalPoint (Node n) n n.tags)
+            |> Array.choose (fun n -> makeOsmOperationalPoint (Node n) n uicRefMappings elements)
+            |> Array.distinctBy (fun op ->
+                if op.RailwayRefContent = RailwayRefContent.NotFound then
+                    op.Name + op.Latitude.ToString()
+                else
+                    op.RailwayRef
+                    + (op.RailwayRefsUicRef |> String.concat ","))
 
     module SoL =
         open System
@@ -151,15 +269,26 @@ module Transform =
 
             r * c
 
-        let private getMinDistanceToWayNodes (node: Node) (way: Way) (elements: Element []) =
+        let private getMinDistanceToWayNodes (lat: float) (lon: float) (way: Way) (elements: Element []) =
             way.nodes
             |> Array.choose (fun n -> Data.nodeOf n elements)
-            |> Array.map (fun nodeOnWay -> ``calculate distance`` (node.lat, node.lon) (nodeOnWay.lat, nodeOnWay.lon))
+            |> Array.map (fun nodeOnWay ->
+                (``calculate distance`` (lat, lon) (nodeOnWay.lat, nodeOnWay.lon), Some nodeOnWay))
             |> fun arr ->
                 if arr.Length > 0 then
-                    Array.min arr
+                    arr |> Array.minBy (fun (d, _) -> d)
                 else
-                    System.Double.MaxValue
+                    (System.Double.MaxValue, None)
+
+        let getMinDistanceToWays (lat: float) (lon: float) (elements: Element []) =
+            elements
+            |> Array.choose (Data.asWay)
+            |> Array.map (fun w -> getMinDistanceToWayNodes lat lon w elements)
+            |> fun arr ->
+                if arr.Length > 0 then
+                    arr |> Array.minBy (fun (d, _) -> d)
+                else
+                    (-1.0, None)
 
         let private filterNearestWays (dist: float) (ways: (Way * float) []) =
             if ways.Length > 1 then
@@ -176,7 +305,11 @@ module Transform =
         let private getWaysAround (node: Node) (relation: Relation) (dist: float) (elements: Element []) =
             OSM.Data.getMembers relation "way" ""
             |> Array.choose (fun m -> OSM.Data.wayOf m.ref elements)
-            |> Array.map ((fun w -> (w, getMinDistanceToWayNodes node w elements)))
+            |> Array.map (
+                (fun w ->
+                    let (d, _) = getMinDistanceToWayNodes node.lat node.lon w elements
+                    (w, d))
+            )
             |> Array.sortBy (fun (_, d) -> d)
             |> filterNearestWays dist
 
@@ -212,7 +345,7 @@ module Transform =
                     |> OSM.Data.getWaysOfElement station (fun w ->
                         OSM.Data.hasTagWithValue Tag.Railway "rail" (Way w)
                         && OSM.Data.hasTagWithValue Tag.Ref (line.ToString()) (Way w))
-            | Way way -> [||]
+            | Way way -> [| way |]
             | Relation relation ->
                 OSM.Data.getWaysOfMembers
                     relation
@@ -340,7 +473,7 @@ module Transform =
                 getAnyWaysFromTo ids1 ids2 waysCache graph
                 |> Array.map (fun w -> w.way) }
 
-        let private getRelationOfRailwayLine (line: int) (elements: Element []) =
+        let getRelationOfRailwayLine (line: int) (elements: Element []) =
             elements
             |> Array.tryFind (fun e ->
                 match e with

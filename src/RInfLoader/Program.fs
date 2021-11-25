@@ -48,9 +48,9 @@ OPTIONS:
                           get path of line
                           (assumes Graph.json, LineInfos.json and OpInfos.json in <dataDir>).
     --Compare.Line <line> compare local RInf and local OSM data of line.
-    --Compare.Line.Remote <line>  
+    --Compare.Line.Remote <line>
                           compare local RInf and remote OSM data of line.
-    --Compare.Lines <maxlines>    
+    --Compare.Lines <maxlines>
                           compare local RInf and local OSM data of max lines.
     --help                display this list of options.
 """
@@ -324,6 +324,8 @@ let main argv =
 
         let rinfDataDir = "../../data/"
 
+        let dbDataDir = "../../db-data/"
+
         use client = new Api.Client(username, password, country)
 
         if argv.Length = 0 then
@@ -520,7 +522,13 @@ let main argv =
         else if argv.[0] = "--Compare.Line" && argv.Length = 2 then
             async {
                 do!
-                    Comparison.compareLineAsync osmDataDir rinfDataDir (int argv.[1]) false (Some "Deutschland")
+                    Comparison.compareLineAsync
+                        osmDataDir
+                        rinfDataDir
+                        dbDataDir
+                        (int argv.[1])
+                        false
+                        (Some "Deutschland")
                     |> Async.Ignore
 
                 return ""
@@ -529,7 +537,13 @@ let main argv =
                 && argv.Length = 2 then
             async {
                 do!
-                    Comparison.compareLineAsync osmDataDir rinfDataDir (int argv.[1]) true (Some "Deutschland")
+                    Comparison.compareLineAsync
+                        osmDataDir
+                        rinfDataDir
+                        dbDataDir
+                        (int argv.[1])
+                        true
+                        (Some "Deutschland")
                     |> Async.Ignore
 
                 return ""
@@ -537,7 +551,16 @@ let main argv =
         else if argv.[0] = "--Compare.Lines" && argv.Length > 1 then
             async {
                 do!
-                    Comparison.compareLinesAsync osmDataDir rinfDataDir (int argv.[1])
+                    Comparison.compareLinesAsync osmDataDir rinfDataDir dbDataDir (int argv.[1])
+                    |> Async.Ignore
+
+                return ""
+            }
+        else if argv.[0] = "--Compare.Lines.List"
+                && argv.Length > 1 then
+            async {
+                do!
+                    Comparison.compareLinesListAsync osmDataDir rinfDataDir dbDataDir (argv.[1].Split [| ',' |])
                     |> Async.Ignore
 
                 return ""
