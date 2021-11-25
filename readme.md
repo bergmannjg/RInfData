@@ -4,7 +4,7 @@ F# program to access the Register of Infrastructure database of the European Uni
 
 * [RInf](https://www.era.europa.eu/registers_en#rinf) Register of Railway Infrastructure
 * [API](https://rinf.era.europa.eu/API/Help) to the the RINF database
-* ERA [vocabulary](http://era.ilabt.imec.be/era-vocabulary/index-en.html)
+* ERA [vocabulary](https://data-interop.era.europa.eu/era-vocabulary/)
 
 ## Program
 
