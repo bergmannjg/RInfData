@@ -103,9 +103,9 @@ module Graph =
         |> Array.fold
             (fun (graph: Map<string, 
 #if FABLE_COMPILER
-            Dijkstra.Vertex>) n ->
+                                    Dijkstra.Vertex>) n ->
 #else
-            Dijkstra.Vertex<string>>) n ->
+                                    Dijkstra.Vertex<string>>) n ->
 #endif            
                 let v = toVertex n
                 graph.Add(v.Id, v))
