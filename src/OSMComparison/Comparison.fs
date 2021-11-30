@@ -94,131 +94,12 @@ let private fill (s: string) (len: int) =
 
 let private toOPID (s: string) = "DE" + (fill s 5) + s
 
-let private equivOPIDs = [| ("DE EBIL", "EBILP") |]
-
 // todo: fix osm data
-let fixOsmErrors (stop: OsmOperationalPoint) =
-    if stop.Name = "Burg (Dithmarschen)"
-       && stop.RailwayRef = "ABRD" then
-        { stop with RailwayRef = "ABR" }
-    else if stop.Name = "Kummersdorf (bei Storkow)"
-            && stop.RailwayRef = "BSTW" then
-        { stop with RailwayRef = "BKUM" }
-    else if stop.Name = "Nürnberg-Dürrenhof"
-            && stop.RailwayRef = "NGLH" then
-        { stop with RailwayRef = "NDHF" }
-    else if stop.Name = "Weilheim (Oberbayern)"
-            && stop.RailwayRef = "5504" then
-        { stop with RailwayRef = "MWH" }
-    else if stop.Name = "Görlitz-Weinhübel (Haltepunkt)"
-            && stop.RailwayRef = "" then
-        { stop with
-            RailwayRef = "DGWH"
-            RailwayRefContent = RailwayRefContent.FromOpId }
-    else if stop.Name = "Plauen Mitte" && stop.RailwayRef = "" then
-        { stop with
-            RailwayRef = "DPM"
-            RailwayRefContent = RailwayRefContent.FromOpId }
-    else if stop.Name = "Domnitz" && stop.RailwayRef = "" then
-        { stop with
-            RailwayRef = "LDN"
-            RailwayRefContent = RailwayRefContent.FromOpId }
-    else if stop.Name = "Haan-Gruiten"
-            && stop.RailwayRef = "KGUH" then
-        { stop with RailwayRef = "KGUA" }
-    else if stop.Name = "Nauheim" && stop.RailwayRef = "FUN" then
-        { stop with RailwayRef = "FNU" }
-    else if stop.Name = "Burgholzhausen"
-            && stop.RailwayRef = "" then
-        { stop with
-            RailwayRef = "FBGH"
-            RailwayRefContent = RailwayRefContent.FromOpId }
-    else if stop.Name = "Friedberg Süd"
-            && stop.RailwayRef = "" then
-        { stop with
-            RailwayRef = "FGS"
-            RailwayRefContent = RailwayRefContent.FromOpId }
-    else if stop.Name = "Stockhausen/Lahn"
-            && stop.RailwayRef = "FTSH" then
-        { stop with RailwayRef = "FSTH" }
-    else if stop.Name = "Gräveneck"
-            && stop.RailwayRef = "FHRK" then
-        { stop with RailwayRef = "FGRK" }
-    else if stop.Name = "Sulzbach" && stop.RailwayRef = "" then
-        { stop with
-            RailwayRef = "FSZ"
-            RailwayRefContent = RailwayRefContent.FromOpId }
-    else if stop.Name = "Borsdorf" && stop.RailwayRef = "" then
-        { stop with
-            RailwayRef = "FBO"
-            RailwayRefContent = RailwayRefContent.FromOpId }
-    else if stop.Name = "Sankt Ottilien"
-            && stop.RailwayRef = "" then
-        { stop with
-            RailwayRef = "MOTN"
-            RailwayRefContent = RailwayRefContent.FromOpId }
-    else if stop.Name = "Hochhausen (Tauber)"
-            && stop.RailwayRef = "" then
-        { stop with
-            RailwayRef = "THO"
-            RailwayRefContent = RailwayRefContent.FromOpId }
-    else if Data.idOf stop.Element = 13668291
-            && stop.RailwayRef = "" then
-        { stop with
-            RailwayRef = "MBIHH"
-            RailwayRefContent = RailwayRefContent.FromOpId }
-    else if stop.Name = "Gundelfingen (Bayern)"
-            && stop.RailwayRef = "" then
-        { stop with
-            RailwayRef = "MGUF"
-            RailwayRefContent = RailwayRefContent.FromOpId }
-    else if stop.Name = "Kirchseeon (Bayern)"
-            && stop.RailwayRef = "MKO;MKO H" then
-        { stop with RailwayRef = "MKO" }
-    else if stop.Name = "Zschaitz" && stop.RailwayRef = "DSTC" then
-        { stop with RailwayRef = "DZSC" }
-    else if stop.Name = "Ottendorf" && stop.RailwayRef = "" then
-        { stop with
-            RailwayRef = "DOF"
-            RailwayRefContent = RailwayRefContent.FromOpId }
-    else if stop.Name = "Aßling (Oberbayern)"
-            && stop.RailwayRef = "" then
-        { stop with
-            RailwayRef = "MAG"
-            RailwayRefContent = RailwayRefContent.FromOpId }
-    else if Data.idOf stop.Element = 19654034
-            && stop.RailwayRef = "" then
+let private fixOsmErrors (stop: OsmOperationalPoint) =
+    if Data.idOf stop.Element = 19654034
+       && stop.RailwayRef = "" then // todo
         { stop with
             RailwayRef = "NRPF"
-            RailwayRefContent = RailwayRefContent.FromOpId }
-    else if stop.Name = "Leiferde" && stop.RailwayRef = "" then
-        { stop with
-            RailwayRef = "HLFG"
-            RailwayRefContent = RailwayRefContent.FromOpId }
-    else if stop.Name = "Neuhausen (Cottbus)"
-            && stop.RailwayRef = "" then
-        { stop with
-            RailwayRef = "BNH"
-            RailwayRefContent = RailwayRefContent.FromOpId }
-    else if stop.Name = "Freital-Hainsberg"
-            && stop.RailwayRef = "" then
-        { stop with
-            RailwayRef = "DFH"
-            RailwayRefContent = RailwayRefContent.FromOpId }
-    else if Data.idOf stop.Element = 600737353
-            && stop.RailwayRef = "" then
-        { stop with
-            RailwayRef = "DAUU"
-            RailwayRefContent = RailwayRefContent.FromOpId }
-    else if stop.Name = "Doberlug-Kirchhain"
-            && stop.RailwayRef = "" then
-        { stop with
-            RailwayRef = "BDKO"
-            RailwayRefContent = RailwayRefContent.FromOpId }
-    else if stop.Name = "Schwerin Görries"
-            && stop.RailwayRef = "" then
-        { stop with
-            RailwayRef = "WSGN"
             RailwayRefContent = RailwayRefContent.FromOpId }
     else
         stop
@@ -236,9 +117,7 @@ let private matchOPID (op: OperationalPoint) (stop: OsmOperationalPoint) =
     let inSplitList (s1: string) (splits: string []) =
         splits |> Array.exists (fun s -> s1 = toOPID s)
 
-    if equivOPIDs
-       |> Array.exists (fun (opId, stopId) -> opId = op.UOPID && stopId = fixedStop.RailwayRef)
-       || op.UOPID = (toOPID fixedStop.RailwayRef)
+    if op.UOPID = (toOPID fixedStop.RailwayRef)
        || (op.UOPID = (toOPID fixedStop.RailwayRefParent)
            && distance op stop < 1.0) then
         Some(stop, RailwayRefMatching.ByOpId)
@@ -417,12 +296,7 @@ let private collectResult
                     | Some node -> urlOpToLonLat m.op node.lon node.lat
                     | None -> ""
 
-                printfn
-                    "distance to line %d, stop %s %s, dist: %.3f"
-                    line
-                    m.op.Name
-                    m.op.UOPID
-                    m.distOfOpToWaysOfLine
+                printfn "distance to line %d, stop %s %s, dist: %.3f" line m.op.Name m.op.UOPID m.distOfOpToWaysOfLine
 
                 printfn
                     "distOfOpToWaysOfLine|%d|%s|%s|[%.3f](%s)|[%d](https://www.openstreetmap.org/relation/%d)|"
@@ -439,7 +313,12 @@ let private collectResult
     maybeOpMatchings
     |> Array.iter (fun m ->
         if m.distOfOpToStop > maxDistanceOfMatchedOps then
-            printfn "distance from op to stop, line %d, stop %s %s, dist: %.3f" line m.op.Name m.op.UOPID m.distOfOpToStop
+            printfn
+                "distance from op to stop, line %d, stop %s %s, dist: %.3f"
+                line
+                m.op.Name
+                m.op.UOPID
+                m.distOfOpToStop
 
             printfn
                 "distOfOpToStop|%d|%s|%s|[%.3f](%s)|"

@@ -1,15 +1,13 @@
 namespace OSM
 
 type Node =
-    { ``type``: string option
-      id: int64
+    { id: int64
       lat: float
       lon: float
       tags: Map<string, string> option }
 
 type Way =
-    { ``type``: string option
-      id: int64
+    { id: int64
       nodes: int64 []
       tags: Map<string, string> option }
 
@@ -19,8 +17,7 @@ type Member =
       role: string }
 
 type Relation =
-    { ``type``: string option
-      id: int64
+    { id: int64
       members: Member []
       tags: Map<string, string> option }
 

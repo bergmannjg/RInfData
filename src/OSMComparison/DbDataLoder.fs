@@ -16,5 +16,12 @@ module DBLoader =
     let private readFile<'a> path name =
         JsonSerializer.Deserialize<'a>(File.ReadAllText(path + name))
 
+    let private fixErrors (m: UicRefMapping) =
+        if m.DS100 = "EBILP" then
+            { m with DS100 = "EBIL" } // according to DB Netze Infrastrukturregister
+        else
+            m
+
     let loadMappings (dbDataDir) =
         readFile<UicRefMapping []> dbDataDir "D_Bahnhof_2020_alle.json"
+        |> Array.map fixErrors
