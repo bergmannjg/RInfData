@@ -109,9 +109,30 @@ module Transform =
             else
                 None
 
+        let private fill (s: string) (len: int) =
+            if s.Length < len then
+                System.String(' ', len - s.Length)
+            else
+                ""
+
+        /// from railwayRef to opid
+        let toOPID (s: string) =
+            if s.Length > 0 then
+                "DE" + (fill s 5) + s
+            else
+                ""
+
+        /// from opid to railwayRef
+        let toRailwayRef (opid: string) =
+            if opid.Length = 7 then
+                opid.Substring(2).Trim()
+            else
+                opid
+
         let private makeOsmOperationalPoint
             (e: Element)
-            (n: Node)
+            (lat: float)
+            (lon: float)
             (uicRefMappings: DB.UicRefMapping [])
             (elements: Element [])
             =
@@ -192,11 +213,13 @@ module Transform =
                 { Element = e
                   Name = nameStep1
                   Type = tagValue Tag.Railway
-                  Latitude = n.lat
-                  Longitude = n.lon
-                  RailwayRef = railwayRefStep2
-                  RailwayRefParent = tagValue Tag.RailwayRefParent
-                  RailwayRefsUicRef = railwayRefsUicRefStep1.Split [| ',' |]
+                  Latitude = lat
+                  Longitude = lon
+                  RailwayRef = toOPID railwayRefStep2
+                  RailwayRefParent = toOPID (tagValue Tag.RailwayRefParent)
+                  RailwayRefsUicRef =
+                    railwayRefsUicRefStep1.Split [| ',' |]
+                    |> Array.map toOPID
                   UicRef = uicRef
                   RailwayRefContent =
                     if railwayRefStep0 <> "" then
@@ -213,30 +236,22 @@ module Transform =
             elements
             |> Array.choose (asRailWayElement Data.asWay)
             |> Array.choose (fun w ->
-                match elements
-                      |> Array.tryFind (fun x -> OSM.Data.idOf x = w.nodes.[0])
-                    with
-                | Some (Node n) -> makeOsmOperationalPoint (Way w) n uicRefMappings elements
+                match OSM.Data.getAnyNodeOfWay w elements with
+                | Some n -> makeOsmOperationalPoint (Way w) n.lat n.lon uicRefMappings elements
                 | _ -> None)
 
         let relationStopsToOsmOperationalPoints (uicRefMappings: DB.UicRefMapping []) (elements: Element []) =
             elements
             |> Array.choose (asRailWayElement Data.asRelation)
             |> Array.choose (fun r ->
-                let nodeMember =
-                    r.members
-                    |> Array.find (fun m -> m.``type`` = "node" && m.role = "stop")
-
-                match elements
-                      |> Array.tryFind (fun x -> OSM.Data.idOf x = nodeMember.ref)
-                    with
-                | Some (Node n) -> makeOsmOperationalPoint (Relation r) n uicRefMappings elements
+                match OSM.Data.getAnyNodeOfRelation r "stop" elements with
+                | Some n -> makeOsmOperationalPoint (Relation r) n.lat n.lon uicRefMappings elements
                 | _ -> None)
 
         let nodeStopsToOsmOperationalPoints (uicRefMappings: DB.UicRefMapping []) (elements: Element []) =
             elements
             |> Array.choose (asRailWayElement Data.asNode)
-            |> Array.choose (fun n -> makeOsmOperationalPoint (Node n) n uicRefMappings elements)
+            |> Array.choose (fun n -> makeOsmOperationalPoint (Node n) n.lat n.lon uicRefMappings elements)
             |> Array.distinctBy (fun op ->
                 if op.RailwayRefContent = RailwayRefContent.NotFound then
                     op.Name + op.Latitude.ToString()

@@ -133,3 +133,25 @@ module Data =
     let getWaysOfMembers (r: Relation) (``type``: string) (role: string) (filter: Way -> bool) (elements: Element []) =
         getMembers r ``type`` role
         |> Array.collect (fun m -> getWaysOfMember m filter elements)
+
+    let getAnyNodeOfWay (w: Way) (elements: Element []) =
+        match elements
+              |> Array.tryFind (fun x -> idOf x = w.nodes.[0])
+            with
+        | Some (Node n) -> Some n
+        | _ -> None
+
+    let getAnyNodeOfRelation (r: Relation) (role: string) (elements: Element []) =
+        let nodeMember =
+            r.members
+            |> Array.find (fun m -> m.``type`` = "node" && m.role = role)
+
+        match elements
+              |> Array.tryFind (fun x -> idOf x = nodeMember.ref)
+            with
+        | Some (Node n) -> Some n
+        | _ -> None
+
+    let toMap (elements: Element []) =
+        elements
+        |> Array.fold (fun (map: Map<int64, Element>) e -> map.Add(idOf e, e)) (Map.empty)

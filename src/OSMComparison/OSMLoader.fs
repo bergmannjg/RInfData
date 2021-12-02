@@ -135,29 +135,30 @@ let loadOsmData osmDataDir client (useRemote: bool) (area: string option) (line:
         }
 
 let loadAllStops osmDataDir uicRefMappings =
+
+    let load (prefix: string) (map: DB.UicRefMapping [] -> Element [] -> OsmOperationalPoint []) (g: OSMJson) =
+        let sw = new System.Diagnostics.Stopwatch()
+        sw.Start()
+        let pts = map uicRefMappings g.elements
+        sw.Stop()
+        printfn "%s: %d, elements %d, %d msecs" prefix pts.Length  g.elements.Length sw.ElapsedMilliseconds
+        pts
+
     let wayStops =
         readFile<OSMJson> osmDataDir "way-stations.json"
-        |> fun g -> OSM.Transform.Op.wayStopsToOsmOperationalPoints uicRefMappings g.elements
-
-    printfn "wayStops: %d" wayStops.Length
+        |> load "wayStops" OSM.Transform.Op.wayStopsToOsmOperationalPoints
 
     let relationStops =
         readFile<OSMJson> osmDataDir "relation-stations.json"
-        |> fun g -> OSM.Transform.Op.relationStopsToOsmOperationalPoints uicRefMappings g.elements
-
-    printfn "relationStops: %d" relationStops.Length
+        |> load "relationStops" OSM.Transform.Op.relationStopsToOsmOperationalPoints
 
     let nodeStops =
         readFile<OSMJson> osmDataDir "node-stations.json"
-        |> fun g -> OSM.Transform.Op.nodeStopsToOsmOperationalPoints uicRefMappings g.elements
-
-    printfn "nodeStops: %d" nodeStops.Length
+        |> load "nodeStops" OSM.Transform.Op.nodeStopsToOsmOperationalPoints
 
     let nodeStopsCH =
         readFile<OSMJson> osmDataDir "node-stations-ch.json"
-        |> fun g -> OSM.Transform.Op.nodeStopsToOsmOperationalPoints uicRefMappings g.elements
-
-    printfn "nodeStopsCH: %d" nodeStopsCH.Length
+        |> load "nodeStopsCH"  OSM.Transform.Op.nodeStopsToOsmOperationalPoints
 
     Array.concat [ nodeStops
                    nodeStopsCH

@@ -317,15 +317,18 @@ let toMap (opInfos: OpInfo []) =
             m)
         (Dictionary<string, OpInfo>())
 
+let osmDataDir = "../../osm-data/"
+
+let rinfDataDir = "../../data/"
+
+let dbDataDir = "../../db-data/"
+
+let compareLineAsync (line: int) (useRemote: bool) (useAllStops: bool) =
+    Comparison.compareLineAsync osmDataDir rinfDataDir dbDataDir line useRemote useAllStops (Some "Deutschland")
+
 [<EntryPoint>]
 let main argv =
     try
-        let osmDataDir = "../../osm-data/"
-
-        let rinfDataDir = "../../data/"
-
-        let dbDataDir = "../../db-data/"
-
         use client = new Api.Client(username, password, country)
 
         if argv.Length = 0 then
@@ -519,31 +522,19 @@ let main argv =
 
                 return ""
             }
-        else if argv.[0] = "--Compare.Line" && argv.Length = 2 then
+        else if argv.[0] = "--Compare.Line" && argv.Length >= 2 then
             async {
                 do!
-                    Comparison.compareLineAsync
-                        osmDataDir
-                        rinfDataDir
-                        dbDataDir
-                        (int argv.[1])
-                        false
-                        (Some "Deutschland")
+                    compareLineAsync (int argv.[1]) false (argv.Length = 3 && argv.[2] = "--allStops")
                     |> Async.Ignore
 
                 return ""
             }
         else if argv.[0] = "--Compare.Line.Remote"
-                && argv.Length = 2 then
+                && argv.Length >= 2 then
             async {
                 do!
-                    Comparison.compareLineAsync
-                        osmDataDir
-                        rinfDataDir
-                        dbDataDir
-                        (int argv.[1])
-                        true
-                        (Some "Deutschland")
+                    compareLineAsync (int argv.[1]) true (argv.Length = 3 && argv.[2] = "--allStops")
                     |> Async.Ignore
 
                 return ""
