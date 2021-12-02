@@ -20,6 +20,8 @@
     <Compile Include="OsmTransform.fs" />
     <Compile Include="OSMLoader.fs" />
     <Compile Include="RInfLoader.fs" />
+    <Compile Include="Matching.fs" />
+    <Compile Include="Result.fs" />
     <Compile Include="Comparison.fs" />
   </ItemGroup>
 
