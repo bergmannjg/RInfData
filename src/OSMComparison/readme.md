@@ -4,7 +4,7 @@ Comparison of [RInf](https://www.era.europa.eu/registers_en#rinf) data and [OSM 
 
 ## Prerequisites
 
-* [local installation](https://wiki.openstreetmap.org/wiki/Overpass_API/Installation) of overpass api
+* [local installation](docker-overpass.sh) of overpass api
 * download RInf data with [RInfLoader](https://github.com/bergmannjg/RInfData/tree/main/src/RInfLoader).
 
 ## Data models

@@ -12,6 +12,7 @@ type Location = { Latitude: float; Longitude: float }
 type RailwayRefMatching =
     | ByNothing
     | ByOpId
+    | ByOpIdParent
     /// opid with same UicRef
     | ByUicRef
     | ByName
@@ -34,24 +35,6 @@ type SoLMatching =
       rinfPath: GraphNode []
       /// OsmSectionOfLine from opStart.stop to opEnd.stop
       osmSol: OsmSectionOfLine }
-
-type ProccessResult =
-    { line: int
-      countElements: int
-      maxDist: float
-      opMatchingOfMaxDist: OpMatching option
-      countStops: int
-      countOps: int
-      countUnrelated: int
-      countCompared: int
-      countMatchedWithOpId: int
-      countMatchedWithUicRef: int
-      countMatchedWithName: int
-      countMissing: int
-      countSolMatchings: int
-      maxSpeedDiff: int
-      railwayRefsMatchedWithUicRef: (string * int * int64) []
-      missingStops: string [] }
 
 /// reason why there is no matching of rinf op and osm stop
 type ReasonOfNoMatching =
@@ -110,10 +93,11 @@ let private matchOPID (op: OperationalPoint) (stopIsRelatedToLine: bool) (stop: 
     let inSplitList (s1: string) (splits: string []) =
         splits |> Array.exists (fun s -> s1 = s)
 
-    if op.UOPID = fixedStop.RailwayRef
-       || (op.UOPID = fixedStop.RailwayRefParent
-           && distance op stop < 1.0) then
+    if op.UOPID = fixedStop.RailwayRef then
         Some(stop, RailwayRefMatching.ByOpId, stopIsRelatedToLine)
+    else if op.UOPID = fixedStop.RailwayRefParent
+            && distance op stop < 1.0 then
+        Some(stop, RailwayRefMatching.ByOpIdParent, stopIsRelatedToLine)
     else if (fixedStop.RailwayRefsUicRef.Length > 0
              && inSplitList op.UOPID fixedStop.RailwayRefsUicRef) then
         Some(stop, RailwayRefMatching.ByUicRef, stopIsRelatedToLine)
@@ -132,7 +116,7 @@ let private makeMatching
         Transform.SoL.``calculate distance`` (op.Latitude, op.Longitude) (stop.Latitude, stop.Longitude)
 
     let (distOfOpToWaysOfLine, node) =
-        Transform.SoL.getMinDistanceToWays op.Latitude op.Longitude elementsOfLine
+        Transform.SoL.getMinDistanceToWays op.Latitude op.Longitude relationOfLine elementsOfLine
 
     { op = op
       stop = stop

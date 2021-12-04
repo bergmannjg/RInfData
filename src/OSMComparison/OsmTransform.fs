@@ -295,9 +295,10 @@ module Transform =
                 else
                     (System.Double.MaxValue, None)
 
-        let getMinDistanceToWays (lat: float) (lon: float) (elements: Element []) =
-            elements
-            |> Array.choose (Data.asWay)
+        let getMinDistanceToWays (lat: float) (lon: float) (relationOfLine: Relation) (elements: Element []) =
+            // elements
+            // |> Array.choose (Data.asWay)
+            Data.getWaysOfRelation relationOfLine elements
             |> Array.map (fun w -> getMinDistanceToWayNodes lat lon w elements)
             |> fun arr ->
                 if arr.Length > 0 then

@@ -7,6 +7,25 @@ open RInf
 open RInfGraph
 open Matching
 
+type ProccessResult =
+    { line: int
+      countElements: int
+      maxDist: float
+      opMatchingOfMaxDist: OpMatching option
+      countStops: int
+      countOps: int
+      countUnrelated: int
+      countCompared: int
+      countMatchedWithOpId: int
+      countMatchedWithOpIdParent: int
+      countMatchedWithUicRef: int
+      countMatchedWithName: int
+      countMissing: int
+      countSolMatchings: int
+      maxSpeedDiff: int
+      railwayRefsMatchedWithUicRef: (string * int * int64) []
+      missingStops: string [] }
+
 let private showWaysOfMatching = false
 
 let osmUrl (op: OperationalPoint) =
@@ -104,6 +123,10 @@ let collectResult
         opMatchings
         |> Array.filter (fun m -> m.railwayRefMatching = RailwayRefMatching.ByOpId)
 
+    let matchedWithOpIdParent =
+        opMatchings
+        |> Array.filter (fun m -> m.railwayRefMatching = RailwayRefMatching.ByOpIdParent)
+
     let matchedWithUicRef =
         opMatchings
         |> Array.filter (fun m -> m.railwayRefMatching = RailwayRefMatching.ByUicRef)
@@ -114,11 +137,13 @@ let collectResult
 
     if not compact then
         printfn
-            "line: %d, stops: %d, ops: %d, matchings: %d, matchedWithUicRef: %d, matchedWithName: %d, relation: %d"
+            "line: %d, stops: %d, ops: %d, matchings: %d, matched(OpId: %d, OpIdParent: %d, hUicRef: %d, Name: %d), relation: %d"
             line
             stopsOfLine.Length
             opsOfLine.Length
             opMatchings.Length
+            matchedWithOpId.Length
+            matchedWithOpIdParent.Length
             matchedWithUicRef.Length
             matchedWithName.Length
             relationOfLine.id
@@ -198,7 +223,7 @@ let collectResult
 
     if compact then
         printfn
-            "line: %d, elements: %d, maxDist: (%.3f, %s), stops: %d, ops: %d, compared: %d, missing: %d, matched(OpId: %d, hUicRef: %d, Name: %d), sols: %d, maxSpeedDiff: %d"
+            "line: %d, elements: %d, maxDist: (%.3f, %s), stops: %d, ops: %d, compared: %d, missing: %d, matched(OpId: %d, OpIdParent: %d, hUicRef: %d, Name: %d), sols: %d, maxSpeedDiff: %d"
             line
             elementsOfLine.Length
             maxDist
@@ -208,6 +233,7 @@ let collectResult
             opMatchings.Length
             (opsOfLine.Length - opMatchings.Length)
             matchedWithOpId.Length
+            matchedWithOpIdParent.Length
             matchedWithUicRef.Length
             matchedWithName.Length
             solMatchings.Length
@@ -278,6 +304,7 @@ let collectResult
       countUnrelated = unassigned.Length
       countCompared = opMatchings.Length
       countMatchedWithOpId = matchedWithOpId.Length
+      countMatchedWithOpIdParent = matchedWithOpIdParent.Length
       countMatchedWithUicRef = matchedWithUicRef.Length
       countMatchedWithName = matchedWithName.Length
       countMissing = opsOfLine.Length - opMatchings.Length
@@ -309,6 +336,10 @@ let printCommonResult (resultOptions: ProccessResult option list) =
             results
             |> List.sumBy (fun r -> r.countMatchedWithOpId)
 
+        let matchedWithOpIdParent =
+            results
+            |> List.sumBy (fun r -> r.countMatchedWithOpIdParent)
+
         let matchedWithUicRef =
             results
             |> List.sumBy (fun r -> r.countMatchedWithUicRef)
@@ -334,7 +365,7 @@ let printCommonResult (resultOptions: ProccessResult option list) =
             |> List.filter (fun r -> r.maxSpeedDiff = -1 && r.countSolMatchings > 0)
 
         printfn
-            "*** lines: %d, max dist: %.3f, stops: %d, ops: %d, unrelated: %d, compared: %d, missing: %d, matched(OpId: %d, UicRef: %d, Name: %d), maxSpeedMissing: %d, maxSpeedDiff: %d"
+            "*** lines: %d, max dist: %.3f, stops: %d, ops: %d, unrelated: %d, compared: %d, missing: %d, matched(OpId: %d, OpIdParent: %d, UicRef: %d, Name: %d), maxSpeedMissing: %d, maxSpeedDiff: %d"
             results.Length
             maxDist
             stops
@@ -343,6 +374,7 @@ let printCommonResult (resultOptions: ProccessResult option list) =
             compared
             missingStops.Length
             matchedWithOpId
+            matchedWithOpIdParent
             matchedWithUicRef
             matchedWithName
             maxSpeedMissing.Length

@@ -5,7 +5,6 @@ module OverpassRequest =
     open System.Net
 
     // see http://overpass-api.de/command_line.html
-    let private baseurl = "https://overpass-api.de/api/"
 
     let private createHandler () =
         let handler = new Http.HttpClientHandler()
@@ -22,7 +21,7 @@ module OverpassRequest =
         else
             raise (System.InvalidOperationException("match failed: " + input))
 
-    let private checkAvailability (client: Http.HttpClient) =
+    let private checkAvailability (client: Http.HttpClient) (baseurl: string) =
         async {
 
             let! response =
@@ -39,11 +38,12 @@ module OverpassRequest =
                 do! Async.Sleep(timeout * 1000)
         }
 
-    let exec (client: Http.HttpClient) (query: string) =
+    let exec (client: Http.HttpClient) (baseurl: string) (query: string) =
 
         async {
 
-            do! checkAvailability client
+            if not (baseurl.Contains "localhost") then
+                do! checkAvailability client baseurl
 
             let url = baseurl + "interpreter?data=" + query
 

@@ -319,7 +319,7 @@ let toMap (opInfos: OpInfo []) =
 
 let osmDataDir = "../../osm-data/"
 
-let rinfDataDir = "../../data/"
+let rinfDataDir = "../../rinf-data/"
 
 let dbDataDir = "../../db-data/"
 

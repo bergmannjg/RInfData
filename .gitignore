@@ -5,7 +5,7 @@
 .fake
 .fsdocs/
 
-data/
+rinf-data/
 db-data/
 osm-data/
 node_modules/

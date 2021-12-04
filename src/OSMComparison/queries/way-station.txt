@@ -1,7 +1,5 @@
 [timeout:900][out:json];
-/*
 area[boundary=administrative][name='Deutschland'];
-*/
 (
 way
   ["railway"]

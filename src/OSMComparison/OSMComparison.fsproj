@@ -14,7 +14,6 @@
 
   <ItemGroup>
     <Compile Include="OsmData.fs" />
-    <Compile Include="OsmQuery.fs" />
     <Compile Include="OverpassRequest.fs" />
     <Compile Include="DbDataLoder.fs" />
     <Compile Include="OsmTransform.fs" />

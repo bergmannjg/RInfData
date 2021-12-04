@@ -1,4 +1,5 @@
 [timeout:900][out:json];
+area[boundary=administrative][name='Deutschland'];
 (
 node
   [!"light_rail"]

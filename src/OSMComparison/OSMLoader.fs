@@ -123,13 +123,13 @@ let loadOsmData osmDataDir client (useRemote: bool) (area: string option) (line:
         async {
             let query = getLineQuery line (if useRemote then area else None)
 
-            let loader =
+            let url =
                 if useRemote then
-                    OverpassRequest.exec client
+                    "https://overpass-api.de/api/"
                 else
-                    OSM.Command.execQuery
+                    "http://localhost:12345/api/"
 
-            let! response = loader query
+            let! response = OverpassRequest.exec client url query
             File.WriteAllText(osmDataDir + filename (line), response)
             return readFile<OSMJson> osmDataDir (filename line)
         }
@@ -141,7 +141,7 @@ let loadAllStops osmDataDir uicRefMappings =
         sw.Start()
         let pts = map uicRefMappings g.elements
         sw.Stop()
-        printfn "%s: %d, elements %d, %d msecs" prefix pts.Length  g.elements.Length sw.ElapsedMilliseconds
+        printfn "%s: %d, elements %d, %d msecs" prefix pts.Length g.elements.Length sw.ElapsedMilliseconds
         pts
 
     let wayStops =
@@ -158,7 +158,7 @@ let loadAllStops osmDataDir uicRefMappings =
 
     let nodeStopsCH =
         readFile<OSMJson> osmDataDir "node-stations-ch.json"
-        |> load "nodeStopsCH"  OSM.Transform.Op.nodeStopsToOsmOperationalPoints
+        |> load "nodeStopsCH" OSM.Transform.Op.nodeStopsToOsmOperationalPoints
 
     Array.concat [ nodeStops
                    nodeStopsCH

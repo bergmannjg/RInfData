@@ -134,6 +134,13 @@ module Data =
         getMembers r ``type`` role
         |> Array.collect (fun m -> getWaysOfMember m filter elements)
 
+    let getWaysOfRelation (r: Relation) (elements: Element []) =
+        getMembers r "way" ""
+        |> Array.choose (fun m ->
+            elements
+            |> Array.tryFind (fun x -> idOf x = m.ref))
+        |> Array.choose asWay
+
     let getAnyNodeOfWay (w: Way) (elements: Element []) =
         match elements
               |> Array.tryFind (fun x -> idOf x = w.nodes.[0])

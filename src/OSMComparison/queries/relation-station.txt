@@ -1,4 +1,5 @@
 [timeout:900][out:json];
+area[boundary=administrative][name='Deutschland'];
 (
 rel
   ["type"="public_transport"]
