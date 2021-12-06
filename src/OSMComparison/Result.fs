@@ -17,7 +17,6 @@ type ProccessResult =
       countUnrelated: int
       countCompared: int
       countMatchedWithOpId: int
-      countMatchedWithOpIdParent: int
       countMatchedWithUicRef: int
       countMatchedWithName: int
       countMissing: int
@@ -76,40 +75,39 @@ let collectResult
     (solMatchings: SoLMatching [])
     =
 
-    let opMatchings =
-        maybeOpMatchings
-        |> Array.filter (fun m ->
-            if m.distOfOpToWaysOfLine < Matching.maxDistanceOfOpToWaysOfLine then
-                true
-            else
-                let url =
-                    match m.nodeOnWaysOfLine with
-                    | Some node -> urlOpToLonLat m.op node.lon node.lat
-                    | None -> ""
+    let checkDistOfOpToWaysOfLine (m: OpMatching) =
+        if m.distOfOpToWaysOfLine < Matching.maxDistanceOfOpToWaysOfLine then
+            true
+        else
+            let url =
+                match m.nodeOnWaysOfLine with
+                | Some node -> urlOpToLonLat m.op node.lon node.lat
+                | None -> ""
 
-                printfn "distance to line %d, stop %s %s, dist: %.3f" line m.op.Name m.op.UOPID m.distOfOpToWaysOfLine
-
-                printfn
-                    "distOfOpToWaysOfLine|%d|%s|%s|[%.3f](%s)|[%d](https://www.openstreetmap.org/relation/%d)|"
-                    line
-                    m.op.Name
-                    m.op.UOPID
-                    m.distOfOpToWaysOfLine
-                    url
-                    relationOfLine.id
-                    relationOfLine.id
-
-                false)
-
-    maybeOpMatchings
-    |> Array.iter (fun m ->
-        if m.distOfOpToStop > maxDistanceOfMatchedOps then
             printfn
-                "distance from op to stop, line %d, stop %s %s, dist: %.3f"
+                "distance from op to ways of line %d, op %s %s, dist: %.3f"
                 line
                 m.op.Name
                 m.op.UOPID
-                m.distOfOpToStop
+                m.distOfOpToWaysOfLine
+
+            printfn
+                "distOfOpToWaysOfLine|%d|%s|%s|[%.3f](%s)|[%d](https://www.openstreetmap.org/relation/%d)|"
+                line
+                m.op.Name
+                m.op.UOPID
+                m.distOfOpToWaysOfLine
+                url
+                relationOfLine.id
+                relationOfLine.id
+
+            false
+
+    let checkDistOfOpToStop (m: OpMatching) =
+        if m.distOfOpToStop < maxDistanceOfMatchedOps then
+            true
+        else
+            printfn "distance from op to stop, line %d, op %s %s, node: %d, dist: %.3f" line m.op.Name m.op.UOPID  (Data.idOf m.stop.Element) m.distOfOpToStop
 
             printfn
                 "distOfOpToStop|%d|%s|%s|[%.3f](%s)|"
@@ -117,15 +115,19 @@ let collectResult
                 m.op.Name
                 m.op.UOPID
                 m.distOfOpToStop
-                (urlOpToLonLat m.op m.stop.Longitude m.stop.Latitude))
+                (urlOpToLonLat m.op m.stop.Longitude m.stop.Latitude)
+
+            false
+
+    let opMatchings =
+        maybeOpMatchings
+        |> Array.filter (fun m ->
+            checkDistOfOpToWaysOfLine m
+            && checkDistOfOpToStop m)
 
     let matchedWithOpId =
         opMatchings
         |> Array.filter (fun m -> m.railwayRefMatching = RailwayRefMatching.ByOpId)
-
-    let matchedWithOpIdParent =
-        opMatchings
-        |> Array.filter (fun m -> m.railwayRefMatching = RailwayRefMatching.ByOpIdParent)
 
     let matchedWithUicRef =
         opMatchings
@@ -137,13 +139,12 @@ let collectResult
 
     if not compact then
         printfn
-            "line: %d, stops: %d, ops: %d, matchings: %d, matched(OpId: %d, OpIdParent: %d, hUicRef: %d, Name: %d), relation: %d"
+            "line: %d, stops: %d, ops: %d, matchings: %d, matched(OpId: %d, hUicRef: %d, Name: %d), relation: %d"
             line
             stopsOfLine.Length
             opsOfLine.Length
             opMatchings.Length
             matchedWithOpId.Length
-            matchedWithOpIdParent.Length
             matchedWithUicRef.Length
             matchedWithName.Length
             relationOfLine.id
@@ -179,7 +180,7 @@ let collectResult
         unassigned
         |> Array.iter (fun m ->
             printfn
-                "Unassigned to line stop %s %s %s, minDist: %.3f"
+                "Unrelated to line stop %s %s %s, minDist: %.3f"
                 m.op.Name
                 m.op.UOPID
                 m.op.Type
@@ -223,7 +224,7 @@ let collectResult
 
     if compact then
         printfn
-            "line: %d, elements: %d, maxDist: (%.3f, %s), stops: %d, ops: %d, compared: %d, missing: %d, matched(OpId: %d, OpIdParent: %d, hUicRef: %d, Name: %d), sols: %d, maxSpeedDiff: %d"
+            "line: %d, elements: %d, maxDist: (%.3f, %s), stops: %d, ops: %d, compared: %d, missing: %d, matched(OpId: %d, hUicRef: %d, Name: %d), sols: %d, maxSpeedDiff: %d"
             line
             elementsOfLine.Length
             maxDist
@@ -233,7 +234,6 @@ let collectResult
             opMatchings.Length
             (opsOfLine.Length - opMatchings.Length)
             matchedWithOpId.Length
-            matchedWithOpIdParent.Length
             matchedWithUicRef.Length
             matchedWithName.Length
             solMatchings.Length
@@ -248,8 +248,10 @@ let collectResult
             match maybeOpMatchings
                   |> Array.tryFind (fun m -> m.op.UOPID = opid)
                 with
-            | Some ms -> ReasonOfNoMatching.DistanceToWaysOfLine
-            | None -> ReasonOfNoMatching.Unexpected
+            | Some ms when ms.distOfOpToStop < maxDistanceOfMatchedOps -> ReasonOfNoMatching.DistanceToStop
+            | Some ms when ms.distOfOpToWaysOfLine < maxDistanceOfOpToWaysOfLine ->
+                ReasonOfNoMatching.DistanceToWaysOfLine
+            | _ -> ReasonOfNoMatching.Unexpected
 
     opsOfLine
     |> Array.filter (findOp >> not)
@@ -270,19 +272,20 @@ let collectResult
         opMatchings
         |> Array.iter (fun m ->
             printfn
-                "dist %.3f, op %s %s %s, stop %d, match %s"
+                "dist %.3f, %s, rinf(%s, %s), osm(%d, %s), match %s"
                 m.distOfOpToStop
-                m.op.Name
                 m.op.UOPID
+                m.op.Name
                 m.op.Type
                 (Data.idOf m.stop.Element)
+                m.stop.Railway
                 (if m.railwayRefMatching = RailwayRefMatching.ByUicRef then
                      "byUicRef "
                      + (m.stop.RailwayRefsUicRef |> String.concat ",")
                  else if m.railwayRefMatching = RailwayRefMatching.ByName then
                      "byName " + m.stop.Name
                  else
-                     "byOpId " + m.stop.RailwayRef))
+                     "byOpId"))
 
     let railwayRefsMatchedWithUicRef =
         matchedWithUicRef
@@ -304,7 +307,6 @@ let collectResult
       countUnrelated = unassigned.Length
       countCompared = opMatchings.Length
       countMatchedWithOpId = matchedWithOpId.Length
-      countMatchedWithOpIdParent = matchedWithOpIdParent.Length
       countMatchedWithUicRef = matchedWithUicRef.Length
       countMatchedWithName = matchedWithName.Length
       countMissing = opsOfLine.Length - opMatchings.Length
@@ -336,10 +338,6 @@ let printCommonResult (resultOptions: ProccessResult option list) =
             results
             |> List.sumBy (fun r -> r.countMatchedWithOpId)
 
-        let matchedWithOpIdParent =
-            results
-            |> List.sumBy (fun r -> r.countMatchedWithOpIdParent)
-
         let matchedWithUicRef =
             results
             |> List.sumBy (fun r -> r.countMatchedWithUicRef)
@@ -365,7 +363,7 @@ let printCommonResult (resultOptions: ProccessResult option list) =
             |> List.filter (fun r -> r.maxSpeedDiff = -1 && r.countSolMatchings > 0)
 
         printfn
-            "*** lines: %d, max dist: %.3f, stops: %d, ops: %d, unrelated: %d, compared: %d, missing: %d, matched(OpId: %d, OpIdParent: %d, UicRef: %d, Name: %d), maxSpeedMissing: %d, maxSpeedDiff: %d"
+            "*** lines: %d, max dist: %.3f, stops: %d, ops: %d, unrelated: %d, compared: %d, missing: %d, matched(OpId: %d, UicRef: %d, Name: %d), maxSpeedMissing: %d, maxSpeedDiff: %d"
             results.Length
             maxDist
             stops
@@ -374,7 +372,6 @@ let printCommonResult (resultOptions: ProccessResult option list) =
             compared
             missingStops.Length
             matchedWithOpId
-            matchedWithOpIdParent
             matchedWithUicRef
             matchedWithName
             maxSpeedMissing.Length
@@ -445,4 +442,3 @@ let printCommonResult (resultOptions: ProccessResult option list) =
         printfn "***OSM railway lines with more than 1 osm operational point: %d" withMoreThanOneOsmfOp
         printfn "***OSM railway lines with sections of line: %d" withSols
         printfn "***OSM railway lines with maxspeed data: %d" withMaxSpeedDiff
-

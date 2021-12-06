@@ -148,6 +148,11 @@ module Data =
         | Some (Node n) -> Some n
         | _ -> None
 
+    let getAnyNodeOfWayMapped (w: Way) (elements: Map<int64, Element>) =
+        match elements |> Map.tryFind w.nodes.[0] with
+        | Some (Node n) -> Some n
+        | _ -> None
+
     let getAnyNodeOfRelation (r: Relation) (role: string) (elements: Element []) =
         let nodeMember =
             r.members

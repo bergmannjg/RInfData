@@ -9,7 +9,7 @@ way
   );
   (
     ._;
-    node(r);
+    node(w);
   );
 way
   ["railway"]
@@ -19,7 +19,7 @@ way
   );
   (
     ._;
-    node(r);
+    node(w);
   );
 way
   ["railway"="platform"]
@@ -30,7 +30,7 @@ way
   );
   (
     ._;
-    node(r);
+    node(w);
   );
 );
 out;

@@ -14,8 +14,8 @@ type OsmOperationalPoint =
       Type: string
       Latitude: float
       Longitude: float
+      Railway: string
       RailwayRef: string
-      RailwayRefParent: string
       RailwayRefsUicRef: string []
       UicRef: int
       RailwayRefContent: RailwayRefContent }
@@ -209,14 +209,16 @@ module Transform =
             let nameStep0 = tagValue Tag.NameDE
             let nameStep1 = otherTagValue Tag.Name nameStep0
 
+            let railway = otherTagValue Tag.Publictransport (tagValue Tag.Railway)
+
             Some
                 { Element = e
                   Name = nameStep1
                   Type = tagValue Tag.Railway
                   Latitude = lat
                   Longitude = lon
+                  Railway = railway
                   RailwayRef = toOPID railwayRefStep2
-                  RailwayRefParent = toOPID (tagValue Tag.RailwayRefParent)
                   RailwayRefsUicRef =
                     railwayRefsUicRefStep1.Split [| ',' |]
                     |> Array.map toOPID
@@ -233,10 +235,11 @@ module Transform =
                         RailwayRefContent.NotFound }
 
         let wayStopsToOsmOperationalPoints (uicRefMappings: DB.UicRefMapping []) (elements: Element []) =
+            let map = Data.toMap elements
             elements
             |> Array.choose (asRailWayElement Data.asWay)
             |> Array.choose (fun w ->
-                match OSM.Data.getAnyNodeOfWay w elements with
+                match OSM.Data.getAnyNodeOfWayMapped w map with
                 | Some n -> makeOsmOperationalPoint (Way w) n.lat n.lon uicRefMappings elements
                 | _ -> None)
 
@@ -296,9 +299,8 @@ module Transform =
                     (System.Double.MaxValue, None)
 
         let getMinDistanceToWays (lat: float) (lon: float) (relationOfLine: Relation) (elements: Element []) =
-            // elements
-            // |> Array.choose (Data.asWay)
-            Data.getWaysOfRelation relationOfLine elements
+            elements
+            |> Array.choose (Data.asWay)
             |> Array.map (fun w -> getMinDistanceToWayNodes lat lon w elements)
             |> fun arr ->
                 if arr.Length > 0 then

@@ -49,9 +49,9 @@ let private printWaysOfLineNotInRelation (line: int) (r: Relation) (elementsOfLi
         && OSM.Data.existsTag Tag.Usage (Way w)
         && OSM.Data.hasTagWithValue Tag.Ref (line.ToString()) (Way w)
         && not (r.members |> Array.exists (fun m -> m.ref = w.id)))
-    // |> Array.map (fun w ->
-    //     printfn "way %d not in relation %d of line %d" w.id r.id line
-    //     w)
+    |> Array.map (fun w ->
+        printfn "way %d not in relation %d of line %d" w.id r.id line
+        w)
     |> fun ways ->
         if ways.Length > 0 then
             printfn "  ways not in relation %d of line %d: %d " r.id line ways.Length
@@ -80,7 +80,7 @@ let private processAsync osmDataDir rinfDataDir compact useRemote area allStops 
 
             match OSM.Transform.SoL.getRelationOfRailwayLine line osmData.elements with
             | Some r ->
-                printWaysOfLineNotInRelation line r osmData.elements
+                // printWaysOfLineNotInRelation line r osmData.elements
 
                 return
                     Some(

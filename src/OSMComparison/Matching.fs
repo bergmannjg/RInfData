@@ -12,7 +12,6 @@ type Location = { Latitude: float; Longitude: float }
 type RailwayRefMatching =
     | ByNothing
     | ByOpId
-    | ByOpIdParent
     /// opid with same UicRef
     | ByUicRef
     | ByName
@@ -40,9 +39,23 @@ type SoLMatching =
 type ReasonOfNoMatching =
     /// historic station is not mapped in osm
     | HistoricStation
-    /// distance of matched rinf op and osm stop is gt than maxDistanceOfOpToWaysOfLine
+    /// distance of matched rinf op and osm stop is gt than maxDistanceOfMatchedOps
+    | DistanceToStop
+    /// distance of matched rinf op and osm ways of line is gt than maxDistanceOfOpToWaysOfLine
     | DistanceToWaysOfLine
+    | NotYetMapped
+    | RInfDataError
     | Unexpected
+
+type ReasonRInfDataError =
+    | RInfOpNotOnOsmLine
+    /// op type should be 'Depot or workshop' or 'Train technical services' or 'Switch'
+    | RInfOpTypeWrong
+
+type RInfDataError =
+    { line: int
+      opid: string
+      reason: ReasonRInfDataError }
 
 type MissingStop =
     { line: int
@@ -68,7 +81,24 @@ let missingStops: MissingStop [] =
          reason = ReasonOfNoMatching.HistoricStation }
        { line = 6441
          opid = "DE WLOW"
-         reason = ReasonOfNoMatching.HistoricStation } |]
+         reason = ReasonOfNoMatching.HistoricStation }
+       { line = 5850
+         opid = "DE NRPF"
+         reason = ReasonOfNoMatching.NotYetMapped }
+       { line = 6441
+         opid = "DE WSGR"
+         reason = ReasonOfNoMatching.RInfDataError } |]
+
+let rinfDataErrors: RInfDataError [] =
+    [| { line = 1153
+         opid = "DE ALBG"
+         reason = ReasonRInfDataError.RInfOpNotOnOsmLine }
+       { line = 1220
+         opid = "DE   AE"
+         reason = ReasonRInfDataError.RInfOpTypeWrong }
+       { line = 6441
+         opid = "DE WSGR"
+         reason = ReasonRInfDataError.RInfOpTypeWrong } |]
 
 // todo: fix osm data
 let private fixOsmErrors (stop: OsmOperationalPoint) =
@@ -95,9 +125,6 @@ let private matchOPID (op: OperationalPoint) (stopIsRelatedToLine: bool) (stop: 
 
     if op.UOPID = fixedStop.RailwayRef then
         Some(stop, RailwayRefMatching.ByOpId, stopIsRelatedToLine)
-    else if op.UOPID = fixedStop.RailwayRefParent
-            && distance op stop < 1.0 then
-        Some(stop, RailwayRefMatching.ByOpIdParent, stopIsRelatedToLine)
     else if (fixedStop.RailwayRefsUicRef.Length > 0
              && inSplitList op.UOPID fixedStop.RailwayRefsUicRef) then
         Some(stop, RailwayRefMatching.ByUicRef, stopIsRelatedToLine)
