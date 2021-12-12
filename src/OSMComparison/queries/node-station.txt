@@ -4,7 +4,7 @@ area[boundary=administrative][name='Deutschland'];
 node
   [!"light_rail"]
   [!"subway"]
-  ["railway"~"^station|^stop|^halt|^service_station"]
+  ["railway"~"^station|^stop|^halt|^service_station|^junction|^yard|^site"]
   ["railway:ref"];
 node
   [!"light_rail"]

@@ -16,6 +16,7 @@ type OsmOperationalPoint =
       Longitude: float
       Railway: string
       RailwayRef: string
+      RailwayRefParent: string
       RailwayRefsUicRef: string []
       UicRef: int
       RailwayRefContent: RailwayRefContent }
@@ -44,6 +45,9 @@ module Tag =
 
     [<Literal>]
     let Type = "type"
+
+    [<Literal>]
+    let Operator = "operator"
 
     [<Literal>]
     let Publictransport = "public_transport"
@@ -80,7 +84,44 @@ module Transform =
 
     module Op =
 
-        let private isStop (t: string option) =
+        type Key =
+            | FromRailwayRef
+            | FromUicRef
+
+        let toRailwayRefMap (ops: OsmOperationalPoint []) (initialmap: Map<string, Key * OsmOperationalPoint>) =
+            let add
+                (map: Map<string, Key * OsmOperationalPoint>)
+                (op: OsmOperationalPoint)
+                (opKeyType: Key)
+                (key: string)
+                =
+                match map.TryFind key with
+                | Some (currKeyType, v) ->
+                    // prefer key from RailwayRef and tag Railway = "station"
+                    if opKeyType = Key.FromRailwayRef
+                       && currKeyType = Key.FromUicRef then
+                        map.Add(key, (opKeyType, op))
+                    else if opKeyType = Key.FromRailwayRef
+                            && currKeyType = Key.FromRailwayRef
+                            && v.Railway <> "station"
+                            && op.Railway = "station" then
+                        map.Add(key, (opKeyType, op))
+                    else
+                        map
+                | None -> map.Add(key, (opKeyType, op))
+
+            ops
+            |> Array.fold
+                (fun map op ->
+                    if op.RailwayRef <> "" then
+                        add map op Key.FromRailwayRef op.RailwayRef
+                    else if op.RailwayRefsUicRef.Length = 1 then
+                        add map op Key.FromUicRef op.RailwayRefsUicRef.[0]
+                    else
+                        map)
+                initialmap
+
+        let private relevantRailwayTag (t: string option) =
             match t with
             | Some t ->
                 t = "station"
@@ -89,12 +130,13 @@ module Transform =
                 || t = "platform"
                 || t = "service_station"
                 || t = "yard"
+                || t = "site"
             | None -> false
 
         let private isRailWayElement (t: System.Type) (e: Element) =
             match e with
-            | Node n when t = typeof<Node> -> isStop (OSM.Data.getTagValue Tag.Railway e)
-            | Way _ when t = typeof<Way> -> isStop (OSM.Data.getTagValue Tag.Railway e)
+            | Node n when t = typeof<Node> -> relevantRailwayTag (OSM.Data.getTagValue Tag.Railway e)
+            | Way _ when t = typeof<Way> -> relevantRailwayTag (OSM.Data.getTagValue Tag.Railway e)
             | Relation r when t = typeof<Relation> ->
                 (OSM.Data.existsTag Tag.RailwayRef e
                  || OSM.Data.existsTag Tag.UicRef e)
@@ -117,8 +159,11 @@ module Transform =
 
         /// from railwayRef to opid
         let toOPID (s: string) =
-            if s.Length > 0 then
+            if s.Length > 0 && s.Length <= 5 then
                 "DE" + (fill s 5) + s
+            else if s.Length > 0 && s.Contains ";" then // todo: change osm data
+                let s1 = s.Substring(0, (s.IndexOf ";"))
+                "DE" + (fill s1 5) + s1
             else
                 ""
 
@@ -196,6 +241,8 @@ module Transform =
                 else
                     railwayRef
 
+            let isSBB = tagValue Tag.Operator = "SBB"
+
             let railwayRefStep0 = tagValue Tag.RailwayRef
             let railwayRefStep1 = otherTagValue Tag.RailwayRefDBAG railwayRefStep0
             let railwayRefStep2 = getRailwayRefFromRelation railwayRefStep1 e
@@ -211,31 +258,36 @@ module Transform =
 
             let railway = otherTagValue Tag.Publictransport (tagValue Tag.Railway)
 
-            Some
-                { Element = e
-                  Name = nameStep1
-                  Type = tagValue Tag.Railway
-                  Latitude = lat
-                  Longitude = lon
-                  Railway = railway
-                  RailwayRef = toOPID railwayRefStep2
-                  RailwayRefsUicRef =
-                    railwayRefsUicRefStep1.Split [| ',' |]
-                    |> Array.map toOPID
-                  UicRef = uicRef
-                  RailwayRefContent =
-                    if railwayRefStep0 <> "" then
-                        RailwayRefContent.FromOpId
-                    else if railwayRefStep0 = "" && railwayRefStep2 <> "" then
-                        RailwayRefContent.FromRelation
-                    else if railwayRefStep2 = ""
-                            && railwayRefsUicRefStep1 <> "" then
-                        RailwayRefContent.FromUicRef
-                    else
-                        RailwayRefContent.NotFound }
+            if isSBB then
+                None
+            else
+                Some
+                    { Element = e
+                      Name = nameStep1
+                      Type = tagValue Tag.Railway
+                      Latitude = lat
+                      Longitude = lon
+                      Railway = railway
+                      RailwayRef = toOPID railwayRefStep2
+                      RailwayRefParent = toOPID (tagValue Tag.RailwayRefParent)
+                      RailwayRefsUicRef =
+                        railwayRefsUicRefStep1.Split [| ',' |]
+                        |> Array.map toOPID
+                      UicRef = uicRef
+                      RailwayRefContent =
+                        if railwayRefStep0 <> "" then
+                            RailwayRefContent.FromOpId
+                        else if railwayRefStep0 = "" && railwayRefStep2 <> "" then
+                            RailwayRefContent.FromRelation
+                        else if railwayRefStep2 = ""
+                                && railwayRefsUicRefStep1 <> "" then
+                            RailwayRefContent.FromUicRef
+                        else
+                            RailwayRefContent.NotFound }
 
         let wayStopsToOsmOperationalPoints (uicRefMappings: DB.UicRefMapping []) (elements: Element []) =
             let map = Data.toMap elements
+
             elements
             |> Array.choose (asRailWayElement Data.asWay)
             |> Array.choose (fun w ->
@@ -255,12 +307,6 @@ module Transform =
             elements
             |> Array.choose (asRailWayElement Data.asNode)
             |> Array.choose (fun n -> makeOsmOperationalPoint (Node n) n.lat n.lon uicRefMappings elements)
-            |> Array.distinctBy (fun op ->
-                if op.RailwayRefContent = RailwayRefContent.NotFound then
-                    op.Name + op.Latitude.ToString()
-                else
-                    op.RailwayRef
-                    + (op.RailwayRefsUicRef |> String.concat ","))
 
     module SoL =
         open System

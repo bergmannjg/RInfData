@@ -12,6 +12,7 @@ type Location = { Latitude: float; Longitude: float }
 type RailwayRefMatching =
     | ByNothing
     | ByOpId
+    | ByOpIdParent
     /// opid with same UicRef
     | ByUicRef
     | ByName
@@ -43,19 +44,8 @@ type ReasonOfNoMatching =
     | DistanceToStop
     /// distance of matched rinf op and osm ways of line is gt than maxDistanceOfOpToWaysOfLine
     | DistanceToWaysOfLine
-    | NotYetMapped
-    | RInfDataError
+    | OsmNotYetMapped
     | Unexpected
-
-type ReasonRInfDataError =
-    | RInfOpNotOnOsmLine
-    /// op type should be 'Depot or workshop' or 'Train technical services' or 'Switch'
-    | RInfOpTypeWrong
-
-type RInfDataError =
-    { line: int
-      opid: string
-      reason: ReasonRInfDataError }
 
 type MissingStop =
     { line: int
@@ -73,32 +63,36 @@ let missingStops: MissingStop [] =
     [| { line = 1962
          opid = "DE HNPL"
          reason = ReasonOfNoMatching.HistoricStation }
+       { line = 3443
+         opid = "DE RKWU"
+         reason = ReasonOfNoMatching.OsmNotYetMapped }
+       { line = 5100
+         opid = "DE NHAL"
+         reason = ReasonOfNoMatching.OsmNotYetMapped }
+       { line = 6078
+         opid = "DE BHPN"
+         reason = ReasonOfNoMatching.OsmNotYetMapped }
        { line = 6194
          opid = "DE DWID"
          reason = ReasonOfNoMatching.HistoricStation }
+       { line = 6220
+         opid = "DE BMZD"
+         reason = ReasonOfNoMatching.OsmNotYetMapped }
+       { line = 6345
+         opid = "DELEGOB"
+         reason = ReasonOfNoMatching.OsmNotYetMapped }
        { line = 6385
          opid = "DE DWIO"
          reason = ReasonOfNoMatching.HistoricStation }
+       { line = 6406
+         opid = "DE  LMR"
+         reason = ReasonOfNoMatching.OsmNotYetMapped }
+       { line = 6441
+         opid = "DE WSGR"
+         reason = ReasonOfNoMatching.OsmNotYetMapped }
        { line = 6441
          opid = "DE WLOW"
-         reason = ReasonOfNoMatching.HistoricStation }
-       { line = 5850
-         opid = "DE NRPF"
-         reason = ReasonOfNoMatching.NotYetMapped }
-       { line = 6441
-         opid = "DE WSGR"
-         reason = ReasonOfNoMatching.RInfDataError } |]
-
-let rinfDataErrors: RInfDataError [] =
-    [| { line = 1153
-         opid = "DE ALBG"
-         reason = ReasonRInfDataError.RInfOpNotOnOsmLine }
-       { line = 1220
-         opid = "DE   AE"
-         reason = ReasonRInfDataError.RInfOpTypeWrong }
-       { line = 6441
-         opid = "DE WSGR"
-         reason = ReasonRInfDataError.RInfOpTypeWrong } |]
+         reason = ReasonOfNoMatching.HistoricStation } |]
 
 // todo: fix osm data
 let private fixOsmErrors (stop: OsmOperationalPoint) =
@@ -120,16 +114,33 @@ let private equalNames (s1: string) (s2: string) = normalize s1 = normalize s2
 let private matchOPID (op: OperationalPoint) (stopIsRelatedToLine: bool) (stop: OsmOperationalPoint) =
     let fixedStop = fixOsmErrors stop
 
-    let inSplitList (s1: string) (splits: string []) =
-        splits |> Array.exists (fun s -> s1 = s)
-
     if op.UOPID = fixedStop.RailwayRef then
         Some(stop, RailwayRefMatching.ByOpId, stopIsRelatedToLine)
-    else if (fixedStop.RailwayRefsUicRef.Length > 0
-             && inSplitList op.UOPID fixedStop.RailwayRefsUicRef) then
+    else if op.UOPID = fixedStop.RailwayRefParent then
+        Some(stop, RailwayRefMatching.ByOpIdParent, stopIsRelatedToLine)
+    else if (fixedStop.RailwayRefsUicRef.Length = 1
+             && op.UOPID = fixedStop.RailwayRefsUicRef.[0]) then
         Some(stop, RailwayRefMatching.ByUicRef, stopIsRelatedToLine)
     else
         None
+
+let private matchName (op: OperationalPoint) (stopIsRelatedToLine: bool) (s: OsmOperationalPoint) =
+    if
+        s.RailwayRefContent = RailwayRefContent.NotFound
+        && equalNames op.Name s.Name
+        && distance op s < maxDistanceOfMatchingByName
+        && not
+            (
+                missingStops
+                |> Array.exists (fun ms -> ms.opid = op.UOPID)
+            )
+    then
+        Some(s, stopIsRelatedToLine)
+    else
+        None
+
+let private distOfOpToStop (op: OperationalPoint) (stop: OsmOperationalPoint) =
+    Transform.SoL.``calculate distance`` (op.Latitude, op.Longitude) (stop.Latitude, stop.Longitude)
 
 let private makeMatching
     (relationOfLine: Relation)
@@ -139,15 +150,12 @@ let private makeMatching
     (stopIsRelatedToLine: bool)
     (elementsOfLine: Element [])
     =
-    let distOfOpToStop =
-        Transform.SoL.``calculate distance`` (op.Latitude, op.Longitude) (stop.Latitude, stop.Longitude)
-
     let (distOfOpToWaysOfLine, node) =
         Transform.SoL.getMinDistanceToWays op.Latitude op.Longitude relationOfLine elementsOfLine
 
     { op = op
       stop = stop
-      distOfOpToStop = distOfOpToStop
+      distOfOpToStop = distOfOpToStop op stop
       distOfOpToWaysOfLine = distOfOpToWaysOfLine
       nodeOnWaysOfLine = node
       railwayRefMatching = railwayRefMatching
@@ -157,24 +165,19 @@ let private tryPick chooser (seq: seq<bool * OsmOperationalPoint []>) =
     seq
     |> Seq.tryPick (fun (b, arr) -> arr |> Array.tryPick (chooser b))
 
-let private matchName (op: OperationalPoint) (stopIsRelatedToLine: bool) (s: OsmOperationalPoint) =
-    if s.RailwayRefContent = RailwayRefContent.NotFound
-       && equalNames op.Name s.Name
-       && distance op s < maxDistanceOfMatchingByName then
-        Some(s, stopIsRelatedToLine)
-    else
-        None
-
 let private getOperationalPointsMatchings
     (relationOfLine: Relation)
     (stopsOfLine: OsmOperationalPoint [])
     (allStops: OsmOperationalPoint [])
+    (mapAllStops: Map<string, Transform.Op.Key * OsmOperationalPoint>)
     (opsOfLine: OperationalPoint [])
     (elementsOfLine: Element [])
     =
     let stops =
         [ (true, stopsOfLine)
           (false, allStops) ]
+
+    let map = Transform.Op.toRailwayRefMap stopsOfLine mapAllStops
 
     let printMachtingInfo (op: OperationalPoint) (stop: OsmOperationalPoint) =
         printfn
@@ -184,19 +187,33 @@ let private getOperationalPointsMatchings
             stop.Name
             (Data.idOf stop.Element)
 
-        printfn "add_railwayref(%d, '%s');" (Data.idOf stop.Element) (Transform.Op.toRailwayRef op.UOPID)
+        match stop.Element with
+        | Node v -> printfn "add_railwayref(%d, '%s');" (v.id) (Transform.Op.toRailwayRef op.UOPID)
+        | _ -> ()
 
     opsOfLine
     |> Array.choose (fun op ->
-        match stops |> tryPick (matchOPID op) with
-        | Some (stop, m, stopIsRelatedToLine) ->
-            Some(makeMatching relationOfLine op stop m stopIsRelatedToLine elementsOfLine)
-        | None ->
-            match stops |> tryPick (matchName op) with
-            | Some (stop, stopIsRelatedToLine) ->
-                printMachtingInfo op stop
-                Some(makeMatching relationOfLine op stop RailwayRefMatching.ByName stopIsRelatedToLine elementsOfLine)
-            | None -> None)
+        match map.TryFind op.UOPID with
+        | Some (keyType, s) ->
+            let matching =
+                match keyType with
+                | Transform.Op.Key.FromRailwayRef -> RailwayRefMatching.ByOpId
+                | Transform.Op.Key.FromUicRef -> RailwayRefMatching.ByUicRef
+
+            Some(makeMatching relationOfLine op s matching true elementsOfLine)
+        | _ ->
+            match stops |> tryPick (matchOPID op) with
+            | Some (stop, m, stopIsRelatedToLine) ->
+                Some(makeMatching relationOfLine op stop m stopIsRelatedToLine elementsOfLine)
+            | None ->
+                match stops |> tryPick (matchName op) with
+                | Some (stop, stopIsRelatedToLine) ->
+                    printMachtingInfo op stop
+
+                    Some(
+                        makeMatching relationOfLine op stop RailwayRefMatching.ByName stopIsRelatedToLine elementsOfLine
+                    )
+                | None -> None)
 
 let private getRInfShortestPathOnLine (line: int) (rinfGraph: GraphNode []) (opStart: string) (opEnd: string) =
     let path = Graph.getShortestPath rinfGraph [| opStart; opEnd |]
@@ -235,6 +252,7 @@ let getRInfOsmMatching
     (relationOfLine: Relation)
     (elementsOfLine: Element [])
     (allStops: OsmOperationalPoint [])
+    (mapAllStops: Map<string, Transform.Op.Key * OsmOperationalPoint>)
     (ops: OperationalPoint [])
     (rinfGraph: GraphNode [])
     (uicRefMappings: DB.UicRefMapping [])
@@ -245,7 +263,7 @@ let getRInfOsmMatching
                        (Transform.Op.relationStopsToOsmOperationalPoints uicRefMappings elementsOfLine) ]
 
     let opMatchings =
-        getOperationalPointsMatchings relationOfLine stopsOfLine allStops ops elementsOfLine
+        getOperationalPointsMatchings relationOfLine stopsOfLine allStops mapAllStops ops elementsOfLine
 
     let matchedOsmOps = opMatchings |> Array.map (fun m -> m.stop)
 

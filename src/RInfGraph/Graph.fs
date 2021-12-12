@@ -3,6 +3,7 @@ namespace RInfGraph
 open FSharpx.Collections
 
 type Location = { Latitude: float; Longitude: float }
+type PoILocation = { Latitude: float; Longitude: float; Content:string }
 
 type OpInfo =
     { UOPID: string
@@ -361,6 +362,26 @@ module Graph =
 
             sprintf
                 "https://brouter.de/brouter-web/#map=10/%s/%s/osm-mapnik-german_style&lonlats=%s&profile=rail"
+                midLat
+                midLon
+                (lonlats)
+        else
+            ""
+
+    let getBRouterPoIUrl (locations: PoILocation []) =
+        if locations.Length > 0 then
+
+            let lonlats =
+                locations
+                |> Array.map (fun loc -> sprintf "%f,%f,%s" loc.Longitude loc.Latitude (loc.Content.Replace(" ", "%20")))
+                |> String.concat ";"
+
+            let (midLon, midLat) =
+                locations.[locations.Length / 2]
+                |> fun loc -> (sprintf "%f" loc.Longitude, sprintf "%f" loc.Latitude)
+
+            sprintf
+                "https://brouter.de/brouter-web/#map=10/%s/%s/osm-mapnik-german_style&pois=%s&profile=rail"
                 midLat
                 midLon
                 (lonlats)

@@ -164,3 +164,7 @@ let loadAllStops osmDataDir uicRefMappings =
                    nodeStopsCH
                    relationStops
                    wayStops ]
+
+let loadRelations osmDataDir =
+    let osmData = readFile<OSMJson> osmDataDir "relations.json"
+    osmData.elements |> Array.choose (Data.asRelation)

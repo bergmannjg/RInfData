@@ -164,6 +164,6 @@ module Data =
         | Some (Node n) -> Some n
         | _ -> None
 
-    let toMap (elements: Element []) =
+    let toMap (elements: Element []) : Map<int64, Element> =
         elements
-        |> Array.fold (fun (map: Map<int64, Element>) e -> map.Add(idOf e, e)) (Map.empty)
+        |> Array.fold (fun map e -> map.Add(idOf e, e)) (Map.empty)

@@ -21,6 +21,11 @@ let loadRInfLines (rinfDataDir) =
 let loadRInfOperationalPoints (line: int) rinfDataDir =
     let now = System.DateTime.Now
 
+    let fixErrors (m: OperationalPoint) =
+        if m.UOPID = "DELE  H" then
+            { m with UOPID = "DE LE H" } // according to DB Netze Infrastrukturregister
+        else
+            m
     readFile<OperationalPoint []> rinfDataDir "OperationalPoints.json"
     |> Array.filter (fun op ->
         op.Type <> "junction"
@@ -33,7 +38,7 @@ let loadRInfOperationalPoints (line: int) rinfDataDir =
         match ops
               |> Array.tryFind (fun op -> now < op.ValidityDateEnd)
             with
-        | Some op -> op
+        | Some op -> fixErrors op
         | None -> ops.[0])
     |> Array.sortBy (fun op ->
         op.RailwayLocations

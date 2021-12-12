@@ -13,13 +13,14 @@ let private compareLine
     (relationOfLine: Relation)
     (elementsOfLine: Element [])
     (allStops: OsmOperationalPoint [])
+    (mapAllStops: Map<string, Transform.Op.Key * OsmOperationalPoint>)
     (ops: OperationalPoint [])
     (rinfGraph: GraphNode [])
     (uicRefMappings: DB.UicRefMapping [])
     =
 
     let (stopsOfLine, opMatchings, solMatchings) =
-        getRInfOsmMatching line relationOfLine elementsOfLine allStops ops rinfGraph uicRefMappings
+        getRInfOsmMatching line relationOfLine elementsOfLine allStops mapAllStops ops rinfGraph uicRefMappings
 
     Result.collectResult compact line relationOfLine elementsOfLine ops stopsOfLine opMatchings solMatchings
 
@@ -56,7 +57,7 @@ let private printWaysOfLineNotInRelation (line: int) (r: Relation) (elementsOfLi
         if ways.Length > 0 then
             printfn "  ways not in relation %d of line %d: %d " r.id line ways.Length
 
-let private processAsync osmDataDir rinfDataDir compact useRemote area allStops uicRefMappings line =
+let private processAsync osmDataDir rinfDataDir compact useRemote area allStops mapAllStops uicRefMappings line =
     async {
         try
             use client = OverpassRequest.getClient ()
@@ -90,6 +91,7 @@ let private processAsync osmDataDir rinfDataDir compact useRemote area allStops 
                             r
                             osmData.elements
                             allStops
+                            mapAllStops
                             filteredOps
                             (RInfLoader.loadRInfGraph rinfDataDir)
                             uicRefMappings
@@ -116,18 +118,15 @@ let compareLineAsync
     =
     let uicRefMappings = DB.DBLoader.loadMappings dbDataDir
 
-    processAsync
-        osmDataDir
-        rinfDataDir
-        false
-        useRemote
-        area
-        (if useAllStops then
-             OSMLoader.loadAllStops osmDataDir uicRefMappings
-         else
-             [||])
-        uicRefMappings
-        line
+    let allStops =
+        if useAllStops then
+            OSMLoader.loadAllStops osmDataDir uicRefMappings
+        else
+            [||]
+
+    let mapAllStops = Transform.Op.toRailwayRefMap allStops (Map.empty)
+
+    processAsync osmDataDir rinfDataDir false useRemote area allStops mapAllStops uicRefMappings line
 
 let compareLinesAsync osmDataDir rinfDataDir dbDataDir (count: int) =
     let rec loop (work: 'a -> Async<'b>) (l: 'a list) (results: 'b list) =
@@ -149,32 +148,10 @@ let compareLinesAsync osmDataDir rinfDataDir dbDataDir (count: int) =
 
         let uicRefMappings = DB.DBLoader.loadMappings dbDataDir
         let allStops = OSMLoader.loadAllStops osmDataDir uicRefMappings
-        let! results = loop (processAsync osmDataDir rinfDataDir true false None allStops uicRefMappings) lines []
+        let mapAllStops = Transform.Op.toRailwayRefMap allStops (Map.empty)
 
-        Result.printCommonResult results
-    }
-
-let compareLinesListAsync osmDataDir rinfDataDir dbDataDir (linesArg: string []) =
-    let rec loop (work: 'a -> Async<'b>) (l: 'a list) (results: 'b list) =
-        async {
-            match l with
-            | h :: t ->
-                let! res = work h
-                return! loop work t (res :: results)
-            | [] -> return results |> List.rev
-        }
-
-    async {
-        let lines =
-            linesArg
-            |> Array.map (fun l -> int l)
-            |> Array.toList
-
-        printfn "***railway lines: %d" lines.Length
-
-        let uicRefMappings = DB.DBLoader.loadMappings dbDataDir
-        let allStops = OSMLoader.loadAllStops osmDataDir uicRefMappings
-        let! results = loop (processAsync osmDataDir rinfDataDir true false None allStops uicRefMappings) lines []
+        let! results =
+            loop (processAsync osmDataDir rinfDataDir true false None allStops mapAllStops uicRefMappings) lines []
 
         Result.printCommonResult results
     }

@@ -469,8 +469,9 @@ let main argv =
                 opsOfLine
                 |> Array.map (fun (op, _) ->
                     { Latitude = op.Latitude
-                      Longitude = op.Longitude })
-                |> Graph.getBRouterUrl
+                      Longitude = op.Longitude
+                      Content = op.UOPID })
+                |> Graph.getBRouterPoIUrl
                 |> printfn "%s"
 
                 return ""
@@ -543,15 +544,6 @@ let main argv =
             async {
                 do!
                     Comparison.compareLinesAsync osmDataDir rinfDataDir dbDataDir (int argv.[1])
-                    |> Async.Ignore
-
-                return ""
-            }
-        else if argv.[0] = "--Compare.Lines.List"
-                && argv.Length > 1 then
-            async {
-                do!
-                    Comparison.compareLinesListAsync osmDataDir rinfDataDir dbDataDir (argv.[1].Split [| ',' |])
                     |> Async.Ignore
 
                 return ""
