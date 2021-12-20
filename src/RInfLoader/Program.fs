@@ -548,6 +548,14 @@ let main argv =
 
                 return ""
             }
+        else if argv.[0] = "--Compare.CheckMissingStops" then
+            async {
+                do!
+                    MissingStops.checkMissingStops rinfDataDir
+                    |> Async.Ignore
+
+                return ""
+            }
         else
             async { return printHelp () }
         |> Async.RunSynchronously

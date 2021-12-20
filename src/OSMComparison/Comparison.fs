@@ -12,28 +12,16 @@ let private compareLine
     (line: int)
     (relationOfLine: Relation)
     (elementsOfLine: Element [])
-    (allStops: OsmOperationalPoint [])
-    (mapAllStops: Map<string, Transform.Op.Key * OsmOperationalPoint>)
+    (stopsOfLine: OsmOperationalPoint [])
     (ops: OperationalPoint [])
     (rinfGraph: GraphNode [])
-    (uicRefMappings: DB.UicRefMapping [])
+    (matchings: IMatching seq)
     =
 
-    let (stopsOfLine, opMatchings, solMatchings) =
-        getRInfOsmMatching line relationOfLine elementsOfLine allStops mapAllStops ops rinfGraph uicRefMappings
+    let (opMatchings, solMatchings) =
+        getRInfOsmMatching line elementsOfLine ops rinfGraph matchings
 
     Result.collectResult compact line relationOfLine elementsOfLine ops stopsOfLine opMatchings solMatchings
-
-let private filterUicRefMapping (op: OperationalPoint) (m: DB.UicRefMapping) =
-    m.DS100.Split [| ',' |]
-    |> Array.exists (fun s -> Transform.Op.toOPID s = op.UOPID)
-
-// UicRefMappings may contain all active stations
-let private filterUicRefMappings (uicRefMappings: DB.UicRefMapping []) (ops: OperationalPoint []) =
-    ops
-    |> Array.filter (fun op ->
-        uicRefMappings
-        |> Array.exists (filterUicRefMapping op))
 
 let private suisseOps =
     [| "DE  RNK"
@@ -57,7 +45,7 @@ let private printWaysOfLineNotInRelation (line: int) (r: Relation) (elementsOfLi
         if ways.Length > 0 then
             printfn "  ways not in relation %d of line %d: %d " r.id line ways.Length
 
-let private processAsync osmDataDir rinfDataDir compact useRemote area allStops mapAllStops uicRefMappings line =
+let private processLineAsync osmDataDir rinfDataDir compact useRemote area allStops mapAllStops line =
     async {
         try
             use client = OverpassRequest.getClient ()
@@ -67,34 +55,41 @@ let private processAsync osmDataDir rinfDataDir compact useRemote area allStops 
                 (RInfLoader.loadRInfOperationalPoints line rinfDataDir)
                 |> Array.filter (fun op -> not (suisseOps |> Array.contains op.UOPID))
 
-            let filteredOps = ops |> filterUicRefMappings uicRefMappings
-
-            if not compact then
-                if ops.Length <> filteredOps.Length then
-                    ops
-                    |> Array.filter (fun op ->
-                        not (
-                            filteredOps
-                            |> Array.exists (fun fOp -> fOp.UOPID = op.UOPID)
-                        ))
-                    |> Array.iter (fun op -> printfn "maybe inactive op: %s %s %s" op.UOPID op.Name (Result.osmUrl op))
+            let rinfGraph = RInfLoader.loadRInfGraph rinfDataDir
 
             match OSM.Transform.SoL.getRelationOfRailwayLine line osmData.elements with
-            | Some r ->
-                // printWaysOfLineNotInRelation line r osmData.elements
+            | Some relationOfLine ->
+                let stopsOfLine =
+                    Array.concat [ (Transform.Op.nodeStopsToOsmOperationalPoints osmData.elements)
+                                   (Transform.Op.wayStopsToOsmOperationalPoints osmData.elements)
+                                   (Transform.Op.relationStopsToOsmOperationalPoints osmData.elements) ]
+
+                let matchingByOpId =
+                    MatchingByOpId(relationOfLine, stopsOfLine, osmData.elements, allStops, mapAllStops)
+
+                let matchingByName =
+                    MatchingByName(relationOfLine, stopsOfLine, osmData.elements, allStops)
+
+                let dbDataDir = "../../db-data/"
+
+                let uicRefs = DB.DBLoader.loadMappings dbDataDir
+
+                let matchingByUicRef =
+                    MatchingByUicRef(relationOfLine, stopsOfLine, osmData.elements, allStops, uicRefs)
 
                 return
                     Some(
                         compareLine
                             compact
                             line
-                            r
+                            relationOfLine
                             osmData.elements
-                            allStops
-                            mapAllStops
-                            filteredOps
-                            (RInfLoader.loadRInfGraph rinfDataDir)
-                            uicRefMappings
+                            stopsOfLine
+                            ops
+                            rinfGraph
+                            [ matchingByOpId
+                              matchingByUicRef
+                              matchingByName ]
                     )
             | None -> return None
         with
@@ -107,28 +102,18 @@ let private processAsync osmDataDir rinfDataDir compact useRemote area allStops 
 let private take<'a> count (arr: 'a []) =
     arr |> Array.take (min count arr.Length)
 
-let compareLineAsync
-    osmDataDir
-    rinfDataDir
-    dbDataDir
-    (line: int)
-    (useRemote: bool)
-    (useAllStops: bool)
-    (area: string option)
-    =
-    let uicRefMappings = DB.DBLoader.loadMappings dbDataDir
-
+let compareLineAsync osmDataDir rinfDataDir dbDataDir line useRemote useAllStops (area: string option) =
     let allStops =
         if useAllStops then
-            OSMLoader.loadAllStops osmDataDir uicRefMappings
+            OSMLoader.loadAllStops osmDataDir
         else
             [||]
 
     let mapAllStops = Transform.Op.toRailwayRefMap allStops (Map.empty)
 
-    processAsync osmDataDir rinfDataDir false useRemote area allStops mapAllStops uicRefMappings line
+    processLineAsync osmDataDir rinfDataDir false useRemote area allStops mapAllStops line
 
-let compareLinesAsync osmDataDir rinfDataDir dbDataDir (count: int) =
+let compareLinesAsync osmDataDir rinfDataDir dbDataDir count =
     let rec loop (work: 'a -> Async<'b>) (l: 'a list) (results: 'b list) =
         async {
             match l with
@@ -146,12 +131,10 @@ let compareLinesAsync osmDataDir rinfDataDir dbDataDir (count: int) =
 
         printfn "***RInf passenger railway lines: %d" lines.Length
 
-        let uicRefMappings = DB.DBLoader.loadMappings dbDataDir
-        let allStops = OSMLoader.loadAllStops osmDataDir uicRefMappings
+        let allStops = OSMLoader.loadAllStops osmDataDir
         let mapAllStops = Transform.Op.toRailwayRefMap allStops (Map.empty)
 
-        let! results =
-            loop (processAsync osmDataDir rinfDataDir true false None allStops mapAllStops uicRefMappings) lines []
+        let! results = loop (processLineAsync osmDataDir rinfDataDir true false None allStops mapAllStops) lines []
 
         Result.printCommonResult results
     }

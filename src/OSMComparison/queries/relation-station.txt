@@ -19,5 +19,11 @@ rel
   (
       ._;>;
   );
+rel
+  ["railway"="facility"]
+  ["railway:ref"];
+  (
+      ._;>;
+  );
 );
 out;

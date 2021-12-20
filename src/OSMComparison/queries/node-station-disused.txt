@@ -1,0 +1,8 @@
+[timeout:900][out:json];
+area[boundary=administrative][name='Deutschland'];
+(
+    node["disused:railway"]["railway:ref"];
+    node["railway:disused"]["railway:ref"];
+    node["historic:railway"]["railway:ref"];
+);
+out;

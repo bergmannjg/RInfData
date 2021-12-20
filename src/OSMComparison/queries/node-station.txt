@@ -4,7 +4,7 @@ area[boundary=administrative][name='Deutschland'];
 node
   [!"light_rail"]
   [!"subway"]
-  ["railway"~"^station|^stop|^halt|^service_station|^junction|^yard|^site"]
+  ["railway"~"^station|^stop|^halt|^service_station|^junction|^yard|^site|^crossover"]
   ["railway:ref"];
 node
   [!"light_rail"]
@@ -40,5 +40,8 @@ node
   ["railway"="station"]
   ["light_rail"]
   ["railway:ref"="BHPG"];
+node
+  ["public_transport"="platform"]
+  ["railway:ref"];
 );
 out;

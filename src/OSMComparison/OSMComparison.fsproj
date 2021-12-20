@@ -15,10 +15,11 @@
   <ItemGroup>
     <Compile Include="OsmData.fs" />
     <Compile Include="OverpassRequest.fs" />
-    <Compile Include="DbDataLoder.fs" />
     <Compile Include="OsmTransform.fs" />
     <Compile Include="OSMLoader.fs" />
     <Compile Include="RInfLoader.fs" />
+    <Compile Include="DbDataLoader.fs" />
+    <Compile Include="MissingStops.fs" />
     <Compile Include="Matching.fs" />
     <Compile Include="Result.fs" />
     <Compile Include="Comparison.fs" />

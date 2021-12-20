@@ -58,6 +58,12 @@ module Data =
         | Way v -> v.id
         | Relation v -> v.id
 
+    let kindOf (element: Element) =
+        match element with
+        | Node v -> "node"
+        | Way v -> "way"
+        | Relation v -> "relation"
+
     let asNode (element: Element) =
         match element with
         | Node v -> Some v
