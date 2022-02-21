@@ -11,4 +11,5 @@ F# program to access the Register of Infrastructure database of the European Uni
 * [RInfApi](src/RInfApi): implements the API
 * [RInfGraph](src/RInfGraph): finds shortest path between operational points
 * [RInfLoader](src/RInfLoader): loads the data.
+* [RInfQuery](src/RInfQuery): query cached data.
 * [OSMComparison](src/OSMComparison): compares RInf data with OSM data.
