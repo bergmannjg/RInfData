@@ -40,7 +40,7 @@ let loadRInfOperationalPoints (line: int) rinfDataDir =
     |> Array.groupBy (fun op -> op.UOPID)
     |> Array.map (fun (k, ops) ->
         match ops
-              |> Array.tryFind (fun op -> now < op.ValidityDateEnd)
+              |> Array.tryFind (fun op -> now <= op.ValidityDateEnd)
             with
         | Some op -> fixErrors op
         | None -> ops.[0])

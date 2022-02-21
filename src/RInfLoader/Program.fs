@@ -102,7 +102,9 @@ let findOp ops opId =
     ops |> Array.find (fun op -> op.ID = opId)
 
 let findOpByOPID (ops: OperationalPoint []) opId =
-    ops |> Array.find (fun op -> op.UOPID = opId)
+    match (Array.tryFind (fun (op: OperationalPoint) -> op.UOPID = opId) ops) with
+    | Some op -> op
+    | None -> raise (System.ArgumentException("opid not found: " + opId))
 
 let getLineInfo (name: string) ops (solsOfLine: GraphNode list) line =
 
@@ -198,6 +200,12 @@ let buildLineInfos (ops: OperationalPoint []) (sols: GraphNode []) : LineInfo []
     |> Array.collect (buildLineInfo ops sols)
     |> Array.sortBy (fun line -> int line.Line)
 
+let nullDefaultValue<'a when 'a: null> (defaultValue: 'a) (value: 'a) =
+    if isNull value then
+        defaultValue
+    else
+        value
+
 let buildGraph
     (ops: OperationalPoint [])
     (sols: SectionOfLine [])
@@ -251,15 +259,16 @@ let buildGraph
         match findOp sol.OPStartID, findOp sol.OPEndID with
         | Some (opStart), Some (opEnd) ->
             let trackIds =
-                sol.SOLTracks
-                |> Array.map (fun tracks -> tracks.TrackID)
+                trackParams
+                |> Array.filter (fun tp -> tp.SOLTrack.SectionOfLineID = sol.ID)
+                |> Array.map (fun tp -> tp.SOLTrack.TrackID)
                 |> Array.distinct
 
             let trackParamsOfSol =
                 trackParams
                 |> Array.filter (fun param ->
                     trackIds
-                    |> Array.exists (fun t -> t = param.TrackID))
+                    |> Array.exists (fun t -> t = param.SOLTrack.TrackID))
 
             if hasPassengerLineCat trackParamsOfSol then
                 let maxSpeed = getMaxSpeed sol trackParamsOfSol
@@ -346,7 +355,25 @@ let main argv =
         else if argv.[0] = "--SectionsOfLines" then
             async {
                 let! response = client.GetSectionsOfLines()
-                return JsonSerializer.Serialize response
+
+                let responseMapped =
+                    response
+                    |> Array.map (fun sol ->
+                        { sol with
+                            OPStartID =
+                                if sol.StartOP.IsNone then
+                                    sol.OPStartID
+                                else
+                                    sol.StartOP.Value.ID
+                            OPEndID =
+                                if sol.EndOP.IsNone then
+                                    sol.OPEndID
+                                else
+                                    sol.EndOP.Value.ID
+
+                         })
+
+                return JsonSerializer.Serialize responseMapped
             }
         else if argv.[0] = "--Routes" && argv.Length > 2 then
             async {
@@ -359,6 +386,7 @@ let main argv =
 
                 let filter (opTracks: OPTrack []) cond =
                     opTracks
+                    |> nullDefaultValue [||]
                     |> Array.map (fun t -> { t with OPTrackParameters = t.OPTrackParameters |> Array.filter cond })
 
                 let response =
@@ -392,12 +420,13 @@ let main argv =
                     response
                     |> List.concat
                     |> List.toArray
-                    |> Array.collect (fun sol -> sol.SOLTracks)
+                    |> Array.collect (fun sol -> nullDefaultValue [||] sol.SOLTracks)
                     |> Array.collect (fun track ->
                         track.SOLTrackParameters
-                        |> Array.filter (fun t ->
-                            t.IsApplicable = "Y"
-                            && filters |> Array.contains t.ID))
+                        |> nullDefaultValue [||]
+                        |> Array.filter (fun tp ->
+                            tp.IsApplicable = "Y"
+                            && filters |> Array.contains tp.ID))
 
                 return JsonSerializer.Serialize response
             }

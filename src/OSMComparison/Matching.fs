@@ -35,8 +35,7 @@ type SoLMatching =
       /// OsmSectionOfLine from opStart.stop to opEnd.stop
       osmSol: OsmSectionOfLine }
 
-type IMatching =
-    abstract Match: OperationalPoint -> OpMatching option
+type OpMatch = OperationalPoint -> OpMatching option
 
 /// distance of max. platform length
 let maxDistanceOfMatchedOps = 0.7
@@ -97,9 +96,9 @@ let private tryPick chooser (seq: seq<bool * OsmOperationalPoint []>) =
     seq
     |> Seq.tryPick (fun (b, arr) -> arr |> Array.tryPick (chooser b))
 
-let private getOperationalPointsMatchings (opsOfLine: OperationalPoint []) (matchings: IMatching seq) =
+let private getOperationalPointsMatchings (opsOfLine: OperationalPoint []) (matchings: OpMatch seq) =
     opsOfLine
-    |> Array.map (fun op -> matchings |> Seq.tryPick (fun m -> m.Match op))
+    |> Array.map (fun op -> matchings |> Seq.tryPick (fun m -> m op))
     |> Array.choose id
 
 let private getRInfShortestPathOnLine (line: int) (rinfGraph: GraphNode []) (opStart: string) (opEnd: string) =
@@ -139,7 +138,7 @@ let getRInfOsmMatching
     (elementsOfLine: Element [])
     (ops: OperationalPoint [])
     (rinfGraph: GraphNode [])
-    (matchings: IMatching seq)
+    (matchings: OpMatch seq)
     =
     let opMatchings = getOperationalPointsMatchings ops matchings
 
@@ -151,14 +150,13 @@ let getRInfOsmMatching
 
     (opMatchings, solMatchings)
 
-type MatchingByOpId
-    (
-        relationOfLine: Relation,
-        stopsOfLine: OsmOperationalPoint [],
-        elementsOfLine: Element [],
-        allStops: OsmOperationalPoint [],
-        mapAllStops: Map<string, OsmOperationalPoint>
-    ) =
+let mkMatchingByOpId
+    (relationOfLine: Relation)
+    (stopsOfLine: OsmOperationalPoint [])
+    (elementsOfLine: Element [])
+    (allStops: OsmOperationalPoint [])
+    (mapAllStops: Map<string, OsmOperationalPoint>)
+    : OpMatch =
 
     let map = Transform.Op.toRailwayRefMap stopsOfLine mapAllStops
 
@@ -188,16 +186,14 @@ type MatchingByOpId
                 Some(makeMatching relationOfLine op stop m stopIsRelatedToLine elementsOfLine)
             | None -> None
 
-    interface IMatching with
-        member this.Match op = matchByOpId op
+    matchByOpId
 
-type MatchingByName
-    (
-        relationOfLine: Relation,
-        stopsOfLine: OsmOperationalPoint [],
-        elementsOfLine: Element [],
-        allStops: OsmOperationalPoint []
-    ) =
+let mkMatchingByName
+    (relationOfLine: Relation)
+    (stopsOfLine: OsmOperationalPoint [])
+    (elementsOfLine: Element [])
+    (allStops: OsmOperationalPoint [])
+    : OpMatch =
 
     let normalize (s: string) = s.Replace(" ", "").Replace("-", "")
 
@@ -231,17 +227,15 @@ type MatchingByName
             Some(makeMatching relationOfLine op stop RailwayRefMatching.ByName stopIsRelatedToLine elementsOfLine)
         | None -> None
 
-    interface IMatching with
-        member this.Match op = matchByName op
+    matchByName
 
-type MatchingByUicRef
-    (
-        relationOfLine: Relation,
-        stopsOfLine: OsmOperationalPoint [],
-        elementsOfLine: Element [],
-        allStops: OsmOperationalPoint [],
-        uicRefMappings: DB.UicRefMapping []
-    ) =
+let mkMatchingByUicRef
+    (relationOfLine: Relation)
+    (stopsOfLine: OsmOperationalPoint [])
+    (elementsOfLine: Element [])
+    (allStops: OsmOperationalPoint [])
+    (uicRefMappings: DB.UicRefMapping [])
+    : OpMatch =
 
     let getRailwayRefFromIFOPT (ifopt: string option) =
         match ifopt with
@@ -305,5 +299,4 @@ type MatchingByUicRef
             Some(makeMatching relationOfLine op stop RailwayRefMatching.ByOther stopIsRelatedToLine elementsOfLine)
         | None -> None
 
-    interface IMatching with
-        member this.Match op = matchByUicRef op
+    matchByUicRef

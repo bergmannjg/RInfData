@@ -18,16 +18,6 @@ type DatasetImport =
       Version: int
       LastImportDate: string }
 
-type SOLTrackParameter =
-    { TrackID: int
-      VersionID: int
-      ParameterID: int
-      Value: string
-      OptionalValue: string
-      IsApplicable: string
-      ID: string
-      Identity: int }
-
 type SOLTunnel =
     { SOLTunnelIMCode: string
       SOLTunnelIdentification: string
@@ -39,7 +29,14 @@ type SOLTunnel =
       EndKm: float
       ITU_Length: float }
 
-type SOLTrack =
+type SOLTrackParameter =
+    { Value: string
+      OptionalValue: string
+      IsApplicable: string
+      ID: string
+      SOLTrack: SOLTrack }
+
+and SOLTrack =
     { SOLTrackIdentification: string
       SOLTrackDirection: string
       SectionOfLineID: int
@@ -52,21 +49,6 @@ type RailwayLocation =
     { Id: int
       NationalIdentNum: string
       Kilometer: float }
-
-type SectionOfLine =
-    { ID: int
-      VersionID: int
-      solName: string
-      Country: string
-      ValidityDateStart: System.DateTime
-      ValidityDateEnd: System.DateTime
-      Length: float
-      Nature: string
-      LineIdentification: string
-      IMCode: string
-      OPStartID: int
-      OPEndID: int
-      SOLTracks: SOLTrack [] }
 
 type OPTrackParameter =
     { ID: string
@@ -95,6 +77,23 @@ type OperationalPoint =
       UOPID: string
       RailwayLocations: RailwayLocation []
       OPTracks: OPTrack [] }
+
+type SectionOfLine =
+    { ID: int
+      VersionID: int
+      solName: string
+      Country: string
+      ValidityDateStart: System.DateTime
+      ValidityDateEnd: System.DateTime
+      Length: float
+      Nature: string
+      LineIdentification: string
+      IMCode: string
+      OPStartID: int
+      OPEndID: int
+      StartOP: OperationalPoint option
+      EndOP: OperationalPoint option
+      SOLTracks: SOLTrack [] }
 
 type Node =
     { OperationalPoint: OperationalPoint
@@ -126,7 +125,8 @@ module Api =
 
         let expandSOLTrackParameters (withTrackParameters: bool option) (prefix: string) =
             if defaultArg withTrackParameters false then
-                prefix + "$expand=SOLTracks/SOLTrackParameters"
+                prefix
+                + "$expand=SOLTracks($expand=SOLTrackParameters)"
             else
                 ""
 
@@ -134,6 +134,18 @@ module Api =
             if defaultArg withTrackParameters false then
                 prefix
                 + "$expand=OPTracks($expand=OPTrackParameters)"
+            else
+                ""
+
+        let expandRailwayLocations (withTrackParameters: bool option) (prefix: string) =
+            if defaultArg withTrackParameters false then
+                prefix + "$expand=RailwayLocations"
+            else
+                ""
+
+        let expandOP (withTrackParameters: bool option) (prefix: string) =
+            if defaultArg withTrackParameters false then
+                prefix + "$expand=StartOP,EndOP"
             else
                 ""
 
@@ -161,20 +173,22 @@ module Api =
             async {
                 let! response = client.Get("DatasetImports")
 
-                let imports =
-                    JsonSerializer.Deserialize<OData<DatasetImport []>> response
+                let imports = JsonSerializer.Deserialize<OData<DatasetImport []>> response
 
                 return imports.value
             }
 
         member __.GetNextSectionsOfLines(skip: int) =
             async {
+                let expand = expandOP (Some true) "&"
+
                 let! response =
                     client.Get(
                         "SectionsOfLine?$filter=Country eq '"
                         + country
                         + "'&$top=100&$skip="
                         + skip.ToString()
+                        + expand
                     )
 
                 return
@@ -186,8 +200,7 @@ module Api =
 
         member __.GetSectionsOfLine(keyID: int, keyVersionID: int, ?withTrackParameters: bool, ?logJson: bool) =
             async {
-                let expand =
-                    expandSOLTrackParameters withTrackParameters "?"
+                let expand = expandSOLTrackParameters withTrackParameters "?"
 
                 let! response =
                     client.Get(
@@ -200,14 +213,26 @@ module Api =
                     )
 
                 if defaultArg logJson false then
-                    printfn "%s" response
+                    fprintfn stderr "%s" response
 
-                return JsonSerializer.Deserialize<SectionOfLine> response
+                let sol = JsonSerializer.Deserialize<SectionOfLine> response
+
+                // set track in track parameters, todo: use expandSOLTrackParameters
+                let tracks =
+                    sol.SOLTracks
+                    |> Array.map (fun t ->
+                        let parameters =
+                            t.SOLTrackParameters
+                            |> Array.map (fun tp -> { tp with SOLTrack = { t with SOLTrackParameters = [||] } })
+
+                        { t with SOLTrackParameters = parameters })
+
+                return { sol with SOLTracks = tracks }
             }
 
         member __.GetNextOperationalPoints(skip: int) =
             async {
-                let expand = expandOPTrackParameters (Some true) "&"
+                let expand = expandRailwayLocations (Some true) "&"
 
                 let! response =
                     client.Get(
@@ -227,8 +252,7 @@ module Api =
 
         member __.GetOperationalPoint(keyID: int, keyVersionID: int, ?withTrackParameters: bool, ?logJson: bool) =
             async {
-                let expand =
-                    expandOPTrackParameters withTrackParameters "?"
+                let expand = expandOPTrackParameters withTrackParameters "?"
 
                 let! response =
                     client.Get(

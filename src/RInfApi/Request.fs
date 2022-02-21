@@ -49,7 +49,7 @@ module internal Request =
                     return
                         match response.IsSuccessStatusCode with
                         | true -> JsonSerializer.Deserialize<Token> body
-                        | false -> raise (System.Exception("token failed"))
+                        | false -> raise (System.Exception((sprintf "%s, StatusCode: %A" "token failed" response.StatusCode)))
             }
 
         member __.Dispose() = client.Dispose()

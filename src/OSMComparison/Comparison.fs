@@ -15,7 +15,7 @@ let private compareLine
     (stopsOfLine: OsmOperationalPoint [])
     (ops: OperationalPoint [])
     (rinfGraph: GraphNode [])
-    (matchings: IMatching seq)
+    (matchings: OpMatch seq)
     =
 
     let (opMatchings, solMatchings) =
@@ -65,17 +65,17 @@ let private processLineAsync osmDataDir rinfDataDir compact useRemote area allSt
                                    (Transform.Op.relationStopsToOsmOperationalPoints osmData.elements) ]
 
                 let matchingByOpId =
-                    MatchingByOpId(relationOfLine, stopsOfLine, osmData.elements, allStops, mapAllStops)
+                    mkMatchingByOpId relationOfLine stopsOfLine osmData.elements allStops mapAllStops
 
                 let matchingByName =
-                    MatchingByName(relationOfLine, stopsOfLine, osmData.elements, allStops)
+                    mkMatchingByName relationOfLine stopsOfLine osmData.elements allStops
 
                 let dbDataDir = "../../db-data/"
 
                 let uicRefs = DB.DBLoader.loadMappings dbDataDir
 
                 let matchingByUicRef =
-                    MatchingByUicRef(relationOfLine, stopsOfLine, osmData.elements, allStops, uicRefs)
+                    mkMatchingByUicRef relationOfLine stopsOfLine osmData.elements allStops uicRefs
 
                 return
                     Some(

@@ -20,7 +20,10 @@ type RailwayTag =
     | Service_station
     | Yard
     | Crossover
+    | Switch
     | Disused
+    | PlannedRailway
+    | Mismatch
     | Undefined
 
 type NotYetMappedStop = { id: string; rw: RailwayTag }
@@ -35,10 +38,8 @@ let private notYetMappedStops: NotYetMappedStop [] =
        { id = "DE  ALH"; rw = Disused }
        { id = "DE  ANN"; rw = Disused }
        { id = "DE  EOD"; rw = Disused }
-       { id = "DE  EPK"; rw = Service_station }
        { id = "DE  EZE"; rw = Disused }
        { id = "DE  FKR"; rw = Yard }
-       { id = "DE  HAL"; rw = Service_station }
        { id = "DE  HER"; rw = Yard }
        { id = "DE  LMR"; rw = Undefined }
        { id = "DE ABDF"; rw = Disused }
@@ -75,30 +76,10 @@ let private notYetMappedStops: NotYetMappedStop [] =
        { id = "DE EWSH"; rw = Service_station }
        { id = "DE HBHE"; rw = Disused }
        { id = "DE HBMA"; rw = Disused }
-       { id = "DE HBNS"; rw = Service_station }
        { id = "DE HDRB"; rw = Disused }
-       { id = "DE HDRE"; rw = Service_station }
        { id = "DE HDRO"; rw = Disused }
-       { id = "DE HEST"; rw = Service_station }
-       { id = "DE HFLL"; rw = Service_station }
-       { id = "DE HGAR"; rw = Service_station }
-       { id = "DE HHAG"; rw = Service_station }
-       { id = "DE HHIG"; rw = Service_station }
-       { id = "DE HHKF"; rw = Service_station }
-       { id = "DE HHMS"; rw = Service_station }
-       { id = "DE HHOE"; rw = Service_station }
-       { id = "DE HHOH"; rw = Service_station }
        { id = "DE HHRN"; rw = Yard }
-       { id = "DE HHWD"; rw = Service_station }
-       { id = "DE HIHV"; rw = Service_station }
-       { id = "DE HKHF"; rw = Service_station }
-       { id = "DE HKSU"; rw = Service_station }
-       { id = "DE HLMB"; rw = Service_station }
-       { id = "DE HNKP"; rw = Service_station }
        { id = "DE HNPL"; rw = Disused }
-       { id = "DE HNTM"; rw = Service_station }
-       { id = "DE HROR"; rw = Service_station }
-       { id = "DE HSVL"; rw = Service_station }
        { id = "DE HU G"; rw = Yard }
        { id = "DE WSGR"; rw = Undefined }
        { id = "DE WWRN"; rw = Disused }
@@ -108,9 +89,90 @@ let private notYetMappedStops: NotYetMappedStop [] =
        { id = "DE HHRN"; rw = Yard }
        { id = "DE ERKS"; rw = Disused }
        { id = "DE HBNB"; rw = Disused }
-       { id = "DE FTWS"; rw = Service_station }
        { id = "DE ERMH"; rw = Service_station }
-       (*---*)
+       { id = "DEEOB O"; rw = Undefined }
+       { id = "DEEOB N"; rw = Undefined }
+       { id = "DE EHIG"; rw = Disused }
+       { id = "DE KMYM"; rw = Disused }
+       { id = "DE KMYM"; rw = PlannedRailway }
+       { id = "DE  SST"; rw = Service_station }
+       { id = "DE SELN"; rw = Disused }
+       { id = "DE SKIR"; rw = Disused }
+       { id = "DE  RLB"; rw = Yard }
+       { id = "DE FMWG"; rw = Service_station }
+       { id = "DE FGHF"; rw = Service_station }
+       { id = "DE FEGW"; rw = Service_station }
+       { id = "DE FWAD"; rw = Service_station }
+       { id = "DE FMAB"; rw = Service_station }
+       { id = "DE  FPF"; rw = Service_station }
+       { id = "DE FWRY"; rw = Service_station }
+       { id = "DEFFG H"; rw = Switch }
+       { id = "DE FNIA"; rw = Service_station }
+       { id = "DE FBTB"; rw = Service_station }
+       { id = "DE FNIJ"; rw = Service_station }
+       { id = "DE  ROW"; rw = Service_station }
+       { id = "DE RMUG"; rw = Service_station }
+       { id = "DE  RKR"; rw = Yard }
+       { id = "DE  ROG"; rw = Yard }
+       { id = "DE RBNB"; rw = Service_station }
+       { id = "DE  RHF"; rw = Mismatch }
+       { id = "DE TUDS"; rw = Service_station }
+       { id = "DETLW S"; rw = Switch }
+       { id = "DETLW O"; rw = Switch }
+       { id = "DE TT G"; rw = Service_station }
+       { id = "DE  TWS"; rw = Service_station }
+       { id = "DETET N"; rw = Switch }
+       { id = "DE TSUD"; rw = Service_station }
+       { id = "DE NPUE"; rw = Service_station }
+       { id = "DE NGAE"; rw = Service_station }
+       { id = "DE  NWR"; rw = Yard }
+       { id = "DE NARN"; rw = Service_station }
+       { id = "DE   NT"; rw = Service_station }
+       { id = "DE  NEM"; rw = Service_station }
+       { id = "DE MUGH"; rw = Service_station }
+       { id = "DE MSEH"; rw = Service_station }
+       { id = "DE MNAR"; rw = Service_station }
+       { id = "DE MPAR"; rw = Disused }
+       { id = "DE  MSM"; rw = Disused }
+       { id = "DE MINU"; rw = Switch }
+       { id = "DE  MGO"; rw = Disused }
+       { id = "DE MPGO"; rw = Yard }
+       { id = "DE MH W"; rw = Yard }
+       { id = "DE  MFH"; rw = Service_station }
+       { id = "DEMMA A"; rw = Switch }
+       { id = "DE MNFO"; rw = Crossover }
+       { id = "DE MAHN"; rw = Service_station }
+       { id = "DE  MFI"; rw = Disused }
+       { id = "DE MHTM"; rw = Service_station }
+       { id = "DE  NSI"; rw = Service_station }
+       { id = "DE NSAN"; rw = Service_station }
+       { id = "DE NSIN"; rw = Service_station }
+       { id = "DE MMNG"; rw = Service_station }
+       { id = "DE NF G"; rw = Yard }
+       { id = "DE NLUH"; rw = Service_station }
+       { id = "DE NHIL"; rw = Service_station }
+       { id = "DE NMEI"; rw = Service_station }
+       { id = "DE  NMM"; rw = Service_station }
+       { id = "DE UE G"; rw = Yard }
+       { id = "DE UE O"; rw = Yard }
+       { id = "DE UE F"; rw = Switch }
+       { id = "DE UE L"; rw = Switch }
+       { id = "DE  BKD"; rw = Service_station }
+       { id = "DE  WDN"; rw = Service_station }
+       { id = "DE WKWA"; rw = Service_station }
+       { id = "DEAHBIA"; rw = Switch }
+       { id = "DE LHEL"; rw = Service_station }
+       { id = "DEBATSO"; rw = Switch }
+       { id = "DE BGRA"; rw = Service_station }
+       { id = "DE BWKL"; rw = Service_station }
+       { id = "DE DGIB"; rw = Switch }
+       { id = "DE  BKP"; rw = Yard }
+       { id = "DE BSTA"; rw = Service_station }
+       { id = "DE DWID"; rw = Disused }
+       { id = "DE DHDF"; rw = Disused }
+       { id = "DE  DCF"; rw = Service_station }
+       { id = "DE  BBS"; rw = Service_station }
+       (*--*)
        |]
 
 let missingStops: MissingStop [] =
@@ -124,11 +186,18 @@ let missingStops: MissingStop [] =
                 ReasonOfNoMatching.OsmNotYetMapped })
 
 let private checkMissingStop (ops: RInf.OperationalPoint []) (ms: MissingStop) =
+    let dumpRailwayTag (e: OSM.Element) =
+        [| OSM.Tag.Railway
+           OSM.Tag.PlannedRailway
+           OSM.Tag.DisusedRailway
+           OSM.Tag.HistoricRailway |]
+        |> Array.tryPick (fun tag -> OSM.Data.getTagValue tag e)
+
     let dumpElement (e: OSM.Element) =
         match e with
-        | OSM.Node v -> sprintf "node %d, %A" v.id (OSM.Data.getTagValue OSM.Tag.Railway e)
-        | OSM.Way v -> sprintf "way %d, %A" v.id (OSM.Data.getTagValue OSM.Tag.Railway e)
-        | OSM.Relation v -> sprintf "relation %d, %A" v.id (OSM.Data.getTagValue OSM.Tag.Railway e)
+        | OSM.Node v -> sprintf "node %d, %A" v.id (dumpRailwayTag e)
+        | OSM.Way v -> sprintf "way %d, %A" v.id (dumpRailwayTag e)
+        | OSM.Relation v -> sprintf "relation %d, %A" v.id (dumpRailwayTag e)
 
     let printScript (s: NotYetMappedStop) (op: RInf.OperationalPoint) =
         printfn

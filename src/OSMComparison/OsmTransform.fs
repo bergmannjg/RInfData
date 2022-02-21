@@ -35,6 +35,9 @@ module Tag =
     let Railway = "railway"
 
     [<Literal>]
+    let PlannedRailway = "planned:railway"
+
+    [<Literal>]
     let DisusedRailway = "disused:railway"
 
     [<Literal>]
@@ -133,6 +136,7 @@ module Transform =
             | Node n when t = typeof<Node> ->
                 relevantRailwayTags
                     [| Tag.Railway
+                       Tag.PlannedRailway
                        Tag.DisusedRailway
                        Tag.HistoricRailway |]
                     e

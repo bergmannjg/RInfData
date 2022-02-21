@@ -17,5 +17,6 @@ Calculating routes with high accuracy, requires further data about the connectiv
 
 ## Build rinf-data module
 
+* run: restore-data.sh
 * run: build-package.sh
 * module is used by [FahrplanApp](https://github.com/bergmannjg/FahrplanApp)

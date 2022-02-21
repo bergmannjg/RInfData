@@ -6,6 +6,7 @@
 .fsdocs/
 
 rinf-data/
+rinf-data-bak/
 db-data/
 osm-data/
 node_modules/
@@ -15,6 +16,7 @@ bin/
 obj/
 output/
 tmp/
+vsmacros/
 
 gh-pages/
 
