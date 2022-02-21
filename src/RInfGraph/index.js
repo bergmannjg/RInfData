@@ -1,5 +1,5 @@
 const { readFile } = require('fs/promises');
-const { rinfgraph } = require('./rinf-data/rinfgraph.bundle.js');
+const { rinfgraph } = require('./rinf-graph/rinfgraph.bundle.js');
 
 readFile(process.argv[2])
     .then(json => {
