@@ -149,12 +149,6 @@ let buildLineInfo (ops: OperationalPoint []) (sols: GraphNode []) (line: string)
         | Some nextNode -> getNextNodes solsOfLine nextNode (nextNode :: nextNodes)
         | None -> nextNodes |> List.rev
 
-    if firstNodes.Length > 0 then
-        fprintfn stderr "line %s, %d sols" line solsOfLine.Length
-
-        firstNodes
-        |> Array.iter (fun sol -> fprintfn stderr "first %s" sol.Node)
-
     // solsOfLine
     // |> Array.iter (fun sol -> fprintfn stderr "sol %s %s" sol.Node sol.Edges.[0].Node)
 
@@ -226,16 +220,23 @@ let buildGraph
     let travelTime (length: float) (maxSpeed: int) =
         length / (float (maxSpeed) * (scale maxSpeed))
 
-    let getCost (sol: SectionOfLine) (maxSpeed: int) =
+    let getCost (sol: SectionOfLine) (maxSpeed: int) (lineCat: string) =
         let cost = int (10000.0 * (travelTime sol.Length maxSpeed))
 
-        if (cost <= 0) then 1 else cost
+        // prefer routes with linecat P1 or P2
+        let extra =
+            if [| "30"; "40"; "50"; "60" |] |> Array.contains lineCat then
+                cost / 5
+            else
+                0
+
+        if (cost <= 0) then 1 else cost + extra
 
     let passengersLineCats = [| "10"; "20"; "30"; "40"; "50"; "60" |]
 
-    let hasPassengerLineCat (trackParamsOfSol: SOLTrackParameter []) =
+    let getPassengerLineCat (trackParamsOfSol: SOLTrackParameter []) =
         trackParamsOfSol
-        |> Array.exists (fun param ->
+        |> Array.tryFind (fun param ->
             param.ID = "IPP_LineCat"
             && passengersLineCats |> Array.contains (param.Value))
 
@@ -254,9 +255,11 @@ let buildGraph
                     trackIds
                     |> Array.exists (fun t -> t = param.SOLTrack.TrackID))
 
-            if hasPassengerLineCat trackParamsOfSol then
+            let lineCat = getPassengerLineCat trackParamsOfSol
+
+            if lineCat.IsSome then
                 let maxSpeed = getMaxSpeed sol trackParamsOfSol
-                let cost = getCost sol maxSpeed
+                let cost = getCost sol maxSpeed lineCat.Value.Value
 
                 graph <-
                     graph.Add(

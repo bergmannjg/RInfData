@@ -263,14 +263,15 @@ module Graph =
         |> Array.iter
             (fun node ->
                 printfn
-                    "%s %s %s %.3f %.3f %.1f %i"
+                    "%s %s %s %.3f %.3f %.1f %i %i"
                     node.Node
                     node.Edges.[0].Node
                     node.Edges.[0].Line
                     node.Edges.[0].StartKm
                     node.Edges.[0].EndKm
                     node.Edges.[0].Length
-                    node.Edges.[0].MaxSpeed)
+                    node.Edges.[0].MaxSpeed
+                    node.Edges.[0].Cost)
 
         printfn
             "%.1f"
