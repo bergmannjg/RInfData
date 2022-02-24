@@ -211,11 +211,7 @@ let buildGraph
                 fprintfn stderr "sol %s, maxspeed not found" sol.solName
                 100)
 
-    let scale (maxSpeed: int) =
-        if maxSpeed >= 250 then 1.4
-        else if maxSpeed >= 200 then 1.2
-        else if maxSpeed >= 160 then 1.1
-        else 1.0
+    let scale (maxSpeed: int) = 1.0
 
     let travelTime (length: float) (maxSpeed: int) =
         length / (float (maxSpeed) * (scale maxSpeed))
@@ -223,14 +219,7 @@ let buildGraph
     let getCost (sol: SectionOfLine) (maxSpeed: int) (lineCat: string) =
         let cost = int (10000.0 * (travelTime sol.Length maxSpeed))
 
-        // prefer routes with linecat P1 or P2
-        let extra =
-            if [| "30"; "40"; "50"; "60" |] |> Array.contains lineCat then
-                cost / 5
-            else
-                0
-
-        if (cost <= 0) then 1 else cost + extra
+        if (cost <= 0) then 1 else cost
 
     let passengersLineCats = [| "10"; "20"; "30"; "40"; "50"; "60" |]
 
@@ -255,11 +244,14 @@ let buildGraph
                     trackIds
                     |> Array.exists (fun t -> t = param.SOLTrack.TrackID))
 
-            let lineCat = getPassengerLineCat trackParamsOfSol
+            let lineCat =
+                match getPassengerLineCat trackParamsOfSol with
+                | Some lineCat -> Some lineCat.Value
+                | None -> Some "60" // ignore missing linecat
 
             if lineCat.IsSome then
                 let maxSpeed = getMaxSpeed sol trackParamsOfSol
-                let cost = getCost sol maxSpeed lineCat.Value.Value
+                let cost = getCost sol maxSpeed lineCat.Value
 
                 graph <-
                     graph.Add(

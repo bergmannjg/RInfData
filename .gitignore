@@ -5,6 +5,7 @@
 .fake
 .fsdocs/
 
+src/RInfGraph/rinf-graph/data/*.json
 rinf-data/
 rinf-data-bak/
 db-data/
