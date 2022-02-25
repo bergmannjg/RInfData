@@ -177,6 +177,15 @@ let main argv =
                 printfn "compact Path:"
                 Graph.printPath (Graph.getCompactPath path)
 
+                let cpath = Graph.compactifyPath path g
+
+                if (Graph.costOfPath path) <> (Graph.costOfPath cpath) then
+                    printfn "compactified Path:"
+                    Graph.printPath cpath
+
+                    printfn "compactified compact Path:"
+                    Graph.printPath (Graph.getCompactPath cpath)
+
                 Graph.getLocationsOfPath g map path
                 |> Array.iter (Graph.getBRouterUrl >> printfn "%s")
 

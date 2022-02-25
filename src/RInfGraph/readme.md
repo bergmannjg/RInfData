@@ -13,7 +13,7 @@ Calculating routes with high accuracy, requires further data about the connectiv
 * add fable directory to FSharpx.Collections nuget package till version 3.0.0 is released
 * build prod: dotnet fable RInfGraph.fable.fsproj -o build --run webpack --mode production --no-devtool --config ./webpack.config.js
 * build dev: dotnet fable RInfGraph.fable.fsproj -o build --run webpack --mode development --devtool source-map --config ./webpack.config.js
-* usage: node index.js rinf-data/data/Graph.json "DE   HH;DE   BL"
+* usage: node index.js rinf-graph/data/Graph.json "DE000HH;DE000AH"
 
 ## Build rinf-data module
 

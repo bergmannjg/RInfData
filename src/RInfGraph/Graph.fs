@@ -3,7 +3,11 @@ namespace RInfGraph
 open FSharpx.Collections
 
 type Location = { Latitude: float; Longitude: float }
-type PoILocation = { Latitude: float; Longitude: float; Content:string }
+
+type PoILocation =
+    { Latitude: float
+      Longitude: float
+      Content: string }
 
 type OpInfo =
     { UOPID: string
@@ -102,12 +106,11 @@ module Graph =
     let toGraph (g: GraphNode []) =
         g
         |> Array.fold
-            (fun (graph: Map<string, 
 #if FABLE_COMPILER
-                                    Dijkstra.Vertex>) n ->
+            (fun (graph: Map<string, Dijkstra.Vertex>) n ->
 #else
-                                    Dijkstra.Vertex<string>>) n ->
-#endif            
+            (fun (graph: Map<string, Dijkstra.Vertex<string>>) n ->
+#endif
                 let v = toVertex n
                 graph.Add(v.Id, v))
             (Map.empty)
@@ -119,12 +122,11 @@ module Graph =
 
             let edges =
                 node1.Edges
-                |> Array.filter
-                    (fun edge ->
-                        edge.Node = n2
-                        && match line with
-                           | Some line -> line = edge.Line
-                           | None -> true)
+                |> Array.filter (fun edge ->
+                    edge.Node = n2
+                    && match line with
+                       | Some line -> line = edge.Line
+                       | None -> true)
                 |> Array.sortBy (fun e -> e.Cost)
 
             let (cost, line, maxSpeed, startKm, endKm, length) =
@@ -135,22 +137,21 @@ module Graph =
 
             { Node = n1
               Edges =
-                  [| { Node = n2
-                       Cost = cost
-                       Line = line
-                       MaxSpeed = maxSpeed
-                       StartKm = startKm
-                       EndKm = endKm
-                       Length = length } |] }
+                [| { Node = n2
+                     Cost = cost
+                     Line = line
+                     MaxSpeed = maxSpeed
+                     StartKm = startKm
+                     EndKm = endKm
+                     Length = length } |] }
             |> Some
         | _ -> None
 
-    let private toGraphNodes (g: GraphNode []) (line: string option) 
 #if FABLE_COMPILER
-                (path: Dijkstra.Path option) =
+    let private toGraphNodes (g: GraphNode []) (line: string option) (path: Dijkstra.Path option) =
 #else
-                (path: Dijkstra.Path<string> option) =
-#endif             
+    let private toGraphNodes (g: GraphNode []) (line: string option) (path: Dijkstra.Path<string> option) =
+#endif
         match path with
         | Some path ->
             path.Nodes
@@ -160,17 +161,21 @@ module Graph =
             |> Seq.toArray
         | None -> Array.empty
 
+#if FABLE_COMPILER
     let private getShortestPathFromGraphWithCond
         (g: GraphNode [])
-#if FABLE_COMPILER
         (graph: Map<string, Dijkstra.Vertex>)
-#else
-        (graph: Map<string, Dijkstra.Vertex<string>>)
-#endif             
         (ids: string [])
         (line: string option)
         =
-
+#else
+    let private getShortestPathFromGraphWithCond
+        (g: GraphNode [])
+        (graph: Map<string, Dijkstra.Vertex<string>>)
+        (ids: string [])
+        (line: string option)
+        =
+#endif
         let nodes =
             ids
             |> Array.map (fun id -> g |> Seq.tryFind (fun node -> node.Node = id))
@@ -180,33 +185,27 @@ module Graph =
 
             nodes
             |> Array.windowed 2
-            |> Array.collect
-                (fun n2 ->
-                    Dijkstra.shortestPath graph n2.[0].Node n2.[1].Node
-                    |> toGraphNodes g line)
+            |> Array.collect (fun n2 ->
+                Dijkstra.shortestPath graph n2.[0].Node n2.[1].Node
+                |> toGraphNodes g line)
         else
-            printfn "nodes not found"
             Array.empty
 
-    let getShortestPathFromGraph (g: GraphNode []) 
 #if FABLE_COMPILER
-                (graph: Map<string, Dijkstra.Vertex>)
+    let getShortestPathFromGraph (g: GraphNode []) (graph: Map<string, Dijkstra.Vertex>) (ids: string []) =
 #else
-                (graph: Map<string, Dijkstra.Vertex<string>>)
-#endif  
-                (ids: string []) =              
+    let getShortestPathFromGraph (g: GraphNode []) (graph: Map<string, Dijkstra.Vertex<string>>) (ids: string []) =
+#endif
         getShortestPathFromGraphWithCond g graph ids None
 
     let getShortestPath (g: GraphNode []) (ids: string []) =
         getShortestPathFromGraph g (toGraph g) ids
 
-    let getPathOfLineFromGraph (g: GraphNode []) 
 #if FABLE_COMPILER
-                            (graph: Map<string, Dijkstra.Vertex>) 
+    let getPathOfLineFromGraph (g: GraphNode []) (graph: Map<string, Dijkstra.Vertex>) (line: LineInfo) =
 #else
-                            (graph: Map<string, Dijkstra.Vertex<string>>) 
-#endif                
-                            (line: LineInfo) =
+    let getPathOfLineFromGraph (g: GraphNode []) (graph: Map<string, Dijkstra.Vertex<string>>) (line: LineInfo) =
+#endif
         getShortestPathFromGraphWithCond g graph line.UOPIDs (Some line.Line)
 
     let getPathOfLine (g: GraphNode []) (line: LineInfo) =
@@ -223,10 +222,10 @@ module Graph =
                   Cost = edge1.Cost + edge2.Cost
                   Line = edge1.Line
                   MaxSpeed =
-                      if edge1.MaxSpeed < edge2.MaxSpeed then
-                          edge1.MaxSpeed
-                      else
-                          edge2.MaxSpeed
+                    if edge1.MaxSpeed < edge2.MaxSpeed then
+                        edge1.MaxSpeed
+                    else
+                        edge2.MaxSpeed
                   StartKm = edge1.StartKm
                   EndKm = edge2.EndKm
                   Length = edge1.Length + edge2.Length }
@@ -258,25 +257,153 @@ module Graph =
         |> List.rev
         |> List.toArray
 
+    let getLineOfGraphNode (node: GraphNode) = node.Edges.[0].Line
+
+    let lengthOfPath (path: GraphNode []) =
+        path
+        |> Array.sumBy (fun node -> node.Edges.[0].Length)
+
+    let costOfPath (path: GraphNode []) =
+        path
+        |> Array.sumBy (fun node -> node.Edges.[0].Cost)
+
     let printPath (path: GraphNode []) =
         path
-        |> Array.iter
-            (fun node ->
-                printfn
-                    "%s %s %s %.3f %.3f %.1f %i %i"
-                    node.Node
-                    node.Edges.[0].Node
-                    node.Edges.[0].Line
-                    node.Edges.[0].StartKm
-                    node.Edges.[0].EndKm
-                    node.Edges.[0].Length
-                    node.Edges.[0].MaxSpeed
-                    node.Edges.[0].Cost)
+        |> Array.iter (fun node ->
+            printfn
+                "%s %s %s %.3f %.3f %.1f %i %i"
+                node.Node
+                node.Edges.[0].Node
+                node.Edges.[0].Line
+                node.Edges.[0].StartKm
+                node.Edges.[0].EndKm
+                node.Edges.[0].Length
+                node.Edges.[0].MaxSpeed
+                node.Edges.[0].Cost)
 
-        printfn
-            "%.1f"
-            (path
-             |> Array.sumBy (fun node -> node.Edges.[0].Length))
+        printfn "%.1f %i" (lengthOfPath path) (costOfPath path)
+
+    type internal Candidate = (string * string * string)
+
+    let private getCompactifyCandidate (path: GraphNode []) (choosen: Candidate list) =
+        let cpath = getCompactPath path
+
+        if cpath.Length > 2 then
+            // find 2 entries of same line in cpath
+            let groups =
+                cpath
+                |> Array.groupBy (fun p -> getLineOfGraphNode p)
+
+            match groups
+                  |> Array.tryFind (fun (_, l) -> l.Length = 2)
+                with
+            | Some (line, l) ->
+                let fromNode = l.[0].Edges.[0].Node
+                let toNode = l.[1].Node
+
+                let fromIndex =
+                    cpath
+                    |> Array.findIndex (fun n -> n.Edges.[0].Node = fromNode)
+
+                let toIndex =
+                    cpath
+                    |> Array.findIndex (fun n -> n.Node = toNode)
+
+                let nodesBetween =
+                    cpath
+                    |> Array.skip (fromIndex + 1)
+                    |> Array.take (toIndex - (fromIndex + 1))
+
+                let length = lengthOfPath nodesBetween
+
+                if length > 0 && length < 50.0 && fromNode <> toNode then
+                    Some(line, fromNode, toNode)
+                else
+                    None
+            | None ->
+                let windowed = cpath |> Array.windowed 2
+
+                let chooser (xs: GraphNode []) =
+                    let edgeOfLast = xs[1].Edges.[0]
+                    let edgeOfFirst = xs[0].Edges.[0]
+
+                    if edgeOfLast.Length < 10.0
+                       && edgeOfLast.Length * 5.0 < edgeOfFirst.Length then
+                        let candidate = (edgeOfFirst.Line, edgeOfFirst.Node, edgeOfLast.Node)
+
+                        if choosen |> List.contains candidate then
+                            None
+                        else
+                            Some candidate
+                    else if edgeOfFirst.Length < 10.0
+                            && edgeOfFirst.Length * 5.0 < edgeOfLast.Length then
+                        let candidate = (edgeOfLast.Line, xs[0].Node, edgeOfFirst.Node)
+
+                        if choosen |> List.contains candidate then
+                            None
+                        else
+                            Some candidate
+                    else
+                        None
+
+                windowed |> Array.choose chooser |> Array.tryHead
+        else
+            None
+
+    let tryCompactifyPath (path: GraphNode []) (graphNodes: GraphNode []) (choosen: Candidate list) =
+        match getCompactifyCandidate path choosen with
+        | Some candidate ->
+            let (line, fromNode, toNode) = candidate
+
+            let graphNodesOfLine =
+                graphNodes
+                |> Array.choose (fun n ->
+                    let edges = n.Edges |> Array.filter (fun e -> e.Line = line)
+
+                    if edges.Length > 0 then
+                        Some { n with Edges = edges }
+                    else
+                        None)
+
+            let spath = getShortestPath graphNodesOfLine [| fromNode; toNode |]
+
+            if spath.Length > 0 then
+
+                let fromIndex =
+                    path
+                    |> Array.tryFindIndex (fun n -> n.Edges.[0].Node = fromNode)
+
+                let toIndex =
+                    path
+                    |> Array.tryFindIndex (fun n -> n.Node = toNode)
+
+                match fromIndex, toIndex with
+                | Some fromIndex, Some toIndex ->
+                    let n1 = path |> Array.take (fromIndex + 1)
+                    let n2 = path |> Array.skip toIndex
+                    Some(Array.concat [ n1; spath; n2 ], candidate)
+                | Some fromIndex, None ->
+                    let n1 = path |> Array.take (fromIndex + 1)
+                    Some(Array.concat [ n1; spath ], candidate)
+                | None, Some toIndex ->
+                    let n2 = path |> Array.skip toIndex
+                    Some(Array.concat [ spath; n2 ], candidate)
+                | None, None -> None
+            else
+                Some(path, candidate)
+        | None -> None
+
+    let compactifyPath (path: GraphNode []) (graphNodes: GraphNode []) =
+        let rec multiCompactifyPath path graphNodes maxDepth choosen =
+            match tryCompactifyPath path graphNodes choosen with
+            | Some (cpath, candidate) ->
+                if maxDepth > 0 then
+                    multiCompactifyPath cpath graphNodes (maxDepth - 1) (candidate :: choosen)
+                else
+                    path
+            | None -> path
+
+        multiCompactifyPath path graphNodes 4 []
 
     let isWalkingPath (node: GraphNode) = node.Edges.[0].Line.StartsWith("99")
 
@@ -314,10 +441,9 @@ module Graph =
 
             let lonlats =
                 path
-                |> Array.map
-                    (fun node ->
-                        { Longitude = opInfos.[node.Node].Longitude
-                          Latitude = opInfos.[node.Node].Latitude })
+                |> Array.map (fun node ->
+                    { Longitude = opInfos.[node.Node].Longitude
+                      Latitude = opInfos.[node.Node].Latitude })
 
             Array.append lonlats [| lastLonlat |]
         else

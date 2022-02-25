@@ -56,6 +56,7 @@ export interface RInfGraph {
     Graph_getShortestPath: (g: Array<GraphNode>, ids: Array<string>) => Array<GraphNode>
     Graph_getPathOfLineFromGraph: (g: Array<GraphNode>, graph: Map<string, any>, line: LineInfo) => Array<GraphNode>
     Graph_getCompactPath: (path: Array<GraphNode>) => Array<GraphNode>
+    Graph_compactifyPath: (path: Array<GraphNode>, g: Array<GraphNode>) => Array<GraphNode>
     Graph_getPathOfLine: (g: Array<GraphNode>, line: LineInfo) => Array<GraphNode>
     Graph_printPath: (path: Array<GraphNode>) => void
     Graph_getLocationsOfPath: (g: Array<GraphNode>, opInfos: Map<string, OpInfo>, path: Array<GraphNode>) => Array<Array<Location>>
