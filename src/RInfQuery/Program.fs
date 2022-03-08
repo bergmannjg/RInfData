@@ -17,6 +17,8 @@ OPTIONS:
 
     --OperationalPoints.Line <dataDir> <line>
                           get OperationalPoints of line from file OperationalPoints.json in <dataDir>.
+    --SectionsOfLine.Line <dataDir> <line>
+                          get SectionsOfLine of line from file SectionsOfLine.json in <dataDir>.
     --Graph.Route <dataDir> <opIds>
                           get path of route from <opIds>, ex. "DE   HH;DE   BL"
                           (assumes Graph.json and OpInfos.json in <dataDir>).
@@ -135,6 +137,60 @@ let main argv =
 
                 return ""
             }
+        else if argv.[0] = "--SectionsOfLine.Line"
+                && argv.Length > 2 then
+            async {
+                let sols = readFile<SectionOfLine []> argv.[1] "SectionsOfLines.json"
+                let ops = readFile<OperationalPoint []> argv.[1] "OperationalPoints.json"
+
+                let opsOfLine =
+                    ops
+                    |> Array.filter (fun op ->
+                        op.RailwayLocations
+                        |> Array.exists (fun loc -> argv.[2] = loc.NationalIdentNum))
+                    |> Array.map (fun op ->
+                        let loc =
+                            op.RailwayLocations
+                            |> Array.find (fun loc -> argv.[2] = loc.NationalIdentNum)
+
+                        (op, loc.Kilometer))
+                    |> Array.sortBy (fun (_, km) -> km)
+                    |> Array.distinct
+
+                let solsOfLine =
+                    sols
+                    |> Array.filter (fun sol -> sol.LineIdentification = argv.[2])
+                    |> Array.map (fun sol ->
+                        (sol,
+                         opsOfLine
+                         |> Array.tryFind (fun (op, _) ->
+                             sol.StartOP.IsSome
+                             && op.UOPID = sol.StartOP.Value.UOPID),
+                         opsOfLine
+                         |> Array.tryFind (fun (op, _) ->
+                             sol.EndOP.IsSome
+                             && op.UOPID = sol.EndOP.Value.UOPID)))
+                    |> Array.sortBy (fun (_, startOp, _) ->
+                        match startOp with
+                        | Some (_, km) -> km
+                        | None -> 0.0)
+
+                solsOfLine
+                |> Array.iter (fun (sol, startOp, endOp) ->
+                    match startOp, endOp with
+                    | Some (startOp, startKm), Some (endOp, endKm) ->
+                        printfn
+                            "%s - %s, start: %.1f, end: %.1f, length: %.1f, %s"
+                            startOp.UOPID
+                            endOp.UOPID
+                            startKm
+                            endKm
+                            sol.Length
+                            sol.solName
+                    | _ -> printfn "ops not found: %s" sol.solName)
+
+                return ""
+            }
         else if argv.[0] = "--Graph.Line" && argv.Length > 2 then
             async {
                 let g = readFile<GraphNode []> argv.[1] "Graph.json"
@@ -179,7 +235,8 @@ let main argv =
 
                 let cpath = Graph.compactifyPath path g
 
-                if (Graph.costOfPath path) <> (Graph.costOfPath cpath) then
+                if (Graph.costOfPath path)
+                   <> (Graph.costOfPath cpath) then
                     printfn "compactified Path:"
                     Graph.printPath cpath
 

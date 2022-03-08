@@ -29,3 +29,4 @@ package-lock.json
 
 [xyz].json
 [xyz].txt
+src/RInfGraph/lineinfos*.json

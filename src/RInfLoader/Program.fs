@@ -36,6 +36,8 @@ OPTIONS:
     --Graph.Build <dataDir>
                           build graph of OperationalPoints and SectionsOfLines from files SectionsOfLines.json,
                           OperationalPoints.json and SOLTrackParameters.json in <dataDir>.
+    --Line.MissingSols <dataDir>
+                          analyze missing SectionsOfLines
     --help                display this list of options.
 """
 
@@ -184,12 +186,41 @@ let nullDefaultValue<'a when 'a: null> (defaultValue: 'a) (value: 'a) =
     else
         value
 
+let scale (maxSpeed: int) = 1.0
+
+let travelTime (length: float) (maxSpeed: int) =
+    length / (float (maxSpeed) * (scale maxSpeed))
+
+let getCost (length: float) (maxSpeed: int) =
+    let cost = int (10000.0 * (travelTime length maxSpeed))
+
+    if (cost <= 0) then 1 else cost
+
+let removeSols (sols: SectionOfLine []) =
+    sols
+    |> Array.filter (fun sol ->
+        not (
+            ExtraEdges.removableEdges
+            |> Array.exists (fun (line, opStart, opEnd) ->
+                sol.LineIdentification = line
+                && sol.StartOP.IsSome
+                && sol.StartOP.Value.UOPID = opStart
+                && sol.EndOP.IsSome
+                && sol.EndOP.Value.UOPID = opEnd)
+        ))
+
 let buildGraph
     (ops: OperationalPoint [])
-    (sols: SectionOfLine [])
+    (allSols: SectionOfLine [])
     (trackParams: SOLTrackParameter [])
     (extraEdges: bool)
     =
+    let sols =
+        if extraEdges then
+            (removeSols allSols)
+        else
+            allSols
+
     let mutable graph = Map.empty
 
     let addOp (op: OperationalPoint) =
@@ -210,16 +241,6 @@ let buildGraph
             | None ->
                 fprintfn stderr "sol %s, maxspeed not found" sol.solName
                 100)
-
-    let scale (maxSpeed: int) = 1.0
-
-    let travelTime (length: float) (maxSpeed: int) =
-        length / (float (maxSpeed) * (scale maxSpeed))
-
-    let getCost (sol: SectionOfLine) (maxSpeed: int) (lineCat: string) =
-        let cost = int (10000.0 * (travelTime sol.Length maxSpeed))
-
-        if (cost <= 0) then 1 else cost
 
     let passengersLineCats = [| "10"; "20"; "30"; "40"; "50"; "60" |]
 
@@ -251,7 +272,7 @@ let buildGraph
 
             if lineCat.IsSome then
                 let maxSpeed = getMaxSpeed sol trackParamsOfSol
-                let cost = getCost sol maxSpeed lineCat.Value
+                let cost = getCost sol.Length maxSpeed
 
                 graph <-
                     graph.Add(
@@ -428,6 +449,84 @@ let main argv =
                 let lineInfos = buildLineInfos ops sols
 
                 return JsonSerializer.Serialize lineInfos
+            }
+        else if argv.[0] = "--Line.MissingSols" && argv.Length > 1 then
+            async {
+                // checked by https://geovdbn.deutschebahn.com/isr
+                let linesWithSolsNotInUse =
+                    [| "1023"
+                       "1570"
+                       "1711"
+                       "2273"
+                       "2850"
+                       "2854"
+                       "2961"
+                       "2982"
+                       "3005"
+                       "3450"
+                       "4330"
+                       "5330"
+                       "5340"
+                       "5919"
+                       "6088"
+                       "6214"
+                       "6253"
+                       "6311"
+                       "6386"
+                       "6425"
+                       "6680"
+                       "6697"
+                       "6726"
+                       "6759"
+                       "6901"
+                       "6938" |]
+
+                let g = readFile<GraphNode []> argv.[1] "Graph.json"
+
+                let estimateMaxSpeed (op: string) (line: string) =
+                    g
+                    |> Array.tryFind (fun n -> n.Node = op)
+                    |> fun n ->
+                        match n with
+                        | Some n -> n.Edges |> Array.tryFind (fun e -> e.Line = line)
+                        | None -> None
+                    |> Option.map (fun e -> e.MaxSpeed)
+                    |> Option.defaultValue 100
+
+                readFile<LineInfo []> argv.[1] "LineInfos.json"
+                |> Array.groupBy (fun line -> line.Line)
+                |> Array.filter (fun (line, infos) ->
+                    not (linesWithSolsNotInUse |> Array.contains line)
+                    && infos.Length > 1)
+                |> Array.iter (fun (line, infos) ->
+                    let sorted = infos |> Array.sortBy (fun info -> info.StartKm)
+
+                    if sorted.Length = 2
+                       && sorted.[1].StartKm > sorted.[0].EndKm then
+                        let dist = Math.Abs(sorted.[1].StartKm - sorted.[0].EndKm)
+
+                        let fromOp = sorted.[0].UOPIDs.[sorted.[0].UOPIDs.Length - 1]
+                        let toOp = sorted.[1].UOPIDs.[0]
+                        let maxSpeed = estimateMaxSpeed fromOp line
+
+                        if dist < 50.0 then
+                            printfn
+                                "\"%s\" \"%s\" \"%s\" %d %d %.3f %.3f %.3f"
+                                fromOp
+                                toOp
+                                line
+                                (getCost dist maxSpeed)
+                                maxSpeed
+                                sorted.[0].EndKm
+                                sorted.[1].StartKm
+                                dist
+
+                    if sorted.Length = 2
+                       && sorted.[1].StartKm < sorted.[0].EndKm then
+
+                        fprintfn stderr "line with overlapping segements: %s" line)
+
+                return ""
             }
         else
             async { return printHelp () }

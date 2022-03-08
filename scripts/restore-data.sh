@@ -18,3 +18,5 @@ dotnet run --project src/RInfLoader/RInfLoader.fsproj --  --SOLTrackParameters .
 dotnet run --project src/RInfLoader/RInfLoader.fsproj --  --OpInfo.Build ./rinf-data/ > ./rinf-data/OpInfos.json
 dotnet run --project src/RInfLoader/RInfLoader.fsproj --  --Graph.Build ./rinf-data/ > ./rinf-data/Graph.json
 dotnet run --project src/RInfLoader/RInfLoader.fsproj --  --LineInfo.Build ./rinf-data/ > ./rinf-data/LineInfos.json
+
+dotnet run --project src/RInfLoader/RInfLoader.fsproj --  --Graph.Build ./rinf-data/ --noExtraEdges > ./rinf-data/Graph-orig.json
