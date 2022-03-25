@@ -54,7 +54,5 @@ let TestHHToAH () =
     TestPath [| "DE000HH"; "DE000AH" |] [|
         ("DE000HH", "DE95366", 1710)
         ("DE95366", "DE0AHAR", 1720)
-        ("DE0AHAR", "DEAWLBA", 2200)
-        ("DEAWLBA", "DE0AOHA", 1280)
-        ("DE0AOHA", "DE000AH", 1250)
+        ("DE0AHAR", "DE000AH", 2200)
     |]

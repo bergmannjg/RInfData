@@ -115,18 +115,14 @@ module Graph =
                 graph.Add(v.Id, v))
             (Map.empty)
 
-    let private toGraphNode (g: GraphNode []) (line: string option) nodes =
+    let private toGraphNode (g: GraphNode []) nodes =
         match nodes with
         | [| n1; n2 |] ->
             let node1 = g |> Seq.find (fun n -> n.Node = n1)
 
             let edges =
                 node1.Edges
-                |> Array.filter (fun edge ->
-                    edge.Node = n2
-                    && match line with
-                       | Some line -> line = edge.Line
-                       | None -> true)
+                |> Array.filter (fun edge -> edge.Node = n2)
                 |> Array.sortBy (fun e -> e.Cost)
 
             let (cost, line, maxSpeed, startKm, endKm, length) =
@@ -148,33 +144,23 @@ module Graph =
         | _ -> None
 
 #if FABLE_COMPILER
-    let private toGraphNodes (g: GraphNode []) (line: string option) (path: Dijkstra.Path option) =
+    let private toGraphNodes (g: GraphNode []) (path: Dijkstra.Path option) =
 #else
-    let private toGraphNodes (g: GraphNode []) (line: string option) (path: Dijkstra.Path<string> option) =
+    let private toGraphNodes (g: GraphNode []) (path: Dijkstra.Path<string> option) =
 #endif
         match path with
         | Some path ->
             path.Nodes
             |> Seq.windowed 2
-            |> Seq.map (toGraphNode g line)
+            |> Seq.map (toGraphNode g)
             |> Seq.choose id
             |> Seq.toArray
         | None -> Array.empty
 
 #if FABLE_COMPILER
-    let private getShortestPathFromGraphWithCond
-        (g: GraphNode [])
-        (graph: Map<string, Dijkstra.Vertex>)
-        (ids: string [])
-        (line: string option)
-        =
+    let getShortestPathFromGraph (g: GraphNode []) (graph: Map<string, Dijkstra.Vertex>) (ids: string []) =
 #else
-    let private getShortestPathFromGraphWithCond
-        (g: GraphNode [])
-        (graph: Map<string, Dijkstra.Vertex<string>>)
-        (ids: string [])
-        (line: string option)
-        =
+    let getShortestPathFromGraph (g: GraphNode []) (graph: Map<string, Dijkstra.Vertex<string>>) (ids: string []) =
 #endif
         let nodes =
             ids
@@ -187,26 +173,30 @@ module Graph =
             |> Array.windowed 2
             |> Array.collect (fun n2 ->
                 Dijkstra.shortestPath graph n2.[0].Node n2.[1].Node
-                |> toGraphNodes g line)
+                |> toGraphNodes g)
         else
             Array.empty
 
-#if FABLE_COMPILER
-    let getShortestPathFromGraph (g: GraphNode []) (graph: Map<string, Dijkstra.Vertex>) (ids: string []) =
-#else
-    let getShortestPathFromGraph (g: GraphNode []) (graph: Map<string, Dijkstra.Vertex<string>>) (ids: string []) =
-#endif
-        getShortestPathFromGraphWithCond g graph ids None
-
     let getShortestPath (g: GraphNode []) (ids: string []) =
         getShortestPathFromGraph g (toGraph g) ids
+
+    let private getGraphNodesOfLine (line: string) (graphNodes: GraphNode []) =
+        graphNodes
+        |> Array.choose (fun n ->
+            let edges = n.Edges |> Array.filter (fun e -> e.Line = line)
+
+            if edges.Length > 0 then
+                Some { n with Edges = edges }
+            else
+                None)
 
 #if FABLE_COMPILER
     let getPathOfLineFromGraph (g: GraphNode []) (graph: Map<string, Dijkstra.Vertex>) (line: LineInfo) =
 #else
     let getPathOfLineFromGraph (g: GraphNode []) (graph: Map<string, Dijkstra.Vertex<string>>) (line: LineInfo) =
 #endif
-        getShortestPathFromGraphWithCond g graph line.UOPIDs (Some line.Line)
+        let graphNodesOfLine = getGraphNodesOfLine line.Line g
+        getShortestPath graphNodesOfLine line.UOPIDs
 
     let getPathOfLine (g: GraphNode []) (line: LineInfo) =
         getPathOfLineFromGraph g (toGraph g) line
@@ -283,87 +273,129 @@ module Graph =
 
         printfn "%.1f %i" (lengthOfPath path) (costOfPath path)
 
-    type internal Candidate = (string * string * string)
+    type internal Candidate = (string * string * string * string)
 
-    let private getCompactifyCandidate (path: GraphNode []) (choosen: Candidate list) =
-        let cpath = getCompactPath path
+    // find 2 entries of same line in cpath
+    let private getCandidateSameLine (cpath: GraphNode []) (graphNodes: GraphNode []) (choosen: Candidate list) =
+        let groups =
+            cpath
+            |> Array.groupBy (fun p -> getLineOfGraphNode p)
 
-        if cpath.Length > 2 then
-            // find 2 entries of same line in cpath
-            let groups =
+        match groups
+              |> Array.tryFind (fun (_, l) -> l.Length = 2)
+            with
+        | Some (line, l) ->
+            let fromNode = l.[0].Edges.[0].Node
+            let toNode = l.[1].Node
+
+            let fromIndex =
                 cpath
-                |> Array.groupBy (fun p -> getLineOfGraphNode p)
+                |> Array.findIndex (fun n -> n.Edges.[0].Node = fromNode)
 
-            match groups
-                  |> Array.tryFind (fun (_, l) -> l.Length = 2)
-                with
-            | Some (line, l) ->
-                let fromNode = l.[0].Edges.[0].Node
-                let toNode = l.[1].Node
+            let toIndex =
+                cpath
+                |> Array.findIndex (fun n -> n.Node = toNode)
 
-                let fromIndex =
-                    cpath
-                    |> Array.findIndex (fun n -> n.Edges.[0].Node = fromNode)
+            let nodesBetween =
+                cpath
+                |> Array.skip (fromIndex + 1)
+                |> Array.take (toIndex - (fromIndex + 1))
 
-                let toIndex =
-                    cpath
-                    |> Array.findIndex (fun n -> n.Node = toNode)
+            let length = lengthOfPath nodesBetween
 
-                let nodesBetween =
-                    cpath
-                    |> Array.skip (fromIndex + 1)
-                    |> Array.take (toIndex - (fromIndex + 1))
+            if length > 0 && length < 50.0 && fromNode <> toNode then
+                Some("CandidateSameLine", line, fromNode, toNode)
+            else
+                None
+        | None -> None
 
-                let length = lengthOfPath nodesBetween
+    let private getCandidateReplaceSmallEdge
+        (cpath: GraphNode [])
+        (graphNodes: GraphNode [])
+        (choosen: Candidate list)
+        =
+        let windowed = cpath |> Array.windowed 2
 
-                if length > 0 && length < 50.0 && fromNode <> toNode then
-                    Some(line, fromNode, toNode)
-                else
+        let chooser (xs: GraphNode []) =
+            let edgeOfLast = xs[1].Edges.[0]
+            let edgeOfFirst = xs[0].Edges.[0]
+
+            if edgeOfLast.Length < 10.0
+               && edgeOfLast.Length * 5.0 < edgeOfFirst.Length then
+                let candidate =
+                    ("CandidateReplaceSmallEdge", edgeOfFirst.Line, edgeOfFirst.Node, edgeOfLast.Node)
+
+                if choosen |> List.contains candidate then
                     None
-            | None ->
-                let windowed = cpath |> Array.windowed 2
+                else
+                    Some candidate
+            else if edgeOfFirst.Length < 10.0
+                    && edgeOfFirst.Length * 5.0 < edgeOfLast.Length then
+                let candidate =
+                    ("CandidateReplaceSmallEdge", edgeOfLast.Line, xs[0].Node, edgeOfFirst.Node)
 
-                let chooser (xs: GraphNode []) =
-                    let edgeOfLast = xs[1].Edges.[0]
-                    let edgeOfFirst = xs[0].Edges.[0]
+                if choosen |> List.contains candidate then
+                    None
+                else
+                    Some candidate
+            else
+                None
 
-                    if edgeOfLast.Length < 10.0
-                       && edgeOfLast.Length * 5.0 < edgeOfFirst.Length then
-                        let candidate = (edgeOfFirst.Line, edgeOfFirst.Node, edgeOfLast.Node)
+        windowed |> Array.choose chooser |> Array.tryHead
 
-                        if choosen |> List.contains candidate then
-                            None
-                        else
-                            Some candidate
-                    else if edgeOfFirst.Length < 10.0
-                            && edgeOfFirst.Length * 5.0 < edgeOfLast.Length then
-                        let candidate = (edgeOfLast.Line, xs[0].Node, edgeOfFirst.Node)
+    let private getLastEdge (cpath: GraphNode []) =
+        (cpath |> Array.last).Edges |> Array.last
 
-                        if choosen |> List.contains candidate then
-                            None
-                        else
-                            Some candidate
-                    else
-                        None
+    let private getLastNode (cpath: GraphNode []) = (getLastEdge cpath).Node
 
-                windowed |> Array.choose chooser |> Array.tryHead
+    let private getCandidateSameLineWithLastNode
+        (cpath: GraphNode [])
+        (graphNodes: GraphNode [])
+        (choosen: Candidate list)
+        =
+        if cpath.Length > 2 then
+            let lastNode = getLastNode cpath
+
+            let lineOfLastNode =
+                match graphNodes
+                      |> Array.tryFind (fun n -> n.Node = lastNode)
+                    with
+                | Some n -> n.Edges |> Array.map (fun e -> e.Line)
+                | None -> [||]
+
+            match cpath
+                  |> Array.take (cpath.Length - 1)
+                  |> Array.tryFind (fun n -> lineOfLastNode |> Array.contains n.Edges.[0].Line)
+                with
+            | Some node ->
+                let candidate =
+                    ("CandidateSameLineWithLastNode", node.Edges.[0].Line, node.Node, lastNode)
+
+                if choosen |> List.contains candidate then
+                    None
+                else
+                    Some candidate
+            | None -> None
         else
             None
 
-    let tryCompactifyPath (path: GraphNode []) (graphNodes: GraphNode []) (choosen: Candidate list) =
-        match getCompactifyCandidate path choosen with
+    let private getCompactifyCandidate (path: GraphNode []) (graphNodes: GraphNode []) (choosen: Candidate list) =
+        let cpath = getCompactPath path
+
+        if cpath.Length > 2 then
+            [| getCandidateSameLine
+               getCandidateReplaceSmallEdge
+               getCandidateSameLineWithLastNode |]
+            |> Array.tryPick (fun s -> s cpath graphNodes choosen)
+        else
+            None
+
+    let private tryCompactifyPath (path: GraphNode []) (graphNodes: GraphNode []) (choosen: Candidate list) =
+        match getCompactifyCandidate path graphNodes choosen with
         | Some candidate ->
-            let (line, fromNode, toNode) = candidate
+            let (_, line, fromNode, toNode) = candidate
 
-            let graphNodesOfLine =
-                graphNodes
-                |> Array.choose (fun n ->
-                    let edges = n.Edges |> Array.filter (fun e -> e.Line = line)
-
-                    if edges.Length > 0 then
-                        Some { n with Edges = edges }
-                    else
-                        None)
+            let graphNodesOfLine = getGraphNodesOfLine line graphNodes
 
             let spath = getShortestPath graphNodesOfLine [| fromNode; toNode |]
 
@@ -377,37 +409,44 @@ module Graph =
                     path
                     |> Array.tryFindIndex (fun n -> n.Node = toNode)
 
-                match fromIndex, toIndex with
-                | Some fromIndex, Some toIndex ->
+                let isPathFromFirstNode = spath.[0].Node = path.[0].Node
+
+                let isPathToLastNode = (getLastNode path) = (getLastNode spath)
+
+                match fromIndex, toIndex, isPathFromFirstNode, isPathToLastNode with
+                | Some fromIndex, Some toIndex, _, _ ->
                     let n1 = path |> Array.take (fromIndex + 1)
                     let n2 = path |> Array.skip toIndex
                     Some(Array.concat [ n1; spath; n2 ], candidate)
-                | Some fromIndex, None ->
+                | Some fromIndex, None, _, true ->
                     let n1 = path |> Array.take (fromIndex + 1)
                     Some(Array.concat [ n1; spath ], candidate)
-                | None, Some toIndex ->
+                | None, Some toIndex, true, _ ->
                     let n2 = path |> Array.skip toIndex
                     Some(Array.concat [ spath; n2 ], candidate)
-                | None, None -> None
+                | None, None, true, true -> Some(spath, candidate)
+                | _ -> None
             else
                 Some(path, candidate)
         | None -> None
 
     let compactifyPath (path: GraphNode []) (graphNodes: GraphNode []) =
+        let lengthOfOrigPath = lengthOfPath path
+
         let rec multiCompactifyPath path graphNodes maxDepth choosen =
             match tryCompactifyPath path graphNodes choosen with
-            | Some (cpath, candidate) ->
+            | Some (cpath, candidate) when System.Math.Abs(lengthOfOrigPath - (lengthOfPath cpath)) < 10.0 ->
                 if maxDepth > 0 then
                     multiCompactifyPath cpath graphNodes (maxDepth - 1) (candidate :: choosen)
                 else
                     path
-            | None -> path
+            | _ -> path
 
-        multiCompactifyPath path graphNodes 4 []
+        multiCompactifyPath path graphNodes 5 []
 
     let isWalkingPath (node: GraphNode) = node.Edges.[0].Line.StartsWith("99")
 
-    let splitNodes (cond: GraphNode -> bool) (path: GraphNode []) =
+    let private splitNodes (cond: GraphNode -> bool) (path: GraphNode []) =
         Array.foldBack
             (fun x (s: (GraphNode list) list) ->
                 let headList = s.Head
