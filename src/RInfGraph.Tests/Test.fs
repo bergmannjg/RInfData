@@ -39,6 +39,14 @@ let TestHHToFF () =
     |]
 
 [<Test>]
+let TestFFToHH () =
+
+    TestPath [| "DE000FF"; "DE000HH" |] [|
+        ("DE000FF", "DE00FFU", 3600)
+        ("DE00FFU", "DE000HH", 1733)
+    |]
+
+[<Test>]
 let TestHHToNN () =
 
     TestPath [| "DE000HH"; "DE000NN" |] [|
@@ -55,4 +63,13 @@ let TestHHToAH () =
         ("DE000HH", "DE95366", 1710)
         ("DE95366", "DE0AHAR", 1720)
         ("DE0AHAR", "DE000AH", 2200)
+    |]
+
+[<Test>]
+let TestAHToHH () =
+
+    TestPath [| "DE000AH"; "DE000HH" |] [|
+        ("DE000AH", "DE0AHAR", 2200)
+        ("DE0AHAR", "DE95366", 1720)
+        ("DE95366", "DE000HH", 1710)
     |]
