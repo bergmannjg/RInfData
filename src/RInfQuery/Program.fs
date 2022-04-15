@@ -216,8 +216,9 @@ let main argv =
 
                 return ""
             }
-        else if argv.[0] = "--Graph.Route" && argv.Length = 3 then
+        else if argv.[0] = "--Graph.Route" && argv.Length >= 3 then
             async {
+                let useMaxSpeed = (argv.Length = 4 && argv.[3] = "--maxSpeed")
                 let g = readFile<GraphNode []> argv.[1] "Graph.json"
 
                 let map =
@@ -228,10 +229,17 @@ let main argv =
 
                 let path = Graph.getShortestPath g args
 
+                let getCompactPath path =
+                    if useMaxSpeed then
+                        Graph.getCompactPathWithMaxSpeed path g
+                    else
+                        Graph.getCompactPath path
+
                 printfn "Path:"
                 Graph.printPath path
-                printfn "compact Path:"
-                Graph.printPath (Graph.getCompactPath path)
+                printfn "compact Path%s:" (if useMaxSpeed then " with maxSpeed" else "")
+
+                Graph.printPath (getCompactPath path)
 
                 let cpath = Graph.compactifyPath path g
 
@@ -240,8 +248,9 @@ let main argv =
                     printfn "compactified Path:"
                     Graph.printPath cpath
 
-                    printfn "compactified compact Path:"
-                    Graph.printPath (Graph.getCompactPath cpath)
+                    printfn "compactified compact Path%s:"  (if useMaxSpeed then " with maxSpeed" else "")
+
+                    Graph.printPath (getCompactPath cpath)
 
                 Graph.getLocationsOfPath g map path
                 |> Array.iter (Graph.getBRouterUrl >> printfn "%s")

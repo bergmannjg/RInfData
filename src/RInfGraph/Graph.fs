@@ -201,11 +201,13 @@ module Graph =
     let getPathOfLine (g: GraphNode []) (line: LineInfo) =
         getPathOfLineFromGraph g (toGraph g) line
 
-    let private compact (n1: GraphNode) (n2: GraphNode) : (GraphNode * GraphNode option) =
+    let private compact (n1: GraphNode) (n2: GraphNode) (useMaxSpeed: bool) : (GraphNode * GraphNode option) =
         let edge1 = n1.Edges.[0]
         let edge2 = n2.Edges.[0]
 
-        if edge1.Line = edge2.Line && n1.Node <> edge2.Node then
+        if edge1.Line = edge2.Line
+           && (not useMaxSpeed || edge1.MaxSpeed = edge2.MaxSpeed)
+           && n1.Node <> edge2.Node then
 
             let edge =
                 { Node = edge2.Node
@@ -228,14 +230,14 @@ module Graph =
         { Node: GraphNode option
           Nodes: GraphNode list }
 
-    let getCompactPath (path: GraphNode []) =
+    let private internalGetCompactPath (path: GraphNode []) (useMaxSpeed: bool) =
         let s =
             path
             |> Array.fold
                 (fun (s: State) p ->
                     match s.Node with
                     | Some n ->
-                        match compact n p with
+                        match compact n p useMaxSpeed with
                         | n, Some p -> { Node = Some p; Nodes = n :: s.Nodes }
                         | n, None -> { Node = Some n; Nodes = s.Nodes }
                     | _ -> { Node = Some p; Nodes = s.Nodes })
@@ -246,6 +248,8 @@ module Graph =
         | None -> s.Nodes
         |> List.rev
         |> List.toArray
+
+    let getCompactPath (path: GraphNode []) = internalGetCompactPath path false
 
     let getLineOfGraphNode (node: GraphNode) = node.Edges.[0].Line
 
@@ -472,6 +476,18 @@ module Graph =
             | _ -> path
 
         multiCompactifyPath path graphNodes 5 []
+
+    let private enhancePathNodeWithMaxSpeed (n: GraphNode) (graphNodes: GraphNode []) =
+        let line = n.Edges.[0].Line
+        let graphNodesOfLine = getGraphNodesOfLine line graphNodes
+
+        let spath = getShortestPath graphNodesOfLine [| n.Node; n.Edges.[0].Node |]
+
+        internalGetCompactPath spath true
+
+    let getCompactPathWithMaxSpeed (path: GraphNode []) (graphNodes: GraphNode []) =
+        getCompactPath path
+        |> Array.collect (fun n -> enhancePathNodeWithMaxSpeed n graphNodes)
 
     let isWalkingPath (node: GraphNode) = node.Edges.[0].Line.StartsWith("99")
 
