@@ -6,17 +6,24 @@ if [ ! -d "./scripts" ]; then
     exit 1
 fi
 
-if [ ! -d "./rinf-data" ]; then
-    echo "directory rinf-data not found"
+RINF_DATA_DIR="./rinf-data"
+
+if [ ! -d ${RINF_DATA_DIR} ]; then
+    echo "directory ${RINF_DATA_DIR} not found"
     exit 1
 fi
 
-dotnet run --project src/RInfLoader/RInfLoader.fsproj --  --SectionsOfLines > ./rinf-data/SectionsOfLines.json
-dotnet run --project src/RInfLoader/RInfLoader.fsproj --  --OperationalPoints > ./rinf-data/OperationalPoints.json
-dotnet run --project src/RInfLoader/RInfLoader.fsproj --  --SOLTrackParameters ./rinf-data/SectionsOfLines.json > ./rinf-data/SOLTrackParameters.json
+if [ $# -ne 1 ]
+  then
+    echo "countries arg expected"
+fi
 
-dotnet run --project src/RInfLoader/RInfLoader.fsproj --  --OpInfo.Build ./rinf-data/ > ./rinf-data/OpInfos.json
-dotnet run --project src/RInfLoader/RInfLoader.fsproj --  --Graph.Build ./rinf-data/ > ./rinf-data/Graph.json
-dotnet run --project src/RInfLoader/RInfLoader.fsproj --  --LineInfo.Build ./rinf-data/ > ./rinf-data/LineInfos.json
+dotnet run --project src/RInfLoader/RInfLoader.fsproj --  --SectionsOfLines $1 > ${RINF_DATA_DIR}/SectionsOfLines.json
+dotnet run --project src/RInfLoader/RInfLoader.fsproj --  --OperationalPoints $1 > ${RINF_DATA_DIR}/OperationalPoints.json
+dotnet run --project src/RInfLoader/RInfLoader.fsproj --  --SOLTrackParameters ${RINF_DATA_DIR}/SectionsOfLines.json > ${RINF_DATA_DIR}/SOLTrackParameters.json
 
-dotnet run --project src/RInfLoader/RInfLoader.fsproj --  --Graph.Build ./rinf-data/ --noExtraEdges > ./rinf-data/Graph-orig.json
+dotnet run --project src/RInfLoader/RInfLoader.fsproj --  --OpInfo.Build ${RINF_DATA_DIR}/ > ${RINF_DATA_DIR}/OpInfos.json
+dotnet run --project src/RInfLoader/RInfLoader.fsproj --  --Graph.Build ${RINF_DATA_DIR}/ > ${RINF_DATA_DIR}/Graph.json
+dotnet run --project src/RInfLoader/RInfLoader.fsproj --  --LineInfo.Build ${RINF_DATA_DIR}/ > ${RINF_DATA_DIR}/LineInfos.json
+
+dotnet run --project src/RInfLoader/RInfLoader.fsproj --  --Graph.Build ${RINF_DATA_DIR}/ --noExtraEdges > ${RINF_DATA_DIR}/Graph-orig.json

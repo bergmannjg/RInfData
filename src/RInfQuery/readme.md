@@ -11,14 +11,16 @@ Query cached [RINF API](https://rinf.era.europa.eu/API/Help) data.
 
 ```txt
 USAGE: RInfQuery
-               [--help] [--OperationalPoints.Line <dataDir> <line>]
+               [--help] [--OperationalPoints.Line <dataDir> <country> <line>]  [--SectionsOfLine.Line <dataDir> <imcode> <line>]
                [--Compare.Line <line>] [--Compare.Line.Remote <line>]  [--Compare.Lines <maxlines>]
                [--Graph.Route <dataDir> <ops>] [--Graph.Line <dataDir> <line>]
 
 OPTIONS:
 
-    --OperationalPoints.Line <dataDir> <line>
+    --OperationalPoints.Line <dataDir> <country> <line>
                           get OperationalPoints of line from file OperationalPoints.json in <dataDir>.
+    --SectionsOfLine.Line <dataDir> <imcode> <line>
+                          get SectionsOfLine of line from file SectionsOfLine.json in <dataDir>.
     --Graph.Route <dataDir> <opIds>
                           get path of route from <opIds>, ex. "DE   HH;DE   BL"
                           (assumes Graph.json and OpInfos.json in <dataDir>).

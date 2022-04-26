@@ -17,8 +17,10 @@ USAGE: RInfLoader
 OPTIONS:
 
     --DatasetImports      load DatasetImports (assumes env vars RINF_USERNAME and RINF_PASSWORD).
-    --SectionsOfLines     load SectionsOfLines (assumes env vars RINF_USERNAME and RINF_PASSWORD).
-    --OperationalPoints   load OperationalPoints (assumes env vars RINF_USERNAME and RINF_PASSWORD).
+    --SectionsOfLines     <countries>
+                          load SectionsOfLines of <countries> (assumes env vars RINF_USERNAME and RINF_PASSWORD).
+    --OperationalPoints   <countries>
+                          load OperationalPoints of <countries> (assumes env vars RINF_USERNAME and RINF_PASSWORD).
     --SOLTrackParameters <SectionsOfLines file>
                           load SOLTrackParameters for all SectionsOfLines 
                           (assumes env vars RINF_USERNAME and RINF_PASSWORD). 
@@ -29,4 +31,8 @@ OPTIONS:
     --Graph.Build <dataDir>
                           build graph of OperationalPoints and SectionsOfLines from files SectionsOfLines.json,
                           OperationalPoints.json and SOLTrackParameters.json in <dataDir>.
+
+Environment variables:
+    RINF_USERNAME         RInf account username.
+    RINF_PASSWORD         RInf account password.
 ```

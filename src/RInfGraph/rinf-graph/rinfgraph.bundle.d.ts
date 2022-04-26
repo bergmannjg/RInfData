@@ -16,6 +16,7 @@ export interface OpInfo {
 
 export interface LineInfo {
     Line: string;
+    IMCode: string;
     Name: string;
     Length: number;
     StartKm: number;
@@ -27,6 +28,7 @@ export interface GraphEdge {
     Node: string;
     Cost: number;
     Line: string;
+    IMCode: string;
     MaxSpeed: number;
     StartKm: number;
     EndKm: number;
@@ -40,6 +42,7 @@ export interface PathElement {
     ToOPID: string
     Line: string;
     LineText: string;
+    IMCode: string;
     StartKm: number;
     EndKm: number;
     MaxSpeed: number;

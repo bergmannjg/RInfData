@@ -50,33 +50,6 @@ let findOpByOPID (ops: OperationalPoint []) opId =
     | Some op -> op
     | None -> raise (System.ArgumentException("opid not found: " + opId))
 
-let getLineInfo (name: string) ops (solsOfLine: GraphNode list) line =
-
-    let firstOp = findOpByOPID ops (solsOfLine |> List.head).Node
-
-    let lastOp = findOpByOPID ops (solsOfLine |> List.last).Edges.[0].Node
-
-    let uOPIDs =
-        solsOfLine
-        |> List.rev
-        |> List.fold (fun (s: string list) sol -> ((findOpByOPID ops sol.Node).UOPID :: s)) [ lastOp.UOPID ]
-        |> List.toArray
-
-    { Line = line
-      Name = name
-      Length =
-        solsOfLine
-        |> List.sumBy (fun sol ->
-            if sol.Edges.Length > 0 then
-                sol.Edges.[0].Length
-            else
-                0.0)
-        |> sprintf "%.1f"
-        |> Double.Parse
-      StartKm = kilometerOfLine firstOp line
-      EndKm = kilometerOfLine lastOp line
-      UOPIDs = uOPIDs }
-
 let toMap (opInfos: OpInfo []) =
     opInfos
     |> Array.fold
@@ -102,19 +75,20 @@ let main argv =
         if argv.Length = 0 then
             async { return printHelp () }
         else if argv.[0] = "--OperationalPoints.Line"
-                && argv.Length > 2 then
+                && argv.Length > 3 then
             async {
                 let ops = readFile<OperationalPoint []> argv.[1] "OperationalPoints.json"
 
                 let opsOfLine =
                     ops
                     |> Array.filter (fun op ->
-                        op.RailwayLocations
-                        |> Array.exists (fun loc -> argv.[2] = loc.NationalIdentNum))
+                        argv.[2] = op.Country
+                        && op.RailwayLocations
+                           |> Array.exists (fun loc -> argv.[3] = loc.NationalIdentNum))
                     |> Array.map (fun op ->
                         let loc =
                             op.RailwayLocations
-                            |> Array.find (fun loc -> argv.[2] = loc.NationalIdentNum)
+                            |> Array.find (fun loc -> argv.[3] = loc.NationalIdentNum)
 
                         ({ UOPID = op.UOPID
                            Name = op.Name
@@ -138,7 +112,7 @@ let main argv =
                 return ""
             }
         else if argv.[0] = "--SectionsOfLine.Line"
-                && argv.Length > 2 then
+                && argv.Length > 3 then
             async {
                 let sols = readFile<SectionOfLine []> argv.[1] "SectionsOfLines.json"
                 let ops = readFile<OperationalPoint []> argv.[1] "OperationalPoints.json"
@@ -147,11 +121,11 @@ let main argv =
                     ops
                     |> Array.filter (fun op ->
                         op.RailwayLocations
-                        |> Array.exists (fun loc -> argv.[2] = loc.NationalIdentNum))
+                        |> Array.exists (fun loc -> argv.[3] = loc.NationalIdentNum))
                     |> Array.map (fun op ->
                         let loc =
                             op.RailwayLocations
-                            |> Array.find (fun loc -> argv.[2] = loc.NationalIdentNum)
+                            |> Array.find (fun loc -> argv.[3] = loc.NationalIdentNum)
 
                         (op, loc.Kilometer))
                     |> Array.sortBy (fun (_, km) -> km)
@@ -159,7 +133,9 @@ let main argv =
 
                 let solsOfLine =
                     sols
-                    |> Array.filter (fun sol -> sol.LineIdentification = argv.[2])
+                    |> Array.filter (fun sol ->
+                        sol.IMCode = argv.[2]
+                        && sol.LineIdentification = argv.[3])
                     |> Array.map (fun sol ->
                         (sol,
                          opsOfLine
@@ -237,7 +213,13 @@ let main argv =
 
                 printfn "Path:"
                 Graph.printPath path
-                printfn "compact Path%s:" (if useMaxSpeed then " with maxSpeed" else "")
+
+                printfn
+                    "compact Path%s:"
+                    (if useMaxSpeed then
+                         " with maxSpeed"
+                     else
+                         "")
 
                 Graph.printPath (getCompactPath path)
 
@@ -248,7 +230,12 @@ let main argv =
                     printfn "compactified Path:"
                     Graph.printPath cpath
 
-                    printfn "compactified compact Path%s:"  (if useMaxSpeed then " with maxSpeed" else "")
+                    printfn
+                        "compactified compact Path%s:"
+                        (if useMaxSpeed then
+                             " with maxSpeed"
+                         else
+                             "")
 
                     Graph.printPath (getCompactPath cpath)
 

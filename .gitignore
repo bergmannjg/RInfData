@@ -8,6 +8,7 @@
 src/RInfGraph/rinf-graph/data/*.json
 rinf-data/
 rinf-data-bak/
+rinf-data-test/
 db-data/
 osm-data/
 node_modules/

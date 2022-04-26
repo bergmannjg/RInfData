@@ -119,7 +119,7 @@ module Api =
 
     open System.Text.Json
 
-    type Client(username, password, country) =
+    type Client(username: string, password: string) =
 
         let client = Request.HttpClient(username, password)
 
@@ -149,10 +149,15 @@ module Api =
             else
                 ""
 
-        let getAllData (getData: int -> Async<'a []>) : Async<'a []> =
+        let toString (arr: string []) =
+            arr
+            |> Array.map (fun s -> "'" + s + "'")
+            |> String.concat ","
+
+        let getAllData (countries: string []) (getData: string [] -> int -> Async<'a []>) : Async<'a []> =
             let rec loop skip (results: array<'a> list) =
                 async {
-                    let! result = getData skip
+                    let! result = getData countries skip
 
                     if result.Length > 0 then
                         return! loop (skip + 100) (result :: results)
@@ -178,15 +183,15 @@ module Api =
                 return imports.value
             }
 
-        member __.GetNextSectionsOfLines(skip: int) =
+        member __.GetNextSectionsOfLines(countries: string []) (skip: int) =
             async {
                 let expand = expandOP (Some true) "&"
 
                 let! response =
                     client.Get(
-                        "SectionsOfLine?$filter=Country eq '"
-                        + country
-                        + "'&$top=100&$skip="
+                        "SectionsOfLine?$filter=Country in ("
+                        + (toString countries)
+                        + ")&$top=100&$skip="
                         + skip.ToString()
                         + expand
                     )
@@ -196,7 +201,8 @@ module Api =
                         .value
             }
 
-        member __.GetSectionsOfLines() = getAllData __.GetNextSectionsOfLines
+        member __.GetSectionsOfLines(countries: string []) =
+            getAllData countries __.GetNextSectionsOfLines
 
         member __.GetSectionsOfLine(keyID: int, keyVersionID: int, ?withTrackParameters: bool, ?logJson: bool) =
             async {
@@ -230,15 +236,15 @@ module Api =
                 return { sol with SOLTracks = tracks }
             }
 
-        member __.GetNextOperationalPoints(skip: int) =
+        member __.GetNextOperationalPoints (countries: string []) (skip: int) =
             async {
                 let expand = expandRailwayLocations (Some true) "&"
 
                 let! response =
                     client.Get(
-                        "OperationalPoints?$filter=Country eq '"
-                        + country
-                        + "'&$top=100&$skip="
+                        "OperationalPoints?$filter=Country in ("
+                        + (toString countries)
+                        + ")&$top=100&$skip="
                         + skip.ToString()
                         + expand
                     )
@@ -248,7 +254,7 @@ module Api =
                         .value
             }
 
-        member __.GetOperationalPoints() = getAllData __.GetNextOperationalPoints
+        member __.GetOperationalPoints(countries: string []) = getAllData countries __.GetNextOperationalPoints
 
         member __.GetOperationalPoint(keyID: int, keyVersionID: int, ?withTrackParameters: bool, ?logJson: bool) =
             async {

@@ -17,6 +17,7 @@ type OpInfo =
 
 type LineInfo =
     { Line: string
+      IMCode: string
       Name: string
       Length: float
       StartKm: float
@@ -27,6 +28,7 @@ type GraphEdge =
     { Node: string
       Cost: int
       Line: string
+      IMCode: string
       MaxSpeed: int
       StartKm: float
       EndKm: float
@@ -41,6 +43,7 @@ type PathElement =
       ToOPID: string
       Line: string
       LineText: string
+      IMCode: string
       StartKm: float
       EndKm: float
       MaxSpeed: int }
@@ -57,6 +60,7 @@ module Graph =
         (opidFrom: string)
         (opidTo: string)
         (line: string)
+        (imcode: string)
         (cost: int)
         (maxSpeed: int)
         (startKm: float)
@@ -76,6 +80,7 @@ module Graph =
             { Node = opEndId
               Cost = cost
               Line = line
+              IMCode = imcode
               MaxSpeed = maxSpeed
               StartKm = startKm
               EndKm = endKm
@@ -125,17 +130,19 @@ module Graph =
                 |> Array.filter (fun edge -> edge.Node = n2)
                 |> Array.sortBy (fun e -> e.Cost)
 
-            let (cost, line, maxSpeed, startKm, endKm, length) =
+            let (cost, line, imcode, maxSpeed, startKm, endKm, length) =
                 edges
                 |> Seq.tryHead
-                |> Option.map (fun edge -> (edge.Cost, edge.Line, edge.MaxSpeed, edge.StartKm, edge.EndKm, edge.Length))
-                |> Option.defaultValue (0, "", 0, 0.0, 0.0, 0.0)
+                |> Option.map (fun edge ->
+                    (edge.Cost, edge.Line, edge.IMCode, edge.MaxSpeed, edge.StartKm, edge.EndKm, edge.Length))
+                |> Option.defaultValue (0, "", "", 0, 0.0, 0.0, 0.0)
 
             { Node = n1
               Edges =
                 [| { Node = n2
                      Cost = cost
                      Line = line
+                     IMCode = imcode
                      MaxSpeed = maxSpeed
                      StartKm = startKm
                      EndKm = endKm
@@ -180,10 +187,12 @@ module Graph =
     let getShortestPath (g: GraphNode []) (ids: string []) =
         getShortestPathFromGraph g (toGraph g) ids
 
-    let private getGraphNodesOfLine (line: string) (graphNodes: GraphNode []) =
+    let private getGraphNodesOfLine (imcode: string) (line: string) (graphNodes: GraphNode []) =
         graphNodes
         |> Array.choose (fun n ->
-            let edges = n.Edges |> Array.filter (fun e -> e.Line = line)
+            let edges =
+                n.Edges
+                |> Array.filter (fun e -> e.IMCode = imcode && e.Line = line)
 
             if edges.Length > 0 then
                 Some { n with Edges = edges }
@@ -195,7 +204,7 @@ module Graph =
 #else
     let getPathOfLineFromGraph (g: GraphNode []) (graph: Map<string, Dijkstra.Vertex<string>>) (line: LineInfo) =
 #endif
-        let graphNodesOfLine = getGraphNodesOfLine line.Line g
+        let graphNodesOfLine = getGraphNodesOfLine line.IMCode line.Line g
         getShortestPath graphNodesOfLine line.UOPIDs
 
     let getPathOfLine (g: GraphNode []) (line: LineInfo) =
@@ -213,6 +222,7 @@ module Graph =
                 { Node = edge2.Node
                   Cost = edge1.Cost + edge2.Cost
                   Line = edge1.Line
+                  IMCode = edge1.IMCode
                   MaxSpeed =
                     if edge1.MaxSpeed < edge2.MaxSpeed then
                         edge1.MaxSpeed
@@ -251,7 +261,8 @@ module Graph =
 
     let getCompactPath (path: GraphNode []) = internalGetCompactPath path false
 
-    let getLineOfGraphNode (node: GraphNode) = node.Edges.[0].Line
+    let getLineOfGraphNode (node: GraphNode) =
+        node.Edges.[0].IMCode, node.Edges.[0].Line
 
     let lengthOfPath (path: GraphNode []) =
         path
@@ -277,7 +288,7 @@ module Graph =
 
         printfn "%.1f %i" (lengthOfPath path) (costOfPath path)
 
-    type internal Candidate = (string * string * string * string)
+    type internal Candidate = (string * string * string * string * string)
 
     // find 2 entries of same line in cpath
     let private getCandidateSameLine (cpath: GraphNode []) (graphNodes: GraphNode []) (choosen: Candidate list) =
@@ -288,7 +299,7 @@ module Graph =
         match groups
               |> Array.tryFind (fun (_, l) -> l.Length = 2)
             with
-        | Some (line, l) ->
+        | Some ((imcode, line), l) ->
             let fromNode = l.[0].Edges.[0].Node
             let toNode = l.[1].Node
 
@@ -308,7 +319,7 @@ module Graph =
             let length = lengthOfPath nodesBetween
 
             if length > 0 && length < 50.0 && fromNode <> toNode then
-                Some("CandidateSameLine", line, fromNode, toNode)
+                Some("CandidateSameLine", imcode, line, fromNode, toNode)
             else
                 None
         | None -> None
@@ -327,7 +338,11 @@ module Graph =
             if edgeOfLast.Length < 10.0
                && edgeOfLast.Length * 5.0 < edgeOfFirst.Length then
                 let candidate =
-                    ("CandidateReplaceSmallEdge", edgeOfFirst.Line, edgeOfFirst.Node, edgeOfLast.Node)
+                    ("CandidateReplaceSmallEdge",
+                     edgeOfFirst.IMCode,
+                     edgeOfFirst.Line,
+                     edgeOfFirst.Node,
+                     edgeOfLast.Node)
 
                 if choosen |> List.contains candidate then
                     None
@@ -336,7 +351,7 @@ module Graph =
             else if edgeOfFirst.Length < 10.0
                     && edgeOfFirst.Length * 5.0 < edgeOfLast.Length then
                 let candidate =
-                    ("CandidateReplaceSmallEdge", edgeOfLast.Line, xs[0].Node, edgeOfFirst.Node)
+                    ("CandidateReplaceSmallEdge", edgeOfLast.IMCode, edgeOfLast.Line, xs[0].Node, edgeOfFirst.Node)
 
                 if choosen |> List.contains candidate then
                     None
@@ -364,16 +379,18 @@ module Graph =
                 match graphNodes
                       |> Array.tryFind (fun n -> n.Node = lastNode)
                     with
-                | Some n -> n.Edges |> Array.map (fun e -> e.Line)
+                | Some n -> n.Edges |> Array.map (fun e -> e.IMCode, e.Line)
                 | None -> [||]
 
             match cpath
                   |> Array.take (cpath.Length - 1)
-                  |> Array.tryFind (fun n -> lineOfLastNode |> Array.contains n.Edges.[0].Line)
+                  |> Array.tryFind (fun n ->
+                      lineOfLastNode
+                      |> Array.contains (n.Edges.[0].IMCode, n.Edges.[0].Line))
                 with
             | Some node ->
                 let candidate =
-                    ("CandidateSameLineWithLastNode", node.Edges.[0].Line, node.Node, lastNode)
+                    ("CandidateSameLineWithLastNode", node.Edges.[0].IMCode, node.Edges.[0].Line, node.Node, lastNode)
 
                 if choosen |> List.contains candidate then
                     None
@@ -387,21 +404,23 @@ module Graph =
         if cpath.Length > 2 then
             let firstNode = cpath.[0].Node
 
-            let existsEdgeToFirstNode (line: string) =
+            let existsEdgeToFirstNode (imcode: string) (line: string) =
                 match graphNodes
                       |> Array.tryFind (fun n -> n.Node = firstNode)
                     with
-                | Some n -> n.Edges |> Array.exists (fun e -> e.Line = line)
+                | Some n ->
+                    n.Edges
+                    |> Array.exists (fun e -> e.IMCode = imcode && e.Line = line)
                 | None -> false
 
             match cpath
                   |> Array.skip 1
                   |> Array.take (System.Math.Min(cpath.Length - 1, 4))
-                  |> Array.tryFind (fun n -> existsEdgeToFirstNode n.Edges[0].Line)
+                  |> Array.tryFind (fun n -> existsEdgeToFirstNode n.Edges[0].IMCode n.Edges[0].Line)
                 with
             | Some n ->
                 let candidate =
-                    ("getCandidateSameLineWithFirstNode", n.Edges[0].Line, firstNode, n.Edges[0].Node)
+                    ("getCandidateSameLineWithFirstNode", n.Edges[0].IMCode, n.Edges[0].Line, firstNode, n.Edges[0].Node)
 
                 if choosen |> List.contains candidate then
                     None
@@ -426,9 +445,9 @@ module Graph =
     let private tryCompactifyPath (path: GraphNode []) (graphNodes: GraphNode []) (choosen: Candidate list) =
         match getCompactifyCandidate path graphNodes choosen with
         | Some candidate ->
-            let (_, line, fromNode, toNode) = candidate
+            let (_, imcode, line, fromNode, toNode) = candidate
 
-            let graphNodesOfLine = getGraphNodesOfLine line graphNodes
+            let graphNodesOfLine = getGraphNodesOfLine imcode line graphNodes
 
             let spath = getShortestPath graphNodesOfLine [| fromNode; toNode |]
 
@@ -478,8 +497,9 @@ module Graph =
         multiCompactifyPath path graphNodes 5 []
 
     let private enhancePathNodeWithMaxSpeed (n: GraphNode) (graphNodes: GraphNode []) =
+        let imcode = n.Edges.[0].IMCode
         let line = n.Edges.[0].Line
-        let graphNodesOfLine = getGraphNodesOfLine line graphNodes
+        let graphNodesOfLine = getGraphNodesOfLine imcode line graphNodes
 
         let spath = getShortestPath graphNodesOfLine [| n.Node; n.Edges.[0].Node |]
 
@@ -555,6 +575,7 @@ module Graph =
           ToOPID = edge.Node
           Line = edge.Line
           LineText = lineInfos.[edge.Line].Name
+          IMCode = edge.IMCode
           StartKm = edge.StartKm
           EndKm = edge.EndKm
           MaxSpeed = edge.MaxSpeed }
