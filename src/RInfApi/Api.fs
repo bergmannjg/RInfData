@@ -1,5 +1,5 @@
-/// see https://rinf.era.europa.eu/API/Help
-/// see https://www.era.europa.eu/registers_en#rinf
+// see https://rinf.era.europa.eu/API/Help
+// see https://www.era.europa.eu/registers_en#rinf
 namespace RInf
 
 open System
@@ -18,6 +18,12 @@ type DatasetImport =
       Version: int
       LastImportDate: string }
 
+type SOLTunnelParameter =
+    { Value: string
+      OptionalValue: string
+      IsApplicable: string
+      ID: string }
+
 type SOLTunnel =
     { SOLTunnelIMCode: string
       SOLTunnelIdentification: string
@@ -27,7 +33,10 @@ type SOLTunnel =
       EndLong: float
       EndLat: float
       EndKm: float
-      ITU_Length: float }
+      ValidityDateStart: System.DateTime
+      ValidityDateEnd: System.DateTime
+      TrackID: int
+      SOLTunnelParameters: SOLTunnelParameter [] }
 
 type SOLTrackParameter =
     { Value: string
@@ -123,10 +132,14 @@ module Api =
 
         let client = Request.HttpClient(username, password)
 
-        let expandSOLTrackParameters (withTrackParameters: bool option) (prefix: string) =
-            if defaultArg withTrackParameters false then
+        let expandSOLTrack (withExpand: string option) (prefix: string) =
+            let expand = defaultArg withExpand ""
+
+            if expand = "SOLTrackParameters" then
                 prefix
                 + "$expand=SOLTracks($expand=SOLTrackParameters)"
+            else if expand = "SOLTunnels" then
+                prefix + "$expand=SOLTracks($expand=SOLTunnels)"
             else
                 ""
 
@@ -145,7 +158,7 @@ module Api =
 
         let expandOP (withTrackParameters: bool option) (prefix: string) =
             if defaultArg withTrackParameters false then
-                prefix + "$expand=StartOP,EndOP"
+                prefix + "$expand=StartOP,EndOP,SOLTracks"
             else
                 ""
 
@@ -183,7 +196,7 @@ module Api =
                 return imports.value
             }
 
-        member __.GetNextSectionsOfLines(countries: string []) (skip: int) =
+        member __.GetNextSectionsOfLines (countries: string []) (skip: int) =
             async {
                 let expand = expandOP (Some true) "&"
 
@@ -204,9 +217,9 @@ module Api =
         member __.GetSectionsOfLines(countries: string []) =
             getAllData countries __.GetNextSectionsOfLines
 
-        member __.GetSectionsOfLine(keyID: int, keyVersionID: int, ?withTrackParameters: bool, ?logJson: bool) =
+        member __.GetSectionsOfLine(keyID: int, keyVersionID: int, ?withExpand: string, ?logJson: bool) =
             async {
-                let expand = expandSOLTrackParameters withTrackParameters "?"
+                let expand = expandSOLTrack withExpand "?"
 
                 let! response =
                     client.Get(
@@ -228,10 +241,26 @@ module Api =
                     sol.SOLTracks
                     |> Array.map (fun t ->
                         let parameters =
-                            t.SOLTrackParameters
-                            |> Array.map (fun tp -> { tp with SOLTrack = { t with SOLTrackParameters = [||] } })
+                            if isNull t.SOLTrackParameters then
+                                [||]
+                            else
+                                t.SOLTrackParameters
+                                |> Array.map (fun tp ->
+                                    { tp with
+                                        SOLTrack =
+                                            { t with
+                                                SOLTrackParameters = [||]
+                                                SOLTunnels = [||] } })
 
-                        { t with SOLTrackParameters = parameters })
+                        let tunnels =
+                            if isNull t.SOLTunnels then
+                                [||]
+                            else
+                                t.SOLTunnels
+
+                        { t with
+                            SOLTrackParameters = parameters
+                            SOLTunnels = tunnels })
 
                 return { sol with SOLTracks = tracks }
             }
@@ -254,7 +283,8 @@ module Api =
                         .value
             }
 
-        member __.GetOperationalPoints(countries: string []) = getAllData countries __.GetNextOperationalPoints
+        member __.GetOperationalPoints(countries: string []) =
+            getAllData countries __.GetNextOperationalPoints
 
         member __.GetOperationalPoint(keyID: int, keyVersionID: int, ?withTrackParameters: bool, ?logJson: bool) =
             async {

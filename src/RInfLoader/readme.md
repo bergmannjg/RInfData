@@ -24,10 +24,15 @@ OPTIONS:
     --SOLTrackParameters <SectionsOfLines file>
                           load SOLTrackParameters for all SectionsOfLines 
                           (assumes env vars RINF_USERNAME and RINF_PASSWORD). 
+    --SOLTunnels <SectionsOfLines file>
+                          load SOLTunnels for all SectionsOfLines
+                          (assumes env vars RINF_USERNAME and RINF_PASSWORD).
     --OpInfo.Build <dataDir>
                           build OpInfos from file OperationalPoints.json in <dataDir>.
     --LineInfo.Build <dataDir>
                           build LineInfos from files SectionsOfLines.json and OperationalPoints.json in <dataDir>.
+    --TunnelInfo.Build <dataDir>
+                          build TunnelInfos from files SectionsOfLines.json and SOLTunnels.json in <dataDir>.
     --Graph.Build <dataDir>
                           build graph of OperationalPoints and SectionsOfLines from files SectionsOfLines.json,
                           OperationalPoints.json and SOLTrackParameters.json in <dataDir>.

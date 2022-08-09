@@ -10,17 +10,19 @@ let printHelp () =
     """
 USAGE: RInfQuery
                [--help] [--OperationalPoints.Line <dataDir> <line>]
+               [--SectionsOfLine.Line <dataDir> <imcode> <line>]
+               [--Graph.Route <dataDir> <opIds>] [--Graph.Line <dataDir> <line>]
                [--Compare.Line <line>] [--Compare.Line.Remote <line>]  [--Compare.Lines <maxlines>]
                [--Graph.Route <dataDir> <ops>] [--Graph.Line <dataDir> <line>]
 
 OPTIONS:
 
-    --OperationalPoints.Line <dataDir> <line>
+    --OperationalPoints.Line <dataDir> <country> <line>
                           get OperationalPoints of line from file OperationalPoints.json in <dataDir>.
-    --SectionsOfLine.Line <dataDir> <line>
+    --SectionsOfLine.Line <dataDir> <imcode> <line>
                           get SectionsOfLine of line from file SectionsOfLine.json in <dataDir>.
     --Graph.Route <dataDir> <opIds>
-                          get path of route from <opIds>, ex. "DE   HH;DE   BL"
+                          get path of route from <opIds>, ex. "DE000HH;DE000BL"
                           (assumes Graph.json and OpInfos.json in <dataDir>).
     --Graph.Line <dataDir> <line>
                           get path of line
@@ -156,9 +158,11 @@ let main argv =
                     match startOp, endOp with
                     | Some (startOp, startKm), Some (endOp, endKm) ->
                         printfn
-                            "%s - %s, start: %.1f, end: %.1f, length: %.1f, %s"
+                            "%s/%s - %s/%s, start: %.1f, end: %.1f, length: %.1f, %s"
                             startOp.UOPID
+                            startOp.Type
                             endOp.UOPID
+                            endOp.Type
                             startKm
                             endKm
                             sol.Length

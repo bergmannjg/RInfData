@@ -22,7 +22,19 @@ type LineInfo =
       Length: float
       StartKm: float
       EndKm: float
-      UOPIDs: string [] }
+      UOPIDs: string []
+      Tunnels: string [] }
+
+type TunnelInfo =
+    { Tunnel: string
+      StartLong: float
+      StartLat: float
+      StartKm: float
+      EndLong: float
+      EndLat: float
+      EndKm: float
+      SingelTrack: bool
+      Line: string }
 
 type GraphEdge =
     { Node: string

@@ -32,7 +32,7 @@ fi
 
 dotnet fable RInfGraph.fable.fsproj -o build --run webpack --mode production --no-devtool --config ./webpack.config.js
 
-cp ${DATADIR}/Graph.json ${DATADIR}/LineInfos.json ${DATADIR}/OpInfos.json rinf-graph/data/
+cp ${DATADIR}/Graph.json ${DATADIR}/LineInfos.json ${DATADIR}/TunnelInfos.json ${DATADIR}/OpInfos.json rinf-graph/data/
 
 npm pack rinf-graph/
 

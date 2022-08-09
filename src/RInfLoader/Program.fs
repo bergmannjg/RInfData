@@ -32,10 +32,15 @@ OPTIONS:
     --SOLTrackParameters <SectionsOfLines file>
                           load SOLTrackParameters for all SectionsOfLines
                           (assumes env vars RINF_USERNAME and RINF_PASSWORD).
+    --SOLTunnels <SectionsOfLines file>
+                          load SOLTunnels for all SectionsOfLines
+                          (assumes env vars RINF_USERNAME and RINF_PASSWORD).
     --OpInfo.Build <dataDir>
                           build OpInfos from file OperationalPoints.json in <dataDir>.
     --LineInfo.Build <dataDir>
                           build LineInfos from files SectionsOfLines.json and OperationalPoints.json in <dataDir>.
+    --TunnelInfo.Build <dataDir>
+                          build TunnelInfos from files SectionsOfLines.json and SOLTunnels.json in <dataDir>.
     --Graph.Build <dataDir>
                           build graph of OperationalPoints and SectionsOfLines from files SectionsOfLines.json,
                           OperationalPoints.json and SOLTrackParameters.json in <dataDir>.
@@ -44,7 +49,7 @@ OPTIONS:
     --help                display this list of options.
 """
 
-let getSectionsOfLines (ids: (int * int) []) =
+let getExtendedSectionsOfLines (withExpand: string) (ids: (int * int) []) =
     async {
         try
             fprintfn stderr "new Api.Client, %A" ids.[0]
@@ -54,7 +59,7 @@ let getSectionsOfLines (ids: (int * int) []) =
             let mutable results = List.empty
 
             for (id, versionId) in ids do
-                let! result = client.GetSectionsOfLine(id, versionId, true)
+                let! result = client.GetSectionsOfLine(id, versionId, withExpand)
                 results <- result :: results
 
             return results
@@ -75,8 +80,8 @@ let rec retry work resultOk retries =
             return! retry work resultOk (retries - 1)
     }
 
-let getSectionsOfLinesWithRetry ids =
-    retry (getSectionsOfLines ids) (fun result -> result.Length > 0) 3
+let getExtendedSectionsOfLinesWithRetry (withExpand: string) ids =
+    retry (getExtendedSectionsOfLines withExpand ids) (fun result -> result.Length > 0) 3
 
 let readFile<'a> path name =
     JsonSerializer.Deserialize<'a>(File.ReadAllText(path + name))
@@ -94,16 +99,16 @@ let findOpByOPID (ops: OperationalPoint []) opId =
     ops
     |> Array.tryFind (fun (op: OperationalPoint) -> op.UOPID = opId)
 
-let getLineInfo (name: string) ops (solsOfLine: GraphNode list) imcode line =
+let getLineInfo (name: string) ops (nodesOfLine: GraphNode list) (tunnels: TunnelInfo []) imcode line =
 
-    let firstOp = findOpByOPID ops (solsOfLine |> List.head).Node
+    let firstOp = findOpByOPID ops (nodesOfLine |> List.head).Node
 
-    let lastOp = findOpByOPID ops (solsOfLine |> List.last).Edges.[0].Node
+    let lastOp = findOpByOPID ops (nodesOfLine |> List.last).Edges.[0].Node
 
     match firstOp, lastOp with
     | Some firstOp, Some lastOp ->
         let uOPIDs =
-            solsOfLine
+            nodesOfLine
             |> List.rev
             |> List.fold
                 (fun (s: string list) sol ->
@@ -113,12 +118,19 @@ let getLineInfo (name: string) ops (solsOfLine: GraphNode list) imcode line =
                 [ lastOp.UOPID ]
             |> List.toArray
 
+        let tunnelsOfLine =
+            tunnels
+            |> Array.filter (fun t -> t.Line = line)
+            |> Array.sortBy (fun t -> t.StartKm)
+            |> Array.map (fun t -> t.Tunnel)
+            |> Array.distinct
+
         Some
             { Line = line
               IMCode = imcode
               Name = name
               Length =
-                solsOfLine
+                nodesOfLine
                 |> List.sumBy (fun sol ->
                     if sol.Edges.Length > 0 then
                         sol.Edges.[0].Length
@@ -128,12 +140,18 @@ let getLineInfo (name: string) ops (solsOfLine: GraphNode list) imcode line =
                 |> Double.Parse
               StartKm = kilometerOfLine firstOp line
               EndKm = kilometerOfLine lastOp line
-              UOPIDs = uOPIDs }
+              UOPIDs = uOPIDs
+              Tunnels = tunnelsOfLine }
     | _ -> None
 
-let buildLineInfo (ops: OperationalPoint []) (sols: GraphNode []) (imcode: string, line: string) : LineInfo [] =
+let buildLineInfo
+    (ops: OperationalPoint [])
+    (nodes: GraphNode [])
+    (tunnels: TunnelInfo [])
+    (imcode: string, line: string)
+    : LineInfo [] =
     let solsOfLine =
-        sols
+        nodes
         |> Array.filter (fun sol ->
             sol.Edges
             |> Array.exists (fun e ->
@@ -185,20 +203,84 @@ let buildLineInfo (ops: OperationalPoint []) (sols: GraphNode []) (imcode: strin
         match firstOp, lastOp with
         | Some firstOp, Some lastOp ->
             nextNodesLists
-            |> Array.map (fun nextNodes -> getLineInfo (firstOp.Name + " - " + lastOp.Name) ops nextNodes imcode line)
+            |> Array.map (fun nextNodes ->
+                getLineInfo (firstOp.Name + " - " + lastOp.Name) ops nextNodes tunnels imcode line)
             |> Array.choose id
         | _ -> [||]
     else
         [||]
 
-let buildLineInfos (ops: OperationalPoint []) (sols: GraphNode []) : LineInfo [] =
-    sols
+let buildLineInfos (ops: OperationalPoint []) (nodes: GraphNode []) (tunnels: TunnelInfo []) : LineInfo [] =
+    nodes
     |> Array.collect (fun sol ->
         sol.Edges
         |> Array.map (fun e -> (e.IMCode, e.Line)))
     |> Array.distinct
-    |> Array.collect (buildLineInfo ops sols)
+    |> Array.collect (buildLineInfo ops nodes tunnels)
     |> Array.sortBy (fun line -> line.Line)
+
+let getMaxSpeed (sol: SectionOfLine) (trackParamsOfSol: SOLTrackParameter []) (defaultValue: int) =
+    trackParamsOfSol
+    |> Array.tryFind (fun param ->
+        param.ID = "IPP_MaxSpeed"
+        && not (isNull param.Value))
+    |> (fun param ->
+        match param with
+        | Some param -> int param.Value
+        | None ->
+            fprintfn stderr "sol %s, maxspeed not found" sol.solName
+            defaultValue)
+
+// missing tunnels in extraEdges
+let extraTunnels: TunnelInfo [] =
+    [| { Tunnel = "Landrückentunnel"
+         StartLong = 9.650944
+         StartLat = 50.406190
+         StartKm = 251.325
+         EndLong = 9.663088
+         EndLat = 50.309693
+         EndKm = 262.104
+         SingelTrack = false
+         Line = "1733" } |]
+
+let buildTunnelInfos
+    (sols: SectionOfLine [])
+    (trackParams: SOLTrackParameter [])
+    (tunnels: SOLTunnel [])
+    : TunnelInfo [] =
+    let now = System.DateTime.Now
+
+    tunnels
+    |> Array.filter (fun t -> now <= t.ValidityDateEnd)
+    |> Array.map (fun t ->
+        let line, singelTrack =
+            match sols
+                  |> Array.tryFind (fun sol ->
+                      sol.SOLTracks
+                      |> Array.exists (fun track -> track.TrackID = t.TrackID))
+                with
+            | Some sol ->
+                sol.LineIdentification,
+                (sol.SOLTracks
+                 |> Array.exists (fun tr -> tr.SOLTrackIdentification = "single-track"))
+            | None ->
+                raise (
+                    System.ArgumentException(
+                        sprintf "sol not found for trackid: %d %s" t.TrackID t.SOLTunnelIdentification
+                    )
+                )
+
+        { Tunnel = t.SOLTunnelIdentification
+          StartLong = t.StartLong
+          StartLat = t.StartLat
+          StartKm = t.StartKm
+          EndLong = t.EndLong
+          EndLat = t.EndLat
+          EndKm = t.EndKm
+          SingelTrack = singelTrack
+          Line = line })
+    |> fun tunnels -> Array.concat [ tunnels; extraTunnels ]
+    |> Array.distinct
 
 let nullDefaultValue<'a when 'a: null> (defaultValue: 'a) (value: 'a) =
     if isNull value then
@@ -250,18 +332,6 @@ let buildGraph
     let findOp opId =
         ops |> Array.tryFind (fun op -> op.ID = opId)
 
-    let getMaxSpeed (sol: SectionOfLine) (trackParamsOfSol: SOLTrackParameter []) =
-        trackParamsOfSol
-        |> Array.tryFind (fun param ->
-            param.ID = "IPP_MaxSpeed"
-            && not (isNull param.Value))
-        |> (fun param ->
-            match param with
-            | Some param -> int param.Value
-            | None ->
-                fprintfn stderr "sol %s, maxspeed not found" sol.solName
-                100)
-
     let passengersLineCats = [| "10"; "20"; "30"; "40"; "50"; "60" |]
 
     let getPassengerLineCat (trackParamsOfSol: SOLTrackParameter []) =
@@ -273,17 +343,11 @@ let buildGraph
     let addSol (sol: SectionOfLine) =
         match findOp sol.OPStartID, findOp sol.OPEndID with
         | Some (opStart), Some (opEnd) ->
-            let trackIds =
-                trackParams
-                |> Array.filter (fun tp -> tp.SOLTrack.SectionOfLineID = sol.ID)
-                |> Array.map (fun tp -> tp.SOLTrack.TrackID)
-                |> Array.distinct
-
             let trackParamsOfSol =
                 trackParams
                 |> Array.filter (fun param ->
-                    trackIds
-                    |> Array.exists (fun t -> t = param.SOLTrack.TrackID))
+                    sol.SOLTracks
+                    |> Array.exists (fun t -> t.TrackID = param.SOLTrack.TrackID))
 
             let lineCat =
                 match getPassengerLineCat trackParamsOfSol with
@@ -291,7 +355,7 @@ let buildGraph
                 | None -> Some "60" // ignore missing linecat
 
             if lineCat.IsSome then
-                let maxSpeed = getMaxSpeed sol trackParamsOfSol
+                let maxSpeed = getMaxSpeed sol trackParamsOfSol 100
                 let cost = getCost sol.Length maxSpeed
 
                 graph <-
@@ -352,7 +416,7 @@ let main argv =
             }
         else if argv.[0] = "--SectionsOfLine" && argv.Length > 3 then
             async {
-                let! response = client.GetSectionsOfLine(int argv.[1], int argv.[2], true, true)
+                let! response = client.GetSectionsOfLine(int argv.[1], int argv.[2], "", true)
                 return JsonSerializer.Serialize response
             }
         else if argv.[0] = "--SectionsOfLines" && argv.Length > 1 then
@@ -391,7 +455,12 @@ let main argv =
                 let filter (opTracks: OPTrack []) cond =
                     opTracks
                     |> nullDefaultValue [||]
-                    |> Array.map (fun t -> { t with OPTrackParameters = t.OPTrackParameters |> Array.filter cond })
+                    |> Array.map (fun t ->
+                        { t with
+                            OPTrackParameters =
+                                t.OPTrackParameters
+                                |> nullDefaultValue [||]
+                                |> Array.filter cond })
 
                 let response =
                     response
@@ -410,7 +479,7 @@ let main argv =
                 JsonSerializer.Deserialize<SectionOfLine []>(File.ReadAllText argv.[1])
                 |> Array.map (fun sol -> (sol.ID, sol.VersionID))
                 |> Array.splitInto 100
-                |> Array.map getSectionsOfLinesWithRetry
+                |> Array.map (getExtendedSectionsOfLinesWithRetry "SOLTrackParameters")
 
             let filters =
                 [| "IPP_LineCat"
@@ -431,6 +500,25 @@ let main argv =
                         |> Array.filter (fun tp ->
                             tp.IsApplicable = "Y"
                             && filters |> Array.contains tp.ID))
+
+                return JsonSerializer.Serialize response
+            }
+        else if argv.[0] = "--SOLTunnels" && argv.Length > 1 then
+            let operations =
+                JsonSerializer.Deserialize<SectionOfLine []>(File.ReadAllText argv.[1])
+                |> Array.map (fun sol -> (sol.ID, sol.VersionID))
+                |> Array.splitInto 100
+                |> Array.map (getExtendedSectionsOfLinesWithRetry "SOLTunnels")
+
+            async {
+                let! response = operations |> Async.Sequential
+
+                let response =
+                    response
+                    |> List.concat
+                    |> List.toArray
+                    |> Array.collect (fun sol -> nullDefaultValue [||] sol.SOLTracks)
+                    |> Array.collect (fun track -> track.SOLTunnels |> nullDefaultValue [||])
 
                 return JsonSerializer.Serialize response
             }
@@ -463,13 +551,27 @@ let main argv =
 
                 return JsonSerializer.Serialize ops
             }
+        else if argv.[0] = "--TunnelInfo.Build" && argv.Length > 1 then
+            async {
+                let sols = readFile<SectionOfLine []> argv.[1] "SectionsOfLines.json"
+
+                let trackParams = readFile<SOLTrackParameter []> argv.[1] "SOLTrackParameters.json"
+
+                let tunnels = readFile<SOLTunnel []> argv.[1] "SOLTunnels.json"
+
+                let tunnelInfos = buildTunnelInfos sols trackParams tunnels
+
+                return JsonSerializer.Serialize tunnelInfos
+            }
         else if argv.[0] = "--LineInfo.Build" && argv.Length > 1 then
             async {
                 let ops = readFile<OperationalPoint []> argv.[1] "OperationalPoints.json"
 
-                let sols = readFile<GraphNode []> argv.[1] "Graph.json"
+                let nodes = readFile<GraphNode []> argv.[1] "Graph.json"
 
-                let lineInfos = buildLineInfos ops sols
+                let tunnels = readFile<TunnelInfo []> argv.[1] "TunnelInfos.json"
+
+                let lineInfos = buildLineInfos ops nodes tunnels
 
                 return JsonSerializer.Serialize lineInfos
             }
@@ -504,7 +606,7 @@ let main argv =
                        "6901"
                        "6938" |]
 
-                let g = readFile<GraphNode []> argv.[1] "Graph.json"
+                let g = readFile<GraphNode []> argv.[1] "Graph-orig.json"
 
                 let estimateMaxSpeed (op: string) (line: string) =
                     g
@@ -516,12 +618,17 @@ let main argv =
                     |> Option.map (fun e -> e.MaxSpeed)
                     |> Option.defaultValue 100
 
-                readFile<LineInfo []> argv.[1] "LineInfos.json"
-                |> Array.groupBy (fun line -> line.Line)
-                |> Array.filter (fun (line, infos) ->
-                    not (linesWithSolsNotInUse |> Array.contains line)
+                let ops = readFile<OperationalPoint []> argv.[1] "OperationalPoints.json"
+
+                let lineInfos = buildLineInfos ops g [||]
+
+                lineInfos
+                |> Array.groupBy (fun line -> (line.Line, line.IMCode))
+                |> Array.filter (fun ((line, imCode), infos) ->
+                    imCode = "0080"
+                    && not (linesWithSolsNotInUse |> Array.contains line)
                     && infos.Length > 1)
-                |> Array.iter (fun (line, infos) ->
+                |> Array.iter (fun ((line, _), infos) ->
                     let sorted = infos |> Array.sortBy (fun info -> info.StartKm)
 
                     if sorted.Length = 2
@@ -546,8 +653,10 @@ let main argv =
 
                     if sorted.Length = 2
                        && sorted.[1].StartKm < sorted.[0].EndKm then
+                        let intersect =
+                            Set.intersect (sorted.[0].UOPIDs |> Set.ofArray) (sorted.[1].UOPIDs |> Set.ofArray)
 
-                        fprintfn stderr "line with overlapping segements: %s" line)
+                        fprintfn stderr "line with overlapping sols: %s, intersect opids: %A" line intersect)
 
                 return ""
             }

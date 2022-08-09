@@ -22,6 +22,19 @@ export interface LineInfo {
     StartKm: number;
     EndKm: number;
     UOPIDs: Array<string>;
+    Tunnels: Array<string>;
+}
+
+export interface TunnelInfo {
+    Tunnel: string;
+    StartLong: number;
+    StartLat: number;
+    StartKm: number;
+    EndLong: number;
+    EndLat: number;
+    EndKm: number;
+    SingelTrack: boolean;
+    Line: string;
 }
 
 export interface GraphEdge {
