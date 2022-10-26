@@ -1,11 +1,10 @@
-# Comparison of RInf and OSM Railway data
+# Comparison of ERA knowledge graph and OSM Railway data
 
-Comparison of [RInf](https://www.era.europa.eu/registers_en#rinf) data and [OSM Railway](https://wiki.openstreetmap.org/wiki/Railways) data.
+Comparison of ERA knowledge graph data and [OSM Railway](https://wiki.openstreetmap.org/wiki/Railways) data.
 
-## Prerequisites
-
-* [local installation](scripts/docker-overpass.sh) of overpass api
-* download RInf data with [RInfLoader](https://github.com/bergmannjg/RInfData/tree/main/src/RInfLoader).
+* ERA [vocabulary](https://data-interop.era.europa.eu/era-vocabulary/)
+* ERA [knowledge graph](https://era-web.linkeddata.es/sparql.html).
+* [SPARQL Endpoint](https://ad-publications.cs.uni-freiburg.de/SIGSPATIAL_osm2rdf_BBKL_2021.pdf) for OSM Data.
 
 ## Data models
 
@@ -17,7 +16,7 @@ See also [specifications of the register of Infrastructure](https://www.era.euro
 
 * **Operational Point** is a location for train service operations with type station, passenger stop, junction, switch etc. OPs have a unique OPID, a location and a list of NationalIdentNum as parameters.
 * **Section of Line** is the connection between two adjacent OPs consisting of tracks of the same line with parameter SOLLineIdentification as the National line identification.
-* **IPP_MaxSpeed** is as infrastructure performance parameter of a track describing the maximum permitted speed.
+* **MaximumPermittedSpeed** is as infrastructure performance parameter of a track describing the maximum permitted speed.
 * **National Railway Line** is a Railway line within a member state.
 
 ### OSM Railway concepts
@@ -33,58 +32,31 @@ The basic [elemets](https://wiki.openstreetmap.org/wiki/Elements) of OSM are [no
 * **maxspeed=*** tag is used on ways to define the maximum legal speed limit.
 * **railway lines** are relations of tracks with the tags type=route and route=tracks and key ref as Railway line number.
 
-possible connection of a station (node) with a railway line (relation):
+### OSM data as RDF data
 
-* node [railway=station] s is part of relation r [type=public_transport]
-* relation r has member node sn [railway=stop]
-* node sn is element of nodes of way t [ref=linenumber]
-* way t is part of relation [route=tracks][ref=linenumber].
+The [OSM to RDF converter](https://ad-publications.cs.uni-freiburg.de/SIGSPATIAL_osm2rdf_BBKL_2021.pdf) make OSM data acceesible via SPARQL queries.
 
-### Conceptual correspondence
+The OSM railway data is loaded with the following SPARQL query:
 
-* OSM tags correspond to RInf parameters.
-* OSM stations, stops and halts as nodes correspond to RInf operational points.
-* The OPs OPID corrrsponds to the station railway:ref.
-
-### Comparison of data
-
-* location distances of operational points/stations
-* max speed of railway lines
-* etc.
-
-## Preliminary results
-
-RInf has data for 1028 railway lines.
-
-OSM data with relation [route=tracks] was found for 976 railway lines.
+```SparQl
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX osmkey: <https://www.openstreetmap.org/wiki/Key:>
+SELECT distinct ?name ?railway ?railway_ref ?uic_ref ?type WHERE {
+  ?stop osmkey:railway ?railway .
+  ?stop osmkey:name ?name .
+  ?stop rdf:type ?type .
+  {?stop osmkey:railway:ref ?railway_ref . }
+  UNION
+  {?stop osmkey:uic_ref ?uic_ref . }
+}
+```
 
 ### Comparison of operational points
 
-RInf operational points with type station or passenger stop are compared.
+ERA KG operational points with type station or passenger stop are compared with the above OSM railway data regarding OPID and railway:ref.
 
-|OSM/RInf ops matched|Count|
+|RInf ops|Count|
 |---|---:|
-|total|6609|
-|by OpId|6606|
-|by OpIdParent|3|
-
-|Reason for mismatch|Remark|Count|
-|---|---|---:|
-|DistanceToWaysOfLine|Matched but RInf ops distance to line more then 1 km|40|
-|DistanceToStop|Matched but RInf ops distance to osm stop more then 1 km|26|
-|OsmNotYetMapped|Unmatched, not yet mapped|67|
-|DisusedStation|Unmatched, not mapped disused stations|29|
-|Unexpected|Unmatched, check if op is disused station or should be mapped|147|
-||total|309|
-
-### Comparison of sections of line
-
-|Type|Count|
-|---|---:|
-|RInf railway lines|1028|
-|OSM railway lines with tag [route=tracks]|976|
-|RInf railway lines with more than 1 operational point|599|
-|OSM railway lines with more than 1 operational point|594|
-|OSM railway lines with section of line|541|
-|OSM railway lines with maxspeed data|468|
-|OSM railway lines with maxspeed difference more than 50 km|47|
+|total|7957|
+|OSM data found|7538|
+|OSM data not found|419|

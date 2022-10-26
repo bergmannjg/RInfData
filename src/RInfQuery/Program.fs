@@ -113,6 +113,43 @@ let main argv =
 
                 return ""
             }
+        else if argv.[0] = "--EraKG.OperationalPoints.Line"
+                && argv.Length > 3 then
+            async {
+                let ops = readFile<EraKG.OperationalPoint []> argv.[1] "OperationalPoints.json"
+
+                let opsOfLine =
+                    ops
+                    |> Array.filter (fun op ->
+                        argv.[2] = op.Country
+                        && op.RailwayLocations
+                           |> Array.exists (fun loc -> argv.[3] = loc.NationalIdentNum))
+                    |> Array.map (fun op ->
+                        let loc =
+                            op.RailwayLocations
+                            |> Array.find (fun loc -> argv.[3] = loc.NationalIdentNum)
+
+                        ({ UOPID = op.UOPID
+                           Name = op.Name
+                           Latitude = op.Latitude
+                           Longitude = op.Longitude },
+                         loc.Kilometer))
+                    |> Array.sortBy (fun (_, km) -> km)
+                    |> Array.distinct
+
+                opsOfLine
+                |> Array.iter (fun (op, km) -> printfn "%s, %s, Km: %.1f" op.Name op.UOPID km)
+
+                opsOfLine
+                |> Array.map (fun (op, _) ->
+                    { Latitude = op.Latitude
+                      Longitude = op.Longitude
+                      Content = op.UOPID })
+                |> Graph.getBRouterPoIUrl
+                |> printfn "%s"
+
+                return ""
+            }
         else if argv.[0] = "--SectionsOfLine.Line"
                 && argv.Length > 3 then
             async {
@@ -168,6 +205,67 @@ let main argv =
                             sol.Length
                             sol.solName
                     | _ -> printfn "ops not found: %s" sol.solName)
+
+                return ""
+            }
+        else if argv.[0] = "--EraKG.SectionsOfLine.Line"
+                && argv.Length > 3 then
+            async {
+                let sols = readFile<EraKG.SectionOfLine []> argv.[1] "SectionsOfLines.json"
+                let ops = readFile<EraKG.OperationalPoint []> argv.[1] "OperationalPoints.json"
+
+                let opsOfLine =
+                    ops
+                    |> Array.filter (fun op ->
+                        op.RailwayLocations
+                        |> Array.exists (fun loc -> argv.[3] = loc.NationalIdentNum))
+                    |> Array.map (fun op ->
+                        let loc =
+                            op.RailwayLocations
+                            |> Array.find (fun loc -> argv.[3] = loc.NationalIdentNum)
+
+                        (op, loc.Kilometer))
+                    |> Array.sortBy (fun (_, km) -> km)
+                    |> Array.distinct
+
+                let solsOfLine =
+                    sols
+                    |> Array.filter (fun sol ->
+                        sol.IMCode = argv.[2]
+                        && sol.LineIdentification = argv.[3])
+                    |> Array.map (fun sol ->
+                        (sol,
+                         opsOfLine
+                         |> Array.tryFind (fun (op, _) -> op.UOPID = sol.StartOP),
+                         opsOfLine
+                         |> Array.tryFind (fun (op, _) -> op.UOPID = sol.EndOP)))
+                    |> Array.sortBy (fun (_, startOp, _) ->
+                        match startOp with
+                        | Some (_, km) -> km
+                        | None -> 0.0)
+
+                let getMaxSpeed (sol: EraKG.SectionOfLine) (defaultValue: int) =
+                    sol.Tracks
+                    |> Array.choose (fun t -> t.maximumPermittedSpeed)
+                    |> Array.tryHead
+                    |> Option.defaultValue defaultValue
+
+                solsOfLine
+                |> Array.iter (fun (sol, startOp, endOp) ->
+                    match startOp, endOp with
+                    | Some (startOp, startKm), Some (endOp, endKm) ->
+                        printfn
+                            "%s/%s - %s/%s, start: %.1f, end: %.1f, length: %.1f, maxspeed: %d %s"
+                            startOp.UOPID
+                            startOp.Type
+                            endOp.UOPID
+                            endOp.Type
+                            startKm
+                            endKm
+                            (sol.Length / 1000.0)
+                            (getMaxSpeed sol 50)
+                            sol.Name
+                    | _ -> printfn "ops not found: %s" sol.Name)
 
                 return ""
             }

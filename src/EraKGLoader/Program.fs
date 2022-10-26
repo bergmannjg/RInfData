@@ -1,0 +1,463 @@
+open System
+open System.IO
+open System.Text.Json
+
+open RInfGraph
+open Sparql
+open EraKG
+
+let printHelp () =
+    """
+USAGE: EraKGLoader
+
+OPTIONS:
+
+    --SectionsOfLine      <dataDir> <country>
+                          load SectionsOfLines.
+    --OperationalPoints   <dataDir> <country>
+                          load OperationalPoints.
+    --Tracks              <dataDir> <country>
+                          load tracks for all SectionsOfLines.
+    --OpInfo.Build        <dataDir>
+                          build OpInfos from file OperationalPoints.json in <dataDir>.
+    --LineInfo.Build      <dataDir>
+                          build LineInfos from files SectionsOfLines.json and OperationalPoints.json in <dataDir>.
+    --Graph.Build         <dataDir>
+                          build graph of OperationalPoints and SectionsOfLines from files SectionsOfLines.json,
+                          OperationalPoints.json and SOLTrackParameters.json in <dataDir>.
+    --help                display this list of options.
+"""
+
+let readFile<'a> path name =
+    JsonSerializer.Deserialize<'a>(File.ReadAllText(path + name))
+
+let kilometerOfLine (op: OperationalPoint) (line: string) =
+    op.RailwayLocations
+    |> Array.tryFind (fun loc -> loc.NationalIdentNum = line)
+    |> Option.map (fun loc -> loc.Kilometer)
+    |> Option.defaultValue 0.0
+
+let findOp ops opId =
+    ops |> Array.find (fun op -> op.UOPID = opId)
+
+let findOpByOPID (ops: OperationalPoint []) opId =
+    ops
+    |> Array.tryFind (fun (op: OperationalPoint) -> op.UOPID = opId)
+
+let getLineInfo (name: string) ops (nodesOfLine: GraphNode list) (tunnels: TunnelInfo []) imcode line =
+
+    let firstOp = findOpByOPID ops (nodesOfLine |> List.head).Node
+
+    let lastOp = findOpByOPID ops (nodesOfLine |> List.last).Edges.[0].Node
+
+    match firstOp, lastOp with
+    | Some firstOp, Some lastOp ->
+        let uOPIDs =
+            nodesOfLine
+            |> List.rev
+            |> List.fold
+                (fun (s: string list) sol ->
+                    match findOpByOPID ops sol.Node with
+                    | Some op -> op.UOPID :: s
+                    | None -> s)
+                [ lastOp.UOPID ]
+            |> List.toArray
+
+        let tunnelsOfLine =
+            tunnels
+            |> Array.filter (fun t -> t.Line = line)
+            |> Array.sortBy (fun t -> t.StartKm)
+            |> Array.map (fun t -> t.Tunnel)
+            |> Array.distinct
+
+        Some
+            { Line = line
+              IMCode = imcode
+              Name = name
+              Length =
+                nodesOfLine
+                |> List.sumBy (fun sol ->
+                    if sol.Edges.Length > 0 then
+                        sol.Edges.[0].Length
+                    else
+                        0.0)
+                |> sprintf "%.1f"
+                |> Double.Parse
+              StartKm = kilometerOfLine firstOp line
+              EndKm = kilometerOfLine lastOp line
+              UOPIDs = uOPIDs
+              Tunnels = tunnelsOfLine }
+    | _ -> None
+
+let buildLineInfo
+    (ops: OperationalPoint [])
+    (nodes: GraphNode [])
+    (tunnels: TunnelInfo [])
+    (imcode: string, line: string)
+    : LineInfo [] =
+    let solsOfLine =
+        nodes
+        |> Array.filter (fun sol ->
+            sol.Edges
+            |> Array.exists (fun e ->
+                e.Line = line
+                && e.IMCode = imcode
+                && e.StartKm < e.EndKm))
+        |> Array.map (fun sol ->
+            { sol with
+                Edges =
+                    sol.Edges
+                    |> Array.filter (fun e ->
+                        e.Line = line
+                        && e.IMCode = imcode
+                        && e.StartKm < e.EndKm) })
+        |> Array.sortBy (fun n -> n.Edges.[0].StartKm)
+
+    let getFirstNodes (solsOfLine: GraphNode []) =
+        solsOfLine
+        |> Array.filter (fun solX ->
+            not (
+                solsOfLine
+                |> Array.exists (fun solY -> solX.Node = solY.Edges.[0].Node)
+            ))
+
+    let firstNodes = getFirstNodes solsOfLine
+
+    let rec getNextNodes (solsOfLine: GraphNode []) (startSol: GraphNode) (nextNodes: GraphNode list) : GraphNode list =
+        let nextNode =
+            solsOfLine
+            |> Array.tryFind (fun sol -> sol.Node = startSol.Edges.[0].Node)
+
+        match nextNode with
+        | Some nextNode -> getNextNodes solsOfLine nextNode (nextNode :: nextNodes)
+        | None -> nextNodes |> List.rev
+
+    let nextNodesLists =
+        firstNodes
+        |> Array.map (fun firstNode -> getNextNodes solsOfLine firstNode [ firstNode ])
+
+    if nextNodesLists.Length > 0 then
+        let firstOp = findOpByOPID ops nextNodesLists.[0].Head.Node
+
+        let lastElem =
+            nextNodesLists.[nextNodesLists.Length - 1]
+            |> List.toArray
+
+        let lastOp = findOpByOPID ops lastElem.[lastElem.Length - 1].Edges.[0].Node
+
+        match firstOp, lastOp with
+        | Some firstOp, Some lastOp ->
+            nextNodesLists
+            |> Array.map (fun nextNodes ->
+                getLineInfo (firstOp.Name + " - " + lastOp.Name) ops nextNodes tunnels imcode line)
+            |> Array.choose id
+        | _ -> [||]
+    else
+        [||]
+
+let buildLineInfos (ops: OperationalPoint []) (nodes: GraphNode []) (tunnels: TunnelInfo []) : LineInfo [] =
+    nodes
+    |> Array.collect (fun sol ->
+        sol.Edges
+        |> Array.map (fun e -> (e.IMCode, e.Line)))
+    |> Array.distinct
+    |> Array.collect (buildLineInfo ops nodes tunnels)
+    |> Array.sortBy (fun line -> line.Line)
+
+let getMaxSpeed (sol: SectionOfLine) (defaultValue: int) =
+    sol.Tracks
+    |> Array.choose (fun t -> t.maximumPermittedSpeed)
+    |> Array.tryHead
+    |> Option.defaultValue defaultValue
+
+let nullDefaultValue<'a when 'a: null> (defaultValue: 'a) (value: 'a) =
+    if isNull value then
+        defaultValue
+    else
+        value
+
+let scale (maxSpeed: int) = 1.0
+
+let travelTime (length: float) (maxSpeed: int) =
+    length / (float (maxSpeed) * (scale maxSpeed))
+
+let getCost (length: float) (maxSpeed: int) =
+    let cost = int (10000.0 * (travelTime length maxSpeed))
+
+    if (cost <= 0) then 1 else cost
+
+let buildGraph (ops: OperationalPoint []) (sols: SectionOfLine []) =
+
+    let mutable graph = Map.empty
+
+    let addOp (op: OperationalPoint) =
+        if not (graph.ContainsKey op.UOPID) then
+            graph <- graph.Add(op.UOPID, List.empty)
+
+    let findOp opId =
+        ops |> Array.tryFind (fun op -> op.UOPID = opId)
+
+    let length (sol: SectionOfLine) = sol.Length / 1000.0
+
+    let addSol (sol: SectionOfLine) =
+        match findOp sol.StartOP, findOp sol.EndOP with
+        | Some (opStart), Some (opEnd) ->
+            let maxSpeed = getMaxSpeed sol 100
+            let cost = getCost (length sol) maxSpeed
+
+            graph <-
+                graph.Add(
+                    opStart.UOPID,
+                    { Node = opEnd.UOPID
+                      Cost = cost
+                      Line = sol.LineIdentification
+                      IMCode = sol.IMCode
+                      MaxSpeed = maxSpeed
+                      StartKm = kilometerOfLine opStart sol.LineIdentification
+                      EndKm = kilometerOfLine opEnd sol.LineIdentification
+                      Length = length sol }
+                    :: graph.[opStart.UOPID]
+                )
+
+            graph <-
+                graph.Add(
+                    opEnd.UOPID,
+                    { Node = opStart.UOPID
+                      Cost = cost
+                      Line = sol.LineIdentification
+                      IMCode = sol.IMCode
+                      MaxSpeed = maxSpeed
+                      StartKm = kilometerOfLine opEnd sol.LineIdentification
+                      EndKm = kilometerOfLine opStart sol.LineIdentification
+                      Length = length sol }
+                    :: graph.[opEnd.UOPID]
+                )
+        | _ -> fprintfn stderr "not found, %A or %A" sol.StartOP sol.EndOP
+
+    ops |> Array.iter addOp
+
+    sols |> Array.iter addSol
+
+    fprintfn stderr "Nodes: %i, Edges: %i" graph.Count (graph |> Seq.sumBy (fun item -> item.Value.Length))
+
+    graph
+    |> Seq.map (fun kv ->
+        { Node = kv.Key
+          Edges = graph.[kv.Key] |> List.toArray })
+    |> Seq.toArray
+
+let chooseItem (item: Item) =
+    if item.id.StartsWith EraKG.Api.prefixTrack then
+        [ EraKG.Api.propLabel
+          EraKG.Api.propMaximumPermittedSpeed
+          EraKG.Api.propLoadCapability
+          EraKG.Api.propTenClassification ]
+        |> List.map (fun prop ->
+            item.properties
+            |> Map.tryPick (fun k v -> if k = prop then Some(k, v) else None))
+        |> List.choose id
+        |> fun properties ->
+            if properties.IsEmpty then
+                None
+            else
+                Some
+                    { id = item.id
+                      properties = Map<string, obj []>(properties) }
+    else
+        None
+
+/// see https://op.europa.eu/en/web/eu-vocabularies/dataset/-/resource?uri=http://publications.europa.eu/resource/dataset/country
+let countries = new Map<string, string>([ "DEU", "Germany" ])
+
+let checkIsDir (path: string) = Directory.Exists path
+
+let checkIsCountry (country: string) = countries |> Map.containsKey country
+
+[<EntryPoint>]
+let main argv =
+    try
+        if argv.Length = 0 then
+            async { return printHelp () }
+        else if argv.[0] = "--Graph.Build"
+                && argv.Length > 1
+                && checkIsDir argv.[1] then
+            async {
+                let ops = readFile<OperationalPoint []> argv.[1] "OperationalPoints.json"
+
+                let sols = readFile<SectionOfLine []> argv.[1] "SectionsOfLines.json"
+
+                let g = buildGraph ops sols
+
+                return JsonSerializer.Serialize g
+            }
+        else if argv.[0] = "--OpInfo.Build"
+                && argv.Length > 1
+                && checkIsDir argv.[1] then
+            async {
+                let ops =
+                    readFile<OperationalPoint []> argv.[1] "OperationalPoints.json"
+                    |> Array.map (fun op ->
+                        { UOPID = op.UOPID
+                          Name = op.Name
+                          Latitude = op.Latitude
+                          Longitude = op.Longitude })
+
+                return JsonSerializer.Serialize ops
+            }
+        else if argv.[0] = "--LineInfo.Build"
+                && argv.Length > 1
+                && checkIsDir argv.[1] then
+            async {
+                let ops = readFile<OperationalPoint []> argv.[1] "OperationalPoints.json"
+
+                let nodes = readFile<GraphNode []> argv.[1] "Graph.json"
+
+                let tunnels = [||]
+
+                let lineInfos = buildLineInfos ops nodes tunnels
+
+                return JsonSerializer.Serialize lineInfos
+            }
+        else if argv.[0] = "--OperationalPoints"
+                && argv.Length > 2
+                && checkIsDir argv.[1]
+                && checkIsCountry argv.[2] then
+            async {
+                let file = argv.[1] + $"sparql-operationalPoints.json"
+
+                if not (File.Exists file) then
+                    let! result = EraKG.Api.loadOperationalPointData argv.[2]
+                    fprintfn stderr $"loadOperationalPointData, {result.Length} bytes"
+                    File.WriteAllText(file, result)
+
+                let result = readFile<QueryResults> argv.[1] "sparql-operationalPoints.json"
+                let kgOps = EraKG.Api.toOperationalPoints result countries[argv.[2]]
+                fprintfn stderr $"kg ops: {kgOps.Length}"
+
+                if argv.Length > 3 && checkIsDir argv.[3] then
+                    let rinfOps = readFile<RInf.OperationalPoint []> argv.[3] "OperationalPoints.json"
+                    fprintfn stderr $"rinf ops: {rinfOps.Length}"
+
+                    rinfOps
+                    |> Array.filter (fun rinfOp ->
+                        kgOps
+                        |> Array.exists (fun kgOp -> kgOp.UOPID = rinfOp.UOPID)
+                        |> not)
+                    |> Array.iter (fun op -> fprintfn stderr $"notFound in kgOps: {op.Name} {op.UOPID}")
+
+                return JsonSerializer.Serialize kgOps
+            }
+        else if argv.[0] = "--RailwayLine"
+                && argv.Length > 2
+                && checkIsDir argv.[1]
+                && checkIsCountry argv.[2] then
+            async {
+                let file = argv.[1] + $"sparql-railwayline.json"
+
+                if not (File.Exists file) then
+                    let! result = EraKG.Api.loadNationalRailwayLineData argv.[2]
+                    fprintfn stderr $"loadNationalRailwayLineData, {result.Length} bytes"
+                    File.WriteAllText(file, result)
+
+                let result = readFile<QueryResults> argv.[1] "sparql-railwayline.json"
+                let railwaylines = EraKG.Api.toRailwayLines result countries[argv.[2]]
+                fprintfn stderr $"kg railwaylines: {railwaylines.Length}"
+
+                return JsonSerializer.Serialize railwaylines
+            }
+        else if argv.[0] = "--SectionsOfLine"
+                && argv.Length > 2
+                && checkIsDir argv.[1]
+                && checkIsCountry argv.[2] then
+            async {
+                let file = argv.[1] + $"sparql-sectionsOfLine.json"
+
+                if not (File.Exists file) then
+                    let! result = EraKG.Api.loadSectionOfLineData argv.[2]
+                    fprintfn stderr $"loadSectionOfLineData, {result.Length} bytes"
+                    File.WriteAllText(file, result)
+
+                let tracks = readFile<Microdata> argv.[1] "sparql-tracks.json"
+                fprintfn stderr $"kg tracks: {tracks.items.Length}"
+
+                let railwaylines = readFile<RailwayLine []> argv.[1] "Railwaylines.json"
+                fprintfn stderr $"kg railwaylines: {railwaylines.Length}"
+
+                let result = readFile<QueryResults> argv.[1] "sparql-sectionsOfLine.json"
+
+                let kgSols =
+                    EraKG.Api.toSectionsOfLine result countries[argv.[2]] railwaylines tracks
+
+                fprintfn stderr $"kg sols: {kgSols.Length}"
+
+                if argv.Length > 3 && checkIsDir argv.[3] then
+                    let rinfSols = readFile<RInf.SectionOfLine []> argv.[3] "SectionsOfLines.json"
+                    fprintfn stderr $"rinf ops: {rinfSols.Length}"
+
+                    let matchOp (op1: string) (op2: string) =
+                        op1.Replace(" ", "0") = op2.Replace(" ", "0")
+
+                    rinfSols
+                    |> Array.filter (fun rinfSol ->
+                        kgSols
+                        |> Array.exists (fun kgSol ->
+                            kgSol.LineIdentification = rinfSol.LineIdentification
+                            && matchOp kgSol.StartOP rinfSol.StartOP.Value.UOPID
+                            && matchOp kgSol.EndOP rinfSol.EndOP.Value.UOPID)
+                        |> not)
+                    |> Array.iteri (fun i sol ->
+                        fprintfn
+                            stderr
+                            $"{(i + 1)}. notFound in kgSols: '{sol.LineIdentification}' '{sol.solName}' '{sol.StartOP.Value.UOPID}' '{sol.EndOP.Value.UOPID}'")
+
+                return JsonSerializer.Serialize kgSols
+            }
+        else if argv.[0] = "--Tracks"
+                && argv.Length > 2
+                && checkIsDir argv.[1]
+                && checkIsCountry argv.[2] then
+
+            let operations =
+                [ 1..9 ]
+                |> List.map (fun n ->
+                    async {
+                        let file = argv.[1] + $"sparql-tracks-{n}.json"
+
+                        if not (File.Exists file) then
+                            let! result = EraKG.Api.loadTrackData argv.[2] n
+                            fprintfn stderr $"load prefix {n}, {result.Length} bytes"
+                            File.WriteAllText(file, result)
+                    })
+
+            async {
+                operations
+                |> Async.Sequential
+                |> Async.RunSynchronously
+                |> ignore
+
+                let items =
+                    [| 1..9 |]
+                    |> Array.collect (fun n ->
+                        let result = readFile<Microdata> argv.[1] $"sparql-tracks-{n}.json"
+                        result.items |> Array.choose chooseItem)
+
+                fprintfn stderr $"items: {items.Length}"
+                let filtered = { items = items }
+
+                let json = JsonSerializer.Serialize(filtered)
+                File.WriteAllText(argv.[1] + "sparql-tracks.json", json)
+
+                return ""
+            }
+        else
+            async {
+                fprintfn stderr $"{argv.[0]} unexpected"
+                return printHelp ()
+            }
+        |> Async.RunSynchronously
+        |> fprintfn stdout "%s"
+
+    with
+    | e -> fprintfn stderr "error: %s %s" e.Message e.StackTrace
+
+    0

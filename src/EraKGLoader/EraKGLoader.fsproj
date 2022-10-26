@@ -10,7 +10,6 @@
     <ProjectReference Include="../EraKGApi/EraKGApi.fsproj"/>
     <ProjectReference Include="../RInfApi/RInfApi.fsproj"/>
     <ProjectReference Include="../RInfGraph/RInfGraph.fsproj"/>
-    <ProjectReference Include="../OSMComparison/OSMComparison.fsproj"/>
   </ItemGroup>
 
   <ItemGroup>

@@ -10,8 +10,17 @@ open RInfGraph
 let readFile<'a> path name =
     JsonSerializer.Deserialize<'a>(File.ReadAllText(path + name))
 
-let TestPath (ids: string []) (expectedPath: (string * string * int) []) =
-    let dir = "../../../../../rinf-data/"
+type Source =
+    | Rinfdata
+    | EraKGdata
+
+let TestPath (source: Source) (ids: string []) (expectedPath: (string * string * int) []) (expectedCost: int) =
+    let dir =
+        if source = Source.Rinfdata then
+            "../../../../../rinf-data/"
+        else
+            "../../../../../erakg-data/"
+
     let g = readFile<GraphNode []> dir "Graph.json"
     let path = Graph.getShortestPath g ids
     let cpath = Graph.compactifyPath path g
@@ -19,6 +28,12 @@ let TestPath (ids: string []) (expectedPath: (string * string * int) []) =
 
     printfn "Path:"
     Graph.printPath ccpath
+
+    let cost = Graph.costOfPath ccpath
+    printfn "Cost: %d" cost
+
+    if source = Source.Rinfdata then
+        Assert.AreEqual(expectedCost, cost)
 
     Assert.AreEqual(expectedPath.Length, ccpath.Length)
 
@@ -30,46 +45,58 @@ let TestPath (ids: string []) (expectedPath: (string * string * int) []) =
         expectedPath
         ccpath
 
-[<Test>]
-let TestHHToFF () =
+let sources = [ Source.Rinfdata; Source.EraKGdata ]
 
-    TestPath [| "DE000HH"; "DE000FF" |] [|
-        ("DE000HH", "DE00FFU", 1733)
-        ("DE00FFU", "DE000FF", 3600)
-    |]
+let switch (source: Source) =
+    if source = Source.Rinfdata then
+        "DE00FFU"
+    else
+        "DE95441" // op new in era kg
 
-[<Test>]
-let TestFFToHH () =
+[<TestCaseSource(nameof (sources))>]
+let TestHHToFF (source: Source) =
+    TestPath
+        source
+        [| "DE000HH"; "DE000FF" |]
+        [| ("DE000HH", switch source, 1733)
+           (switch source, "DE000FF", 3600) |]
+        15245
 
-    TestPath [| "DE000FF"; "DE000HH" |] [|
-        ("DE000FF", "DE00FFU", 3600)
-        ("DE00FFU", "DE000HH", 1733)
-    |]
+[<TestCaseSource(nameof (sources))>]
+let TestFFToHH (source: Source) =
+    TestPath
+        source
+        [| "DE000FF"; "DE000HH" |]
+        [| ("DE000FF", switch source, 3600)
+           (switch source, "DE000HH", 1733) |]
+        15245
 
-[<Test>]
-let TestHHToNN () =
+[<TestCaseSource(nameof (sources))>]
+let TestHHToNN (source: Source) =
+    TestPath
+        source
+        [| "DE000HH"; "DE000NN" |]
+        [| ("DE000HH", "DE00NWH", 1733)
+           ("DE00NWH", "DE000NF", 5910)
+           ("DE000NF", "DE000NN", 5900) |]
+        18167
 
-    TestPath [| "DE000HH"; "DE000NN" |] [|
-        ("DE000HH", "DE00NWH", 1733)
-        ("DE00NWH", "DE000NF", 5910)
-        ("DE000NF", "DENF  G", 5972)
-        ("DENF  G", "DE000NN", 5900)
-    |]
+[<TestCaseSource(nameof (sources))>]
+let TestHHToAH (source: Source) =
+    TestPath
+        source
+        [| "DE000HH"; "DE000AH" |]
+        [| ("DE000HH", "DE95366", 1710)
+           ("DE95366", "DE0AHAR", 1720)
+           ("DE0AHAR", "DE000AH", 2200) |]
+        9172
 
-[<Test>]
-let TestHHToAH () =
-
-    TestPath [| "DE000HH"; "DE000AH" |] [|
-        ("DE000HH", "DE95366", 1710)
-        ("DE95366", "DE0AHAR", 1720)
-        ("DE0AHAR", "DE000AH", 2200)
-    |]
-
-[<Test>]
-let TestAHToHH () =
-
-    TestPath [| "DE000AH"; "DE000HH" |] [|
-        ("DE000AH", "DE0AHAR", 2200)
-        ("DE0AHAR", "DE95366", 1720)
-        ("DE95366", "DE000HH", 1710)
-    |]
+[<TestCaseSource(nameof (sources))>]
+let TestAHToHH (source: Source) =
+    TestPath
+        source
+        [| "DE000AH"; "DE000HH" |]
+        [| ("DE000AH", "DE0AHAR", 2200)
+           ("DE0AHAR", "DE95366", 1720)
+           ("DE95366", "DE000HH", 1710) |]
+        9172

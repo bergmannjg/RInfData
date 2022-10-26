@@ -10,7 +10,6 @@ Calculating routes with high accuracy, requires further data about the connectiv
 
 ## Compile to JavaScript via [Fable](https://github.com/fable-compiler/Fable)
 
-* add fable directory to FSharpx.Collections nuget package till version 3.0.0 is released
 * run: restore-data.sh
 * run: build-package.sh
 * usage: node index.js rinf-graph/data/Graph.json "DE000HH;DE000AH"

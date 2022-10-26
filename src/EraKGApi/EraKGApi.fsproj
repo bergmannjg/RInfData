@@ -2,12 +2,13 @@
 
   <PropertyGroup>
     <TargetFramework>net6.0</TargetFramework>
+    <WarnOn>3390;$(WarnOn)</WarnOn>
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="PriorityQueue.fs" />
-    <Compile Include="Dijkstra.fs" />
-    <Compile Include="Graph.fs" />
+    <Compile Include="Request.fs" />
+    <Compile Include="Sparql.fs" />
+    <Compile Include="Api.fs" />
   </ItemGroup>
 
 </Project>

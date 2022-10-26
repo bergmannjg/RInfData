@@ -331,7 +331,13 @@ module Graph =
             let length = lengthOfPath nodesBetween
 
             if length > 0 && length < 50.0 && fromNode <> toNode then
-                Some("CandidateSameLine", imcode, line, fromNode, toNode)
+                let candidate = ("CandidateSameLine", imcode, line, fromNode, toNode)
+
+                if choosen |> List.contains candidate then
+                    None
+                else
+                    Some candidate
+
             else
                 None
         | None -> None
@@ -457,7 +463,7 @@ module Graph =
     let private tryCompactifyPath (path: GraphNode []) (graphNodes: GraphNode []) (choosen: Candidate list) =
         match getCompactifyCandidate path graphNodes choosen with
         | Some candidate ->
-            let (_, imcode, line, fromNode, toNode) = candidate
+            let (s, imcode, line, fromNode, toNode) = candidate
 
             let graphNodesOfLine = getGraphNodesOfLine imcode line graphNodes
 
@@ -503,7 +509,7 @@ module Graph =
                 if maxDepth > 0 then
                     multiCompactifyPath cpath graphNodes (maxDepth - 1) (candidate :: choosen)
                 else
-                    path
+                    cpath
             | _ -> path
 
         multiCompactifyPath path graphNodes 5 []

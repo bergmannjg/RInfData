@@ -6,7 +6,8 @@ if [ ! -d "./scripts" ]; then
     exit 1
 fi
 
-DATADIR=../../rinf-data
+# DATADIR=../../rinf-data
+DATADIR=../../erakg-data
 
 pushd ./src/RInfGraph
 

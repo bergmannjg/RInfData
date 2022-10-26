@@ -7,7 +7,6 @@
   <ItemGroup>
     <PackageReference Include="Fable.Core" Version="3.3.0" />
     <PackageReference Include="Fable.Promise" Version="2.0.0" />
-    <PackageReference Include="FSharpx.Collections" Version="3.0.1" />
   </ItemGroup>
 
   <PropertyGroup>
@@ -15,6 +14,7 @@
   </PropertyGroup>
   
   <ItemGroup>
+    <Compile Include="PriorityQueue.fs" />
     <Compile Include="Dijkstra.fs" />
     <Compile Include="Graph.fs" />
   </ItemGroup>
