@@ -62,15 +62,6 @@ let toMap (opInfos: OpInfo []) =
             m)
         (Dictionary<string, OpInfo>())
 
-let osmDataDir = "../../osm-data/"
-
-let rinfDataDir = "../../rinf-data/"
-
-let dbDataDir = "../../db-data/"
-
-let compareLineAsync (line: int) (useRemote: bool) (useAllStops: bool) =
-    Comparison.compareLineAsync osmDataDir rinfDataDir dbDataDir line useRemote useAllStops (Some "Deutschland")
-
 [<EntryPoint>]
 let main argv =
     try
@@ -343,39 +334,6 @@ let main argv =
 
                 Graph.getLocationsOfPath g map path
                 |> Array.iter (Graph.getBRouterUrl >> printfn "%s")
-
-                return ""
-            }
-        else if argv.[0] = "--Compare.Line" && argv.Length >= 2 then
-            async {
-                do!
-                    compareLineAsync (int argv.[1]) false (argv.Length = 3 && argv.[2] = "--allStops")
-                    |> Async.Ignore
-
-                return ""
-            }
-        else if argv.[0] = "--Compare.Line.Remote"
-                && argv.Length >= 2 then
-            async {
-                do!
-                    compareLineAsync (int argv.[1]) true (argv.Length = 3 && argv.[2] = "--allStops")
-                    |> Async.Ignore
-
-                return ""
-            }
-        else if argv.[0] = "--Compare.Lines" && argv.Length > 1 then
-            async {
-                do!
-                    Comparison.compareLinesAsync osmDataDir rinfDataDir dbDataDir (int argv.[1])
-                    |> Async.Ignore
-
-                return ""
-            }
-        else if argv.[0] = "--Compare.CheckMissingStops" then
-            async {
-                do!
-                    MissingStops.checkMissingStops rinfDataDir
-                    |> Async.Ignore
 
                 return ""
             }
