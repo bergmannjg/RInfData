@@ -8,7 +8,7 @@ type RailwayLocation =
     { NationalIdentNum: string
       Kilometer: float }
 
-type OperationalPoint = 
+type OperationalPoint =
     { Name: string
       Type: string
       Country: string
@@ -18,7 +18,8 @@ type OperationalPoint =
       RailwayLocations: RailwayLocation [] }
 
 type Track =
-    { label: string
+    { id: string
+      label: string
       maximumPermittedSpeed: int option
       loadCapability: string option }
 
@@ -37,6 +38,17 @@ type SectionOfLine =
       EndOP: string
       Tracks: Track [] }
 
+type Tunnel =
+    { Name: string
+      Country: string
+      Length: float
+      LineIdentification: string
+      StartLatitude: float
+      StartLongitude: float
+      EndLatitude: float
+      EndLongitude: float
+      ContainingTracks: string [] }
+
 module Api =
 
     open Sparql
@@ -46,6 +58,7 @@ module Api =
     let propMaximumPermittedSpeed = "http://data.europa.eu/949/maximumPermittedSpeed"
     let propLoadCapability = "http://data.europa.eu/949/loadCapability"
     let propTenClassification = "http://data.europa.eu/949/tenClassification"
+    let propNetElements = "http://data.europa.eu/949/topology/netElements/"
 
     let private endpoint = "https://linked.ec-dataplatform.eu/sparql"
 
@@ -143,6 +156,28 @@ WHERE {{
 
     let loadNationalRailwayLineData (country: string) : Async<string> =
         Request.GetAsync endpoint (nationalRailwayLineQuery country) Request.applicationSparqlResults
+
+    let private tunnelQuery (country: string) =
+        $"""
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX era: <http://data.europa.eu/949/>
+
+SELECT distinct ?tunnel, ?tunnelIdentification, ?length, ?startlocation, ?endlocation, ?netElement 
+WHERE {{
+  ?tunnel a era:Tunnel.
+
+  ?tunnel era:tunnelIdentification ?tunnelIdentification .
+  ?tunnel era:length ?length .
+  ?tunnel era:startLocation ?startlocation .
+  ?tunnel era:endLocation ?endlocation .
+  ?tunnel era:netElement ?netElement.
+
+  ?tunnel era:inCountry <http://publications.europa.eu/resource/authority/country/{country}> .
+}}
+"""
+
+    let loadTunnelData (country: string) : Async<string> =
+        Request.GetAsync endpoint (tunnelQuery country) Request.applicationSparqlResults
 
     let private uriTypeToString (r: Rdf) (prefix: string) : string =
         if r.``type`` = "uri" then
@@ -258,7 +293,8 @@ WHERE {{
                 else
                     None
 
-            { label = getValue propLabel |> Option.defaultValue ""
+            { id = System.Web.HttpUtility.UrlDecode(id.Substring(prefixTrack.Length))
+              label = getValue propLabel |> Option.defaultValue ""
               maximumPermittedSpeed =
                 getValue propMaximumPermittedSpeed
                 |> Option.map int
@@ -266,6 +302,59 @@ WHERE {{
                 getValue propLoadCapability
                 |> Option.map (fun s -> s.Substring(prefixLoadCapabilities.Length)) }
         | None -> raise (System.Exception($"track {id} not found"))
+
+    let toTunnels (sparql: QueryResults) (country: string) : Tunnel [] =
+        sparql.results.bindings
+        |> Array.fold
+            (fun (ops: Map<string, Tunnel>) b ->
+                let toTrackLabel (netElement: string) =
+                    System.Web.HttpUtility.UrlDecode(netElement.Substring(propNetElements.Length))
+
+                ops.Change(
+                    b.["tunnelIdentification"].value,
+                    fun op ->
+                        match op with
+                        | Some op ->
+                            let candidate = toTrackLabel b.["netElement"].value
+
+                            if op.ContainingTracks |> Array.contains candidate then
+                                Some op
+                            else
+                                Some
+                                    { op with
+                                        ContainingTracks =
+                                            op.ContainingTracks
+                                            |> Array.append [| candidate |] }
+                        | None ->
+                            let startlon, startlat = toLocation b.["startlocation"]
+                            let endlon, endlat = toLocation b.["endlocation"]
+                            let trackLabel = toTrackLabel b.["netElement"].value
+
+                            Some
+                                { Name = b.["tunnelIdentification"].value
+                                  Country = country
+                                  LineIdentification = trackLabel.Substring(0, 4)
+                                  Length = float b.["length"].value
+                                  StartLatitude = startlat
+                                  StartLongitude = startlon
+                                  EndLatitude = endlat
+                                  EndLongitude = endlon
+                                  ContainingTracks = [| trackLabel |] }
+                ))
+            Map.empty
+        |> Map.values
+        |> Seq.toArray
+        |> fun tunnels ->
+            tunnels
+            |> Array.filter (fun tunnel -> // filter doublettes
+                if tunnel.Name.EndsWith "-Tunnel" then
+                    tunnels
+                    |> Array.exists (fun t ->
+                        t.Name = tunnel.Name.Replace("-Tunnel", "tunnel")
+                        && t.Length = tunnel.Length)
+                    |> not
+                else
+                    true)
 
     let private hasPassendgerLineCategory (lineIdentification: string) (lines: RailwayLine []) =
         match lines

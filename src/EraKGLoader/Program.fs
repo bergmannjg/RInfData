@@ -164,6 +164,35 @@ let buildLineInfos (ops: OperationalPoint []) (nodes: GraphNode []) (tunnels: Tu
     |> Array.collect (buildLineInfo ops nodes tunnels)
     |> Array.sortBy (fun line -> line.Line)
 
+let buildTunnelInfos (sols: SectionOfLine []) (tunnels: Tunnel []) : TunnelInfo [] =
+    tunnels
+    |> Array.choose (fun t ->
+        match sols
+              |> Array.tryFind (fun sol ->
+                  sol.Tracks
+                  |> Array.exists (fun track ->
+                      t.ContainingTracks
+                      |> Array.exists (fun t -> track.id = t)))
+            with
+        | Some sol ->
+            Some
+                { Tunnel = t.Name
+                  Length = t.Length / 1000.0
+                  StartLong = t.StartLongitude
+                  StartLat = t.StartLatitude
+                  StartKm = None
+                  StartOP = sol.StartOP
+                  EndLong = t.EndLongitude
+                  EndLat = t.EndLatitude
+                  EndKm = None
+                  EndOP = sol.EndOP
+                  SingelTrack = t.ContainingTracks.Length = 1
+                  Line = sol.LineIdentification }
+        | None ->
+            fprintfn stderr "sol not found for trackid: %s" t.Name
+            None)
+    |> Array.distinct
+
 let getMaxSpeed (sol: SectionOfLine) (defaultValue: int) =
     sol.Tracks
     |> Array.choose (fun t -> t.maximumPermittedSpeed)
@@ -312,11 +341,21 @@ let main argv =
 
                 let nodes = readFile<GraphNode []> argv.[1] "Graph.json"
 
-                let tunnels = [||]
+                let tunnels = readFile<TunnelInfo []> argv.[1] "TunnelInfos.json"
 
                 let lineInfos = buildLineInfos ops nodes tunnels
 
                 return JsonSerializer.Serialize lineInfos
+            }
+        else if argv.[0] = "--TunnelInfo.Build" && argv.Length > 1 then
+            async {
+                let sols = readFile<SectionOfLine []> argv.[1] "SectionsOfLines.json"
+
+                let tunnels = readFile<Tunnel []> argv.[1] "Tunnels.json"
+
+                let tunnelInfos = buildTunnelInfos sols tunnels
+
+                return JsonSerializer.Serialize tunnelInfos
             }
         else if argv.[0] = "--OperationalPoints"
                 && argv.Length > 2
@@ -364,6 +403,24 @@ let main argv =
                 fprintfn stderr $"kg railwaylines: {railwaylines.Length}"
 
                 return JsonSerializer.Serialize railwaylines
+            }
+        else if argv.[0] = "--Tunnel"
+                && argv.Length > 2
+                && checkIsDir argv.[1]
+                && checkIsCountry argv.[2] then
+            async {
+                let file = argv.[1] + $"sparql-tunnel.json"
+
+                if not (File.Exists file) then
+                    let! result = EraKG.Api.loadTunnelData argv.[2]
+                    fprintfn stderr $"loadTunnelData, {result.Length} bytes"
+                    File.WriteAllText(file, result)
+
+                let result = readFile<QueryResults> argv.[1] "sparql-tunnel.json"
+                let tunnels = EraKG.Api.toTunnels result countries[argv.[2]]
+                fprintfn stderr $"kg tunnels: {tunnels.Length}"
+
+                return JsonSerializer.Serialize tunnels
             }
         else if argv.[0] = "--SectionsOfLine"
                 && argv.Length > 2

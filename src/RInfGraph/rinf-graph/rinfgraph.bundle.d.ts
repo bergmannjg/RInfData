@@ -27,12 +27,15 @@ export interface LineInfo {
 
 export interface TunnelInfo {
     Tunnel: string;
+    Length: number;
     StartLong: number;
     StartLat: number;
-    StartKm: number;
+    StartKm?: number;
+    StartOP: string;
     EndLong: number;
     EndLat: number;
-    EndKm: number;
+    EndKm?: number;
+    EndOP: string;
     SingelTrack: boolean;
     Line: string;
 }

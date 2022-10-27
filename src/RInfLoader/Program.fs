@@ -234,12 +234,15 @@ let getMaxSpeed (sol: SectionOfLine) (trackParamsOfSol: SOLTrackParameter []) (d
 // missing tunnels in extraEdges
 let extraTunnels: TunnelInfo [] =
     [| { Tunnel = "Landrückentunnel"
+         Length = 262.104 - 251.325
          StartLong = 9.650944
          StartLat = 50.406190
-         StartKm = 251.325
+         StartKm = Some 251.325
+         StartOP = "DE00FFU"
          EndLong = 9.663088
          EndLat = 50.309693
-         EndKm = 262.104
+         EndKm = Some 262.104
+         EndOP = "DE0NMOT"
          SingelTrack = false
          Line = "1733" } |]
 
@@ -253,7 +256,7 @@ let buildTunnelInfos
     tunnels
     |> Array.filter (fun t -> now <= t.ValidityDateEnd)
     |> Array.map (fun t ->
-        let line, singelTrack =
+        let line, sol , singelTrack=
             match sols
                   |> Array.tryFind (fun sol ->
                       sol.SOLTracks
@@ -261,6 +264,7 @@ let buildTunnelInfos
                 with
             | Some sol ->
                 sol.LineIdentification,
+                sol,
                 (sol.SOLTracks
                  |> Array.exists (fun tr -> tr.SOLTrackIdentification = "single-track"))
             | None ->
@@ -271,12 +275,15 @@ let buildTunnelInfos
                 )
 
         { Tunnel = t.SOLTunnelIdentification
+          Length = t.EndKm - t.StartKm
           StartLong = t.StartLong
           StartLat = t.StartLat
-          StartKm = t.StartKm
+          StartKm = Some t.StartKm
+          StartOP = sol.StartOP.Value.UOPID
           EndLong = t.EndLong
           EndLat = t.EndLat
-          EndKm = t.EndKm
+          EndKm = Some t.EndKm
+          EndOP = sol.EndOP.Value.UOPID
           SingelTrack = singelTrack
           Line = line })
     |> fun tunnels -> Array.concat [ tunnels; extraTunnels ]

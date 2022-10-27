@@ -27,12 +27,15 @@ type LineInfo =
 
 type TunnelInfo =
     { Tunnel: string
+      Length: float
       StartLong: float
       StartLat: float
-      StartKm: float
+      StartKm: float option
+      StartOP: string
       EndLong: float
       EndLat: float
-      EndKm: float
+      EndKm: float option
+      EndOP: string
       SingelTrack: bool
       Line: string }
 
