@@ -164,7 +164,63 @@ let buildLineInfos (ops: OperationalPoint []) (nodes: GraphNode []) (tunnels: Tu
     |> Array.collect (buildLineInfo ops nodes tunnels)
     |> Array.sortBy (fun line -> line.Line)
 
-let buildTunnelInfos (sols: SectionOfLine []) (tunnels: Tunnel []) : TunnelInfo [] =
+// see http://www.fssnip.net/7P8/title/Calculate-distance-between-two-GPS-latitudelongitude-points
+let ``calculate distance`` (p1Latitude, p1Longitude) (p2Latitude, p2Longitude) =
+    let r = 6371.0 // km
+
+    let dLat = (p2Latitude - p1Latitude) * Math.PI / 180.0
+
+    let dLon = (p2Longitude - p1Longitude) * Math.PI / 180.0
+
+    let lat1 = p1Latitude * Math.PI / 180.0
+    let lat2 = p2Latitude * Math.PI / 180.0
+
+    let a =
+        Math.Sin(dLat / 2.0) * Math.Sin(dLat / 2.0)
+        + Math.Sin(dLon / 2.0)
+          * Math.Sin(dLon / 2.0)
+          * Math.Cos(lat1)
+          * Math.Cos(lat2)
+
+    let c = 2.0 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1.0 - a))
+
+    r * c
+
+let estimateKilometres
+    (startOp: string)
+    (endOp: string)
+    (ops: OperationalPoint [])
+    (nodes: GraphNode [])
+    (tunnel: Tunnel)
+    =
+    match nodes
+          |> Array.tryFind (fun node -> node.Node = startOp)
+        with
+    | Some node ->
+        match node.Edges
+              |> Array.tryFind (fun e -> e.Node = endOp)
+            with
+        | Some edge ->
+            match ops
+                  |> Array.tryFind (fun op -> op.UOPID = startOp)
+                with
+            | Some op ->
+                let startKm =
+                    edge.StartKm
+                    + ``calculate distance`` (op.Latitude, op.Longitude) (tunnel.StartLatitude, tunnel.StartLongitude)
+
+                let endKm = startKm + tunnel.Length / 1000.0
+                Some(System.Math.Round(startKm, 3)), Some(System.Math.Round(endKm, 3))
+            | None -> None, None
+        | None -> None, None
+    | None -> None, None
+
+let buildTunnelInfos
+    (sols: SectionOfLine [])
+    (ops: OperationalPoint [])
+    (nodes: GraphNode [])
+    (tunnels: Tunnel [])
+    : TunnelInfo [] =
     tunnels
     |> Array.choose (fun t ->
         match sols
@@ -175,16 +231,18 @@ let buildTunnelInfos (sols: SectionOfLine []) (tunnels: Tunnel []) : TunnelInfo 
                       |> Array.exists (fun t -> track.id = t)))
             with
         | Some sol ->
+            let startKm, endKm = estimateKilometres sol.StartOP sol.EndOP ops nodes t
+
             Some
                 { Tunnel = t.Name
                   Length = t.Length / 1000.0
                   StartLong = t.StartLongitude
                   StartLat = t.StartLatitude
-                  StartKm = None
+                  StartKm = startKm
                   StartOP = sol.StartOP
                   EndLong = t.EndLongitude
                   EndLat = t.EndLatitude
-                  EndKm = None
+                  EndKm = endKm
                   EndOP = sol.EndOP
                   SingelTrack = t.ContainingTracks.Length = 1
                   Line = sol.LineIdentification }
@@ -347,13 +405,19 @@ let main argv =
 
                 return JsonSerializer.Serialize lineInfos
             }
-        else if argv.[0] = "--TunnelInfo.Build" && argv.Length > 1 then
+        else if argv.[0] = "--TunnelInfo.Build"
+                && argv.Length > 1
+                && checkIsDir argv.[1] then
             async {
+                let ops = readFile<OperationalPoint []> argv.[1] "OperationalPoints.json"
+
+                let nodes = readFile<GraphNode []> argv.[1] "Graph.json"
+
                 let sols = readFile<SectionOfLine []> argv.[1] "SectionsOfLines.json"
 
                 let tunnels = readFile<Tunnel []> argv.[1] "Tunnels.json"
 
-                let tunnelInfos = buildTunnelInfos sols tunnels
+                let tunnelInfos = buildTunnelInfos sols ops nodes tunnels
 
                 return JsonSerializer.Serialize tunnelInfos
             }
@@ -417,7 +481,21 @@ let main argv =
                     File.WriteAllText(file, result)
 
                 let result = readFile<QueryResults> argv.[1] "sparql-tunnel.json"
-                let tunnels = EraKG.Api.toTunnels result countries[argv.[2]]
+
+                let tunnels =
+                    EraKG.Api.toTunnels result countries[argv.[2]]
+                    |> fun tunnels -> // filter double entries
+                        tunnels
+                        |> Array.filter (fun tunnel ->
+                            tunnels
+                            |> Array.filter (fun t ->
+                                t.Length = tunnel.Length
+                                && ``calculate distance``
+                                    (t.StartLatitude, t.StartLongitude)
+                                    (tunnel.StartLatitude, tunnel.StartLongitude) < 0.05)
+                            |> Array.sortBy (fun t -> t.Name.Length)
+                            |> fun filtered -> tunnel.Name = filtered.[0].Name)
+
                 fprintfn stderr $"kg tunnels: {tunnels.Length}"
 
                 return JsonSerializer.Serialize tunnels

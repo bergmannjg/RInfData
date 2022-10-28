@@ -344,17 +344,6 @@ WHERE {{
             Map.empty
         |> Map.values
         |> Seq.toArray
-        |> fun tunnels ->
-            tunnels
-            |> Array.filter (fun tunnel -> // filter doublettes
-                if tunnel.Name.EndsWith "-Tunnel" then
-                    tunnels
-                    |> Array.exists (fun t ->
-                        t.Name = tunnel.Name.Replace("-Tunnel", "tunnel")
-                        && t.Length = tunnel.Length)
-                    |> not
-                else
-                    true)
 
     let private hasPassendgerLineCategory (lineIdentification: string) (lines: RailwayLine []) =
         match lines
