@@ -6,7 +6,7 @@ import networkx as nx
 
 G = nx.MultiGraph()
 
-file = '../../rinf-data/Graph-orig.json' if '--orig' in sys.argv else '../../rinf-data/Graph.json'
+file = '../rinf-data/Graph-orig.json' if '--orig' in sys.argv else '../rinf-data/Graph.json'
 
 with open(file, 'r') as f:
     data = json.load(f)

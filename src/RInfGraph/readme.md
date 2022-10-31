@@ -7,15 +7,3 @@ Cost function is the estimated traveltime, length of section of line multiplied 
 The path actually taken by a train may be slightly different.
 
 Calculating routes with high accuracy, requires further data about the connectivity within each operational point (see [Leveraging Semantic Technologies for Digital Interoperability in the European Railway Domain](https://link.springer.com/epdf/10.1007/978-3-030-88361-4_38?sharing_token=1o_s7PDoV39x-REbzrEi9fe4RwlQNchNByi7wbcMAY6cX0iMBo8kbKm6MVocmAfla1lOS3pIKdJnlGw_p7Hlarek_nfbMrdg2IEYVlyrg7UoC8_O5QAzne-G1waJIuD4K6xSNHF9bK26QKM6niEPNUKiwT_oLJLoafQwuYM5Z2I%3D)).
-
-## Compile to JavaScript via [Fable](https://github.com/fable-compiler/Fable)
-
-* run: restore-data.sh
-* run: build-package.sh
-* usage: node index.js rinf-graph/data/Graph.json "DE000HH;DE000AH"
-
-## Build rinf-data module
-
-* run: restore-data.sh
-* run: build-package.sh
-* module is used by [FahrplanApp](https://github.com/bergmannjg/FahrplanApp)

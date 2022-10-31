@@ -6,10 +6,10 @@ if [ ! -d "./scripts" ]; then
     exit 1
 fi
 
-# DATADIR=../../rinf-data
-DATADIR=../../erakg-data
+# DATADIR=../../../rinf-data
+DATADIR=../../../erakg-data
 
-pushd ./src/RInfGraph
+pushd ./src/RInfGraph/target.javascript
 
 if [ ! -d "${DATADIR}" ]; then
     echo "${DATADIR} not found"
@@ -30,6 +30,8 @@ if [ ! -f "./package.json" ]; then
     echo "package.json not found"
     exit 1
 fi
+
+npm install
 
 dotnet fable RInfGraph.fable.fsproj -o build --run webpack --mode production --no-devtool --config ./webpack.config.js
 
