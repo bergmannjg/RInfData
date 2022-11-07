@@ -108,7 +108,7 @@ WHERE {{
   ?sectionOfLine era:inCountry <http://publications.europa.eu/resource/authority/country/{country}> .
   ?sectionOfLine era:solNature <http://data.europa.eu/949/concepts/sol-natures/Regular_SoL> .
 }}
-Limit 30000}}
+Limit 30000
 """
 
     let loadSectionOfLineData (country: string) : Async<string> =
