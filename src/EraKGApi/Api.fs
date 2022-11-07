@@ -85,7 +85,7 @@ Limit 30000
 """
 
     let loadOperationalPointData (country: string) : Async<string> =
-        Request.GetAsync endpoint (operationalPointQuery country) Request.applicationMicrodata
+        Request.GetAsync endpoint (operationalPointQuery country) Request.applicationSparqlResults
 
     let private sectionOfLineQuery (country: string) =
         $"""
@@ -112,7 +112,7 @@ Limit 30000}}
 """
 
     let loadSectionOfLineData (country: string) : Async<string> =
-        Request.GetAsync endpoint (sectionOfLineQuery country) Request.applicationMicrodata
+        Request.GetAsync endpoint (sectionOfLineQuery country) Request.applicationSparqlResults
 
     let private trackQuery (country: string) (n: int) =
         $"""
