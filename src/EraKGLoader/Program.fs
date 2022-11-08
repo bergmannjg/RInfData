@@ -426,7 +426,12 @@ let main argv =
                 && checkIsDir argv.[1]
                 && checkIsCountry argv.[2] then
             async {
-                let file = argv.[1] + $"sparql-operationalPoints.json"
+                let file =
+                    argv.[1]
+                    + (if argv.Length > 3 && not (checkIsDir argv.[3]) then
+                           argv.[3]
+                       else
+                           $"sparql-operationalPoints.json")
 
                 if not (File.Exists file) then
                     let! result = EraKG.Api.loadOperationalPointData argv.[2]
@@ -505,7 +510,12 @@ let main argv =
                 && checkIsDir argv.[1]
                 && checkIsCountry argv.[2] then
             async {
-                let file = argv.[1] + $"sparql-sectionsOfLine.json"
+                let file =
+                    argv.[1]
+                    + (if argv.Length > 3  && not (checkIsDir argv.[3]) then
+                           argv.[3]
+                       else
+                           $"sparql-sectionsOfLine.json")
 
                 if not (File.Exists file) then
                     let! result = EraKG.Api.loadSectionOfLineData argv.[2]
