@@ -14,9 +14,12 @@
   </PropertyGroup>
   
   <ItemGroup>
-    <Compile Include="PriorityQueue.fs" />
     <Compile Include="Dijkstra.fs" />
     <Compile Include="Graph.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="FSharpx.Collections" Version="3.1.0" />
   </ItemGroup>
 
 </Project>

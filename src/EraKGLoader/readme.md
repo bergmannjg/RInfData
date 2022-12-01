@@ -22,7 +22,6 @@ OPTIONS:
                           load OperationalPoints.
     --Tracks              <country>
                           load tracks for all SectionsOfLines
-                          (assumes env vars RINF_USERNAME and RINF_PASSWORD).
     --OpInfo.Build <dataDir>
                           build OpInfos from file OperationalPoints.json in <dataDir>.
     --LineInfo.Build <dataDir>

@@ -2,7 +2,7 @@
 
 F# program to access the ERA (EU Agency for Railways) Register of Infrastructure database and the ERA knowledge graph.
 
-* [RInf](https://www.era.europa.eu/registers_en#rinf) Register of Railway Infrastructure
+* [RInf](https://www.era.europa.eu/domains/registers/rinf_en) Register of Railway Infrastructure
 * [API](https://rinf.era.europa.eu/API/Help) to the the RINF database
 * ERA [vocabulary](https://data-interop.era.europa.eu/era-vocabulary/)
 * [ERA knowledge graph](https://era-web.linkeddata.es/sparql.html).

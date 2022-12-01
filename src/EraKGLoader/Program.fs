@@ -353,12 +353,32 @@ let chooseItem (item: Item) =
     else
         None
 
-/// see https://op.europa.eu/en/web/eu-vocabularies/dataset/-/resource?uri=http://publications.europa.eu/resource/dataset/country
-let countries = new Map<string, string>([ "DEU", "Germany" ])
-
 let checkIsDir (path: string) = Directory.Exists path
 
-let checkIsCountry (country: string) = countries |> Map.containsKey country
+let checkIsCountry (path: string) (countryArg: string) : Async<string []> =
+    async {
+
+        let file = path + $"sparql-countries.json"
+
+        if not (File.Exists file) then
+            let! result = EraKG.Api.loadCountriesData ()
+            File.WriteAllText(file, result)
+
+        let result = readFile<QueryResults> path "sparql-countries.json"
+
+        let allCountries = Api.toCountries result
+
+        let countries = countryArg.Split Api.countrySplitChars
+
+        let isCountry =
+            countries
+            |> Array.forall (fun country -> allCountries |> Array.contains country)
+
+        if not isCountry then
+            raise (System.ArgumentException($"unkown country {countryArg}"))
+
+        return countries
+    }
 
 [<EntryPoint>]
 let main argv =
@@ -423,9 +443,10 @@ let main argv =
             }
         else if argv.[0] = "--OperationalPoints"
                 && argv.Length > 2
-                && checkIsDir argv.[1]
-                && checkIsCountry argv.[2] then
+                && checkIsDir argv.[1] then
             async {
+                let! countries = checkIsCountry argv.[1] argv.[2]
+
                 let file =
                     argv.[1]
                     + (if argv.Length > 3 && not (checkIsDir argv.[3]) then
@@ -439,7 +460,9 @@ let main argv =
                     File.WriteAllText(file, result)
 
                 let result = readFile<QueryResults> argv.[1] "sparql-operationalPoints.json"
-                let kgOps = EraKG.Api.toOperationalPoints result countries[argv.[2]]
+
+                let kgOps = Api.toOperationalPoints result countries
+
                 fprintfn stderr $"kg ops: {kgOps.Length}"
 
                 if argv.Length > 3 && checkIsDir argv.[3] then
@@ -457,9 +480,10 @@ let main argv =
             }
         else if argv.[0] = "--RailwayLine"
                 && argv.Length > 2
-                && checkIsDir argv.[1]
-                && checkIsCountry argv.[2] then
+                && checkIsDir argv.[1] then
             async {
+                let! _ = checkIsCountry argv.[1] argv.[2]
+
                 let file = argv.[1] + $"sparql-railwayline.json"
 
                 if not (File.Exists file) then
@@ -468,16 +492,17 @@ let main argv =
                     File.WriteAllText(file, result)
 
                 let result = readFile<QueryResults> argv.[1] "sparql-railwayline.json"
-                let railwaylines = EraKG.Api.toRailwayLines result countries[argv.[2]]
+                let railwaylines = EraKG.Api.toRailwayLines result
                 fprintfn stderr $"kg railwaylines: {railwaylines.Length}"
 
                 return JsonSerializer.Serialize railwaylines
             }
         else if argv.[0] = "--Tunnel"
                 && argv.Length > 2
-                && checkIsDir argv.[1]
-                && checkIsCountry argv.[2] then
+                && checkIsDir argv.[1] then
             async {
+                let! _ = checkIsCountry argv.[1] argv.[2]
+
                 let file = argv.[1] + $"sparql-tunnel.json"
 
                 if not (File.Exists file) then
@@ -488,7 +513,7 @@ let main argv =
                 let result = readFile<QueryResults> argv.[1] "sparql-tunnel.json"
 
                 let tunnels =
-                    EraKG.Api.toTunnels result countries[argv.[2]]
+                    EraKG.Api.toTunnels result
                     |> fun tunnels -> // filter double entries
                         tunnels
                         |> Array.filter (fun tunnel ->
@@ -507,12 +532,13 @@ let main argv =
             }
         else if argv.[0] = "--SectionsOfLine"
                 && argv.Length > 2
-                && checkIsDir argv.[1]
-                && checkIsCountry argv.[2] then
+                && checkIsDir argv.[1] then
             async {
+                let! _ = checkIsCountry argv.[1] argv.[2]
+
                 let file =
                     argv.[1]
-                    + (if argv.Length > 3  && not (checkIsDir argv.[3]) then
+                    + (if argv.Length > 3 && not (checkIsDir argv.[3]) then
                            argv.[3]
                        else
                            $"sparql-sectionsOfLine.json")
@@ -530,8 +556,7 @@ let main argv =
 
                 let result = readFile<QueryResults> argv.[1] "sparql-sectionsOfLine.json"
 
-                let kgSols =
-                    EraKG.Api.toSectionsOfLine result countries[argv.[2]] railwaylines tracks
+                let kgSols = EraKG.Api.toSectionsOfLine result railwaylines tracks
 
                 fprintfn stderr $"kg sols: {kgSols.Length}"
 
@@ -559,8 +584,7 @@ let main argv =
             }
         else if argv.[0] = "--Tracks"
                 && argv.Length > 2
-                && checkIsDir argv.[1]
-                && checkIsCountry argv.[2] then
+                && checkIsDir argv.[1] then
 
             let operations =
                 [ 1..9 ]
@@ -575,6 +599,8 @@ let main argv =
                     })
 
             async {
+                let! _ = checkIsCountry argv.[1] argv.[2]
+
                 operations
                 |> Async.Sequential
                 |> Async.RunSynchronously

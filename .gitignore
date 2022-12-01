@@ -7,7 +7,7 @@
 
 src/RInfGraph/target.javascript/rinf-graph/data/*.json
 rinf-data/
-erakg-data/
+erakg-*data/
 rinf-data-*/
 db-data/
 osm-data/

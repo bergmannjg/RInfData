@@ -62,13 +62,39 @@ module Api =
 
     let private endpoint = "https://linked.ec-dataplatform.eu/sparql"
 
+    let countrySplitChars = [| ';' |]
+
+    /// see https://op.europa.eu/en/web/eu-vocabularies/dataset/-/resource?uri=http://publications.europa.eu/resource/dataset/country
+    let private countriesQuery () =
+        $"""
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX era: <http://data.europa.eu/949/>
+PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
+
+SELECT distinct ?country
+WHERE {{
+  ?operationalPoint a era:OperationalPoint .
+  ?operationalPoint era:inCountry ?country .
+}}
+"""
+
+    let loadCountriesData () : Async<string> =
+        Request.GetAsync endpoint (countriesQuery ()) Request.applicationSparqlResults
+
+
+    let private toCountryQuery (item: string) (countryArg: string) : string =
+        countryArg.Split countrySplitChars
+        |> Array.map (fun country ->
+            $"{{ {item} era:inCountry <http://publications.europa.eu/resource/authority/country/{country}> . }}")
+        |> String.concat " UNION "
+
     let private operationalPointQuery (country: string) =
         $"""
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 PREFIX era: <http://data.europa.eu/949/>
 PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
 
-SELECT distinct ?opName, ?uopid, ?opType, ?location, ?lineReference
+SELECT distinct ?opName, ?uopid, ?opType, ?location, ?lineReference, ?country
 WHERE {{
   ?operationalPoint a era:OperationalPoint .
   ?operationalPoint rdfs:label ?opName .
@@ -77,11 +103,9 @@ WHERE {{
   ?operationalPoint era:lineReference ?lineReference .
   ?operationalPoint <http://www.w3.org/2003/01/geo/wgs84_pos#location> ?location .
   ?operationalPoint era:opType ?opType .
-
-  FILTER(!STRSTARTS(STR(?opType), 'http://data.europa.eu/949/concepts/op-types/rinf/')).
-  ?operationalPoint era:inCountry <http://publications.europa.eu/resource/authority/country/{country}> .
+  ?operationalPoint era:inCountry ?country .
+  {toCountryQuery "?operationalPoint" country}
 }}
-Limit 30000
 """
 
     let loadOperationalPointData (country: string) : Async<string> =
@@ -93,7 +117,7 @@ PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 PREFIX era: <http://data.europa.eu/949/>
 PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
 
-SELECT distinct ?label, ?length, ?solNature, ?lineNationalId , ?imCode, ?startOp, ?endOp, ?track
+SELECT distinct ?label, ?length, ?solNature, ?lineNationalId , ?imCode, ?startOp, ?endOp, ?track, ?country
 WHERE {{
   ?sectionOfLine a era:SectionOfLine .
   ?sectionOfLine rdfs:label ?label .
@@ -104,17 +128,23 @@ WHERE {{
   ?sectionOfLine era:opStart ?startOp .
   ?sectionOfLine era:opEnd ?endOp .
   ?sectionOfLine era:track ?track .
-
-  ?sectionOfLine era:inCountry <http://publications.europa.eu/resource/authority/country/{country}> .
-  ?sectionOfLine era:solNature <http://data.europa.eu/949/concepts/sol-natures/Regular_SoL> .
+  ?sectionOfLine era:inCountry ?country .
+  {toCountryQuery "?sectionOfLine" country}
 }}
-Limit 30000
 """
 
     let loadSectionOfLineData (country: string) : Async<string> =
         Request.GetAsync endpoint (sectionOfLineQuery country) Request.applicationSparqlResults
 
     let private trackQuery (country: string) (n: int) =
+        let filter =
+            if n < 9 then
+                n.ToString()
+            else
+                (n.ToString() + "a-z")
+
+        let pattern = $"^[{filter}]"
+
         $"""
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 PREFIX era: <http://data.europa.eu/949/>
@@ -126,10 +156,8 @@ WHERE {{
   
   ?sectionOfLine era:lineNationalId ?lineNationalId .
   ?lineNationalId rdfs:label ?line .
-  FILTER(STRSTARTS(?line, "{n}")) .
-
-  ?sectionOfLine era:inCountry <http://publications.europa.eu/resource/authority/country/{country}> .
-  ?sectionOfLine era:solNature <http://data.europa.eu/949/concepts/sol-natures/Regular_SoL> .
+  FILTER(regex(?line, "{pattern}", "i")) .
+  {toCountryQuery "?sectionOfLine" country}
 }}
 """
 
@@ -141,7 +169,7 @@ WHERE {{
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 PREFIX era: <http://data.europa.eu/949/>
 
-SELECT distinct ?label, ?lineCategory
+SELECT distinct ?label, ?lineCategory, ?country
 WHERE {{
   ?nationalRailwayLine a era:NationalRailwayLine.
   ?nationalRailwayLine rdfs:label ?label .
@@ -149,8 +177,8 @@ WHERE {{
      ?nationalRailwayLine era:lineCategory ?lineCategory .
      FILTER(!STRSTARTS(STR(?lineCategory), 'http://data.europa.eu/949/concepts/line-category/rinf/')).
   }} .
-
-  ?nationalRailwayLine  era:inCountry <http://publications.europa.eu/resource/authority/country/{country}> .
+  ?nationalRailwayLine era:inCountry ?country .
+  {toCountryQuery "?nationalRailwayLine" country}
 }}
 """
 
@@ -162,7 +190,7 @@ WHERE {{
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 PREFIX era: <http://data.europa.eu/949/>
 
-SELECT distinct ?tunnel, ?tunnelIdentification, ?length, ?startlocation, ?endlocation, ?netElement 
+SELECT distinct ?tunnel, ?tunnelIdentification, ?length, ?startlocation, ?endlocation, ?netElement, ?country
 WHERE {{
   ?tunnel a era:Tunnel.
 
@@ -171,8 +199,8 @@ WHERE {{
   ?tunnel era:startLocation ?startlocation .
   ?tunnel era:endLocation ?endlocation .
   ?tunnel era:netElement ?netElement.
-
-  ?tunnel era:inCountry <http://publications.europa.eu/resource/authority/country/{country}> .
+  ?tunnel era:inCountry ?country .
+  {toCountryQuery "?tunnel" country}
 }}
 """
 
@@ -187,6 +215,9 @@ WHERE {{
 
     let private toOpType (r: Rdf) : string =
         uriTypeToString r "http://data.europa.eu/949/concepts/op-types/"
+
+    let private toCountryType (r: Rdf) : string =
+        uriTypeToString r "http://publications.europa.eu/resource/authority/country/"
 
     let private toNationalLines (r: Rdf) : string =
         uriTypeToString r "http://data.europa.eu/949/functionalInfrastructure/nationalLines/"
@@ -217,42 +248,51 @@ WHERE {{
             fprintfn stderr "%s" error.Message
             0.0
 
-    let toOperationalPoints (sparql: QueryResults) (country: string) : OperationalPoint [] =
+    let toOperationalPoints (sparql: QueryResults) (countries: string []) : OperationalPoint [] =
         sparql.results.bindings
         |> Array.fold
             (fun (ops: Map<string, OperationalPoint>) b ->
-                ops.Change(
-                    b.["uopid"].value,
-                    fun op ->
-                        match op with
-                        | Some op ->
-                            let candidate = toRailwayLocation b.["lineReference"]
+                let country = toCountryType b.["country"]
 
-                            if op.RailwayLocations |> Array.contains candidate then
-                                Some op
-                            else
+                if countries |> Array.contains country then
+                    ops.Change(
+                        b.["uopid"].value,
+                        fun op ->
+                            match op with
+                            | Some op ->
+                                let candidate = toRailwayLocation b.["lineReference"]
+
+                                if op.RailwayLocations |> Array.contains candidate then
+                                    Some op
+                                else
+                                    Some
+                                        { op with
+                                            RailwayLocations =
+                                                op.RailwayLocations
+                                                |> Array.append [| candidate |] }
+                            | None ->
+                                let lon, lat = toLocation b.["location"]
+
                                 Some
-                                    { op with
-                                        RailwayLocations =
-                                            op.RailwayLocations
-                                            |> Array.append [| candidate |] }
-                        | None ->
-                            let lon, lat = toLocation b.["location"]
-
-                            Some
-                                { Name = b.["opName"].value
-                                  Type = toOpType b.["opType"]
-                                  Country = country
-                                  UOPID = b.["uopid"].value
-                                  Latitude = lat
-                                  Longitude = lon
-                                  RailwayLocations = [| toRailwayLocation b.["lineReference"] |] }
-                ))
+                                    { Name = b.["opName"].value
+                                      Type = toOpType b.["opType"]
+                                      Country = country
+                                      UOPID = b.["uopid"].value
+                                      Latitude = lat
+                                      Longitude = lon
+                                      RailwayLocations = [| toRailwayLocation b.["lineReference"] |] }
+                    )
+                else
+                    ops)
             Map.empty
         |> Map.values
         |> Seq.toArray
 
-    let toRailwayLines (sparql: QueryResults) (country: string) : RailwayLine [] =
+    let toCountries (sparql: QueryResults) : string [] =
+        sparql.results.bindings
+        |> Array.map (fun b -> toCountryType b.["country"])
+
+    let toRailwayLines (sparql: QueryResults) : RailwayLine [] =
         sparql.results.bindings
         |> Array.fold
             (fun (lines: Map<string, RailwayLine>) b ->
@@ -273,7 +313,7 @@ WHERE {{
                         | None ->
                             Some
                                 { LineIdentification = b.["label"].value
-                                  Country = country
+                                  Country = toCountryType b.["country"]
                                   LineCategories = addLineCategory b [||] }
                 ))
             Map.empty
@@ -303,7 +343,7 @@ WHERE {{
                 |> Option.map (fun s -> s.Substring(prefixLoadCapabilities.Length)) }
         | None -> raise (System.Exception($"track {id} not found"))
 
-    let toTunnels (sparql: QueryResults) (country: string) : Tunnel [] =
+    let toTunnels (sparql: QueryResults) : Tunnel [] =
         sparql.results.bindings
         |> Array.fold
             (fun (ops: Map<string, Tunnel>) b ->
@@ -332,7 +372,7 @@ WHERE {{
 
                             Some
                                 { Name = b.["tunnelIdentification"].value
-                                  Country = country
+                                  Country = toCountryType b.["country"]
                                   LineIdentification = trackLabel.Substring(0, 4)
                                   Length = float b.["length"].value
                                   StartLatitude = startlat
@@ -357,12 +397,7 @@ WHERE {{
             fprintfn stderr $"line {lineIdentification} not found"
             false
 
-    let toSectionsOfLine
-        (sparql: QueryResults)
-        (country: string)
-        (lines: RailwayLine [])
-        (tracks: Microdata)
-        : SectionOfLine [] =
+    let toSectionsOfLine (sparql: QueryResults) (lines: RailwayLine []) (tracks: Microdata) : SectionOfLine [] =
         sparql.results.bindings
         |> Array.fold
             (fun (sols: Map<string, SectionOfLine>) b ->
@@ -383,7 +418,7 @@ WHERE {{
                             | None ->
                                 Some
                                     { Name = b.["label"].value
-                                      Country = country
+                                      Country = toCountryType b.["country"]
                                       Length = toFloat b.["length"]
                                       LineIdentification = toNationalLines b.["lineNationalId"]
                                       IMCode = b.["imCode"].value

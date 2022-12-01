@@ -20,9 +20,7 @@ module Request =
             let client = new Http.HttpClient(createHandler ())
             client.DefaultRequestHeaders.Add("Accept", format)
 
-            let url =
-                baseurl
-                + System.Web.HttpUtility.UrlEncode(query)
+            let url = baseurl + System.Web.HttpUtility.UrlEncode(query)
 
             let! response = client.GetAsync(url) |> Async.AwaitTask
 
