@@ -31,6 +31,18 @@ OPTIONS:
 let readFile<'a> path name =
     JsonSerializer.Deserialize<'a>(File.ReadAllText(path + name))
 
+let loadDataCached<'a> path name (loader: unit -> Async<string>) =
+    async {
+        let file = path + name
+
+        if not (File.Exists file) then
+            let! result = loader ()
+            fprintfn stderr $"{name}, {result.Length} bytes"
+            File.WriteAllText(file, result)
+
+        return readFile<'a> path name
+    }
+
 let kilometerOfLine (op: OperationalPoint) (line: string) =
     op.RailwayLocations
     |> Array.tryFind (fun loc -> loc.NationalIdentNum = line)
@@ -358,13 +370,7 @@ let checkIsDir (path: string) = Directory.Exists path
 let checkIsCountry (path: string) (countryArg: string) : Async<string []> =
     async {
 
-        let file = path + $"sparql-countries.json"
-
-        if not (File.Exists file) then
-            let! result = EraKG.Api.loadCountriesData ()
-            File.WriteAllText(file, result)
-
-        let result = readFile<QueryResults> path "sparql-countries.json"
+        let! result = loadDataCached path "sparql-countries.json" (fun () -> Api.loadCountriesData ())
 
         let allCountries = Api.toCountries result
 
@@ -447,34 +453,13 @@ let main argv =
             async {
                 let! countries = checkIsCountry argv.[1] argv.[2]
 
-                let file =
-                    argv.[1]
-                    + (if argv.Length > 3 && not (checkIsDir argv.[3]) then
-                           argv.[3]
-                       else
-                           $"sparql-operationalPoints.json")
-
-                if not (File.Exists file) then
-                    let! result = EraKG.Api.loadOperationalPointData argv.[2]
-                    fprintfn stderr $"loadOperationalPointData, {result.Length} bytes"
-                    File.WriteAllText(file, result)
-
-                let result = readFile<QueryResults> argv.[1] "sparql-operationalPoints.json"
+                let! result =
+                    loadDataCached argv.[1] "sparql-operationalPoints.json" (fun () ->
+                        Api.loadOperationalPointData argv.[2])
 
                 let kgOps = Api.toOperationalPoints result countries
 
                 fprintfn stderr $"kg ops: {kgOps.Length}"
-
-                if argv.Length > 3 && checkIsDir argv.[3] then
-                    let rinfOps = readFile<RInf.OperationalPoint []> argv.[3] "OperationalPoints.json"
-                    fprintfn stderr $"rinf ops: {rinfOps.Length}"
-
-                    rinfOps
-                    |> Array.filter (fun rinfOp ->
-                        kgOps
-                        |> Array.exists (fun kgOp -> kgOp.UOPID = rinfOp.UOPID)
-                        |> not)
-                    |> Array.iter (fun op -> fprintfn stderr $"notFound in kgOps: {op.Name} {op.UOPID}")
 
                 return JsonSerializer.Serialize kgOps
             }
@@ -484,14 +469,10 @@ let main argv =
             async {
                 let! _ = checkIsCountry argv.[1] argv.[2]
 
-                let file = argv.[1] + $"sparql-railwayline.json"
+                let! result =
+                    loadDataCached argv.[1] "sparql-railwayline.json" (fun () ->
+                        Api.loadNationalRailwayLineData argv.[2])
 
-                if not (File.Exists file) then
-                    let! result = EraKG.Api.loadNationalRailwayLineData argv.[2]
-                    fprintfn stderr $"loadNationalRailwayLineData, {result.Length} bytes"
-                    File.WriteAllText(file, result)
-
-                let result = readFile<QueryResults> argv.[1] "sparql-railwayline.json"
                 let railwaylines = EraKG.Api.toRailwayLines result
                 fprintfn stderr $"kg railwaylines: {railwaylines.Length}"
 
@@ -503,14 +484,7 @@ let main argv =
             async {
                 let! _ = checkIsCountry argv.[1] argv.[2]
 
-                let file = argv.[1] + $"sparql-tunnel.json"
-
-                if not (File.Exists file) then
-                    let! result = EraKG.Api.loadTunnelData argv.[2]
-                    fprintfn stderr $"loadTunnelData, {result.Length} bytes"
-                    File.WriteAllText(file, result)
-
-                let result = readFile<QueryResults> argv.[1] "sparql-tunnel.json"
+                let! result = loadDataCached argv.[1] "sparql-tunnel.json" (fun () -> Api.loadTunnelData argv.[2])
 
                 let tunnels =
                     EraKG.Api.toTunnels result
@@ -536,25 +510,14 @@ let main argv =
             async {
                 let! _ = checkIsCountry argv.[1] argv.[2]
 
-                let file =
-                    argv.[1]
-                    + (if argv.Length > 3 && not (checkIsDir argv.[3]) then
-                           argv.[3]
-                       else
-                           $"sparql-sectionsOfLine.json")
-
-                if not (File.Exists file) then
-                    let! result = EraKG.Api.loadSectionOfLineData argv.[2]
-                    fprintfn stderr $"loadSectionOfLineData, {result.Length} bytes"
-                    File.WriteAllText(file, result)
+                let! result =
+                    loadDataCached argv.[1] "sparql-sectionsOfLine.json" (fun () -> Api.loadSectionOfLineData argv.[2])
 
                 let tracks = readFile<Microdata> argv.[1] "sparql-tracks.json"
                 fprintfn stderr $"kg tracks: {tracks.items.Length}"
 
                 let railwaylines = readFile<RailwayLine []> argv.[1] "Railwaylines.json"
                 fprintfn stderr $"kg railwaylines: {railwaylines.Length}"
-
-                let result = readFile<QueryResults> argv.[1] "sparql-sectionsOfLine.json"
 
                 let kgSols = EraKG.Api.toSectionsOfLine result railwaylines tracks
 
@@ -589,34 +552,22 @@ let main argv =
             let operations =
                 [ 1..9 ]
                 |> List.map (fun n ->
-                    async {
-                        let file = argv.[1] + $"sparql-tracks-{n}.json"
-
-                        if not (File.Exists file) then
-                            let! result = EraKG.Api.loadTrackData argv.[2] n
-                            fprintfn stderr $"load prefix {n}, {result.Length} bytes"
-                            File.WriteAllText(file, result)
-                    })
+                    loadDataCached<Microdata> argv.[1] $"sparql-tracks-{n}.json" (fun () -> Api.loadTrackData argv.[2] n))
 
             async {
                 let! _ = checkIsCountry argv.[1] argv.[2]
 
-                operations
-                |> Async.Sequential
-                |> Async.RunSynchronously
-                |> ignore
+                let! _ =
+                    loadDataCached<Microdata> argv.[1] $"sparql-tracks.json" (fun () ->
+                        async {
+                            let items =
+                                operations
+                                |> Async.Sequential
+                                |> Async.RunSynchronously
+                                |> Array.collect (fun result -> result.items |> Array.choose chooseItem)
 
-                let items =
-                    [| 1..9 |]
-                    |> Array.collect (fun n ->
-                        let result = readFile<Microdata> argv.[1] $"sparql-tracks-{n}.json"
-                        result.items |> Array.choose chooseItem)
-
-                fprintfn stderr $"items: {items.Length}"
-                let filtered = { items = items }
-
-                let json = JsonSerializer.Serialize(filtered)
-                File.WriteAllText(argv.[1] + "sparql-tracks.json", json)
+                            return JsonSerializer.Serialize({ items = items })
+                        })
 
                 return ""
             }
