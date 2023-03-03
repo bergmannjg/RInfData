@@ -4,7 +4,8 @@ open System.Text.Json
 
 open Sparql
 open EraKG
-open OSM
+open OSM.Sparql
+open OSM.Comparison
 
 let printHelp () =
     """
@@ -24,57 +25,6 @@ let readFile<'a> path name =
 
 let checkIsDir (path: string) = Directory.Exists path
 
-let filterUnmatchedUOPID (operationalPoints: OperationalPoint []) (osmEntries: Entry []) : OperationalPoint [] =
-    let fill (s: string) (len: int) =
-        if s.Length < len then
-            System.String('0', len - s.Length)
-        else
-            ""
-
-    /// from railwayRef to opid
-    let toOPID (s: string) =
-        if s.Length > 0 && s.Length <= 5 then
-            "DE" + (fill s 5) + s.Replace(" ", "0")
-        else
-            ""
-
-    let matchType (op: OperationalPoint) =
-        op.Type = "station" || op.Type = "passengerStop"
-
-    let matchUOPID (railwayRef: string) (uOPID: string) =
-        toOPID railwayRef = uOPID.Replace(" ", "0")
-        || if uOPID.Contains "  "
-              && railwayRef.Length = 4
-              && railwayRef.Contains " " then
-               let railwayRefX = railwayRef.Replace(" ", "  ")
-               toOPID railwayRefX = uOPID.Replace(" ", "0") // matches 'TU R' with 'DETU  R'
-           else
-               false
-
-    operationalPoints
-    |> Array.filter (fun op ->
-        matchType op
-        && osmEntries
-           |> Array.exists (fun entry ->
-               entry.RailwayRef.IsSome
-               && matchUOPID entry.RailwayRef.Value op.UOPID)
-           |> not)
-
-let filterByName (operationalPoints: OperationalPoint []) (osmEntries: Entry []) : OperationalPoint [] =
-    operationalPoints
-    |> Array.filter (fun op ->
-        match osmEntries
-              |> Array.tryFind (fun entry -> entry.Name = op.Name)
-            with
-        | Some entry ->
-            if entry.RailwayRef.IsSome then
-                fprintfn
-                    stderr
-                    $"found by name {entry.Name}, RailwayRef '{entry.RailwayRef.Value}' distinct from UOPID '{op.UOPID}'"
-
-            true
-        | None -> false)
-
 [<EntryPoint>]
 let main argv =
     try
@@ -87,17 +37,33 @@ let main argv =
                 let file = argv.[1] + $"sparql-osm.json"
 
                 if not (File.Exists file) then
-                    let! result = OSM.Api.loadOsmData ()
+                    let! result = OSM.Sparql.Api.loadOsmData ()
                     fprintfn stderr $"loadOsmData, {result.Length} bytes"
                     File.WriteAllText(file, result)
 
                 let result = readFile<QueryResults> argv.[1] "sparql-osm.json"
-                let entries = OSM.Api.toEntries result
+                let entries = OSM.Sparql.Api.ToEntries result
                 fprintfn stderr $"osm entries: {entries.Length}"
 
                 return JsonSerializer.Serialize entries
             }
-        else if argv.[0] = "--Osm.Compare"
+        else if argv.[0] = "--Wikidata"
+                && argv.Length > 1
+                && checkIsDir argv.[1] then
+            async {
+                let file = argv.[1] + $"sparql-wikidata.json"
+
+                if not (File.Exists file) then
+                    let! result = Wikidata.Sparql.Api.loadOsmData ()
+                    fprintfn stderr $"loadWikidata, {result.Length} bytes"
+                    File.WriteAllText(file, result)
+
+                let result = readFile<QueryResults> argv.[1] "sparql-wikidata.json"
+                let entries = Wikidata.Sparql.Api.ToEntries result
+
+                return JsonSerializer.Serialize entries
+            }
+        else if argv.[0].StartsWith "--Wikidata.Compare"
                 && argv.Length > 1
                 && checkIsDir argv.[1] then
             async {
@@ -106,23 +72,63 @@ let main argv =
 
                 fprintfn stderr $"kg operationalPoints: {operationalPoints.Length}"
 
-                let osmEntries = readFile<OSM.Entry []> argv.[1] "OsmEntries.json"
+                let wikidataEntries =
+                    readFile<Wikidata.Sparql.Entry []> argv.[1] "WikidataEntries.json"
+
+                fprintfn stderr $"kg wikidataEntries: {wikidataEntries.Length}"
+
+                Wikidata.Comparison.compare (argv.[0] = "--Wikidata.Compare.Extra") operationalPoints wikidataEntries
+
+                return ""
+            }
+        else if argv.[0].StartsWith "--Osm.Compare"
+                && argv.Length > 1
+                && checkIsDir argv.[1] then
+            async {
+                let operationalPoints =
+                    readFile<OperationalPoint []> argv.[1] "OperationalPoints.json"
+
+                fprintfn stderr $"kg operationalPoints: {operationalPoints.Length}"
+
+                let osmEntries = readFile<Entry []> argv.[1] "OsmEntries.json"
                 fprintfn stderr $"kg osmEntries: {osmEntries.Length}"
 
-                let operationalPointsNotFound = filterUnmatchedUOPID operationalPoints osmEntries
+                compare (argv.[0] = "--Osm.Compare.Extra") operationalPoints osmEntries
 
-                let notFound = operationalPointsNotFound.Length
-                let found = operationalPoints.Length - notFound
+                return ""
+            }
+        else if argv.[0].StartsWith "--Osm.Query"
+                && argv.Length > 2
+                && checkIsDir argv.[1] then
+            async {
+                let osmEntries = readFile<Entry []> argv.[1] "OsmEntries.json"
+                fprintfn stderr $"kg osmEntries: {osmEntries.Length}"
 
-                let opsFoundByName = filterByName operationalPointsNotFound osmEntries
-                let foundByName = opsFoundByName.Length
+                osmEntries
+                |> Array.filter (fun entry ->
+                    entry.Name = argv.[2]
+                    || entry.Stop.Contains argv.[2])
+                |> Array.map (fun entry ->
+                    printfn $"{entry}"
+                    entry)
+                |> Array.iter (fun entry ->
+                    if entry.RailwayRef.IsSome then
+                        printfn $"***** {entry.Stop} {entry.RailwayRef.Value}")
 
-                operationalPointsNotFound
-                |> Array.groupBy (fun op -> op.Type)
-                |> Array.iter (fun (k, l) -> fprintfn stderr $"type {k}, not found {l.Length}")
+                return ""
+            }
+        else if argv.[0].StartsWith "--Osm.Get" && argv.Length > 2 then
+            async {
+                let! json = OSM.Api.loadOsmData argv.[1] argv.[2]
+                printfn $"{json}"
 
-                fprintfn stderr $"found {found}, not found {notFound}, foundByName {foundByName}"
-                return JsonSerializer.Serialize operationalPointsNotFound
+                match json with
+                | Some osmjson when osmjson.elements.Length > 0 ->
+                    let entries = OSM.Api.ToEntries osmjson
+                    printfn $"{entries.[0]}"
+                | _ -> ()
+
+                return ""
             }
         else
             async {

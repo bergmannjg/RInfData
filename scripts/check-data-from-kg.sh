@@ -29,6 +29,9 @@ if [ ! -f ${RINF_DATA_DIR}/sparql-operationalPoints.json ]; then
     exit 1
 fi
 
+rm -f ${RINF_DATA_DIR}/sparql-operationalPoints-new.json
+rm -f ${RINF_DATA_DIR}/sparql-sectionsOfLine-new.json
+
 dotnet run --project src/EraKGLoader/EraKGLoader.fsproj --OperationalPoints ${RINF_DATA_DIR}/ $1 sparql-operationalPoints-new.json > /dev/null
 
 diff -e ${RINF_DATA_DIR}/sparql-operationalPoints.json ${RINF_DATA_DIR}/sparql-operationalPoints-new.json 2> /dev/null

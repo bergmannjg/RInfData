@@ -1,10 +1,10 @@
 # Comparison of ERA knowledge graph and OSM Railway data
 
-Comparison of ERA knowledge graph data and [OSM Railway](https://wiki.openstreetmap.org/wiki/Railways) data.
+Comparison of [ERA](https://www.era.europa.eu/) knowledge graph data and [OSM Railway](https://wiki.openstreetmap.org/wiki/Railways) data.
 
 * ERA [vocabulary](https://data-interop.era.europa.eu/era-vocabulary/)
-* ERA [knowledge graph](https://era-web.linkeddata.es/sparql.html).
-* [SPARQL Endpoint](https://ad-publications.cs.uni-freiburg.de/SIGSPATIAL_osm2rdf_BBKL_2021.pdf) for OSM Data.
+* [SPARQL Endpoint](https://era-web.linkeddata.es/sparql.html) for ERA data,
+* [SPARQL Endpoint](https://qlever.cs.uni-freiburg.de/osm-germany) for OSM data.
 
 ## Data models
 
@@ -41,13 +41,18 @@ The OSM railway data is loaded with the following SPARQL query:
 ```SparQl
 PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
 PREFIX osmkey: <https://www.openstreetmap.org/wiki/Key:>
-SELECT distinct ?name ?railway ?railway_ref ?uic_ref ?type WHERE {
-  ?stop osmkey:railway ?railway .
+SELECT distinct ?stop ?public_transport ?railway ?name ?type ?railway_ref ?uic_ref ?railway_ref_DBAG WHERE {
   ?stop osmkey:name ?name .
   ?stop rdf:type ?type .
-  {?stop osmkey:railway:ref ?railway_ref . }
+  { ?stop osmkey:railway ?railway . }
   UNION
-  {?stop osmkey:uic_ref ?uic_ref . }
+  { ?stop osmkey:public_transport ?public_transport . }
+  OPTIONAL {
+      {?stop osmkey:railway:ref ?railway_ref . }
+      UNION
+      {?stop osmkey:uic_ref ?uic_ref . }
+  }
+   OPTIONAL { ?stop osmkey:railway:ref:DBAG ?railway_ref_DBAG . }
 }
 ```
 
@@ -57,6 +62,6 @@ ERA KG operational points with type station or passenger stop are compared with 
 
 |RInf ops|Count|
 |---|---:|
-|total|7957|
-|OSM data found|7538|
-|OSM data not found|419|
+|total|6542|
+|OSM data found|6249|
+|OSM data not found|293|

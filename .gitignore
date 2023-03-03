@@ -5,9 +5,11 @@
 .fake
 .fsdocs/
 
+graaljs*/
+
 src/RInfGraph/target.javascript/rinf-graph/data/*.json
 rinf-data/
-erakg-*data/
+erakg-*data*/
 rinf-data-*/
 db-data/
 osm-data/
@@ -31,3 +33,4 @@ package-lock.json
 [xyz].json
 [xyz].txt
 src/RInfGraph/lineinfos*.json
+scripts/josm-changes.js

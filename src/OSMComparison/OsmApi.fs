@@ -1,48 +1,70 @@
 namespace OSM
 
-type Entry =
-    { Name: string
-      Railway: string
-      RailwayRef: string option
-      UicRef: string option
-      OsmType: string }
+type Element =
+    { ``type``: string
+      id: int64
+      lat: float option
+      lon: float option
+      timestamp: string
+      version: int32
+      changeset: int64
+      user: string
+      tags: Map<string, string> option }
+
+type OsmJson = { elements: Element [] }
 
 module Api =
 
-    open Sparql
+    open System.Net
+    open System.Text.Json
+    open OSM.Sparql
+    
+    let applicationJson = "application/json"
 
-    let private endpoint = "https://qlever.cs.uni-freiburg.de/api/osm-germany"
+    let private GetAsync (url: string) : Async<OsmJson option> =
+        async {
 
-    let private osmQuery () =
-        $"""
-PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-PREFIX osmkey: <https://www.openstreetmap.org/wiki/Key:>
-SELECT distinct ?name ?railway ?railway_ref ?uic_ref ?type WHERE {{
-  ?stop osmkey:railway ?railway .
-  ?stop osmkey:name ?name .
-  ?stop rdf:type ?type .
-  {{?stop osmkey:railway:ref ?railway_ref . }}
-  UNION
-  {{?stop osmkey:uic_ref ?uic_ref . }}
-}}
-"""
+            let client = new Http.HttpClient()
+            client.DefaultRequestHeaders.Add("Accept", applicationJson)
 
-    let loadOsmData () : Async<string> =
-        EraKG.Request.GetAsync endpoint (osmQuery ()) EraKG.Request.applicationSparqlResults
+            let! response = client.GetAsync(url) |> Async.AwaitTask
 
-    let toEntries (sparql: QueryResults) : Entry [] =
-        sparql.results.bindings
-        |> Array.map (fun b ->
-            { Name = b.["name"].value
-              Railway = b.["railway"].value
-              RailwayRef =
-                if b.ContainsKey "railway_ref" then
-                    Some b.["railway_ref"].value
-                else
-                    None
-              UicRef =
-                if b.ContainsKey "uic_ref" then
-                    Some b.["uic_ref"].value
-                else
-                    None
-              OsmType = b.["type"].value })
+            let! body =
+                response.Content.ReadAsStringAsync()
+                |> Async.AwaitTask
+
+            return
+                match response.IsSuccessStatusCode with
+                | true -> Some(JsonSerializer.Deserialize<OsmJson>(body))
+                | false -> None
+        }
+
+    let private endpoint = "https://api.openstreetmap.org/api/0.6/"
+
+    let loadOsmData (``type``: string) (id: string) : Async<OsmJson option> =
+        GetAsync(endpoint + ``type`` + "/" + id)
+
+    let private maybeGetTag (e: Element) (key: string) =
+        match e.tags with
+        | Some tags ->
+            if tags.ContainsKey key then
+                Some tags.[key]
+            else
+                None
+        | None -> None
+
+    let private getTag (e: Element) (key: string) =
+        match maybeGetTag e key with
+        | Some v -> v
+        | None -> ""
+
+    let ToEntries (json: OsmJson) : Entry [] =
+        json.elements
+        |> Array.map (fun e ->
+            { Stop = ""
+              Name = getTag e "name"
+              PublicTransport = maybeGetTag e "public_transport"
+              Railway = maybeGetTag e "railway"
+              RailwayRef = maybeGetTag e "railway:ref"
+              UicRef = maybeGetTag e "uic_ref"
+              OsmType = e.``type`` })

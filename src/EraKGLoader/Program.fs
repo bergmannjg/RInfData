@@ -452,9 +452,9 @@ let main argv =
                 && checkIsDir argv.[1] then
             async {
                 let! countries = checkIsCountry argv.[1] argv.[2]
-
+                let filename = if argv.Length > 3 then argv.[3] else "sparql-operationalPoints.json"
                 let! result =
-                    loadDataCached argv.[1] "sparql-operationalPoints.json" (fun () ->
+                    loadDataCached argv.[1] filename (fun () ->
                         Api.loadOperationalPointData argv.[2])
 
                 let kgOps = Api.toOperationalPoints result countries
@@ -509,9 +509,9 @@ let main argv =
                 && checkIsDir argv.[1] then
             async {
                 let! _ = checkIsCountry argv.[1] argv.[2]
-
+                let filename = if argv.Length > 3 then argv.[3] else "sparql-sectionsOfLine.json"
                 let! result =
-                    loadDataCached argv.[1] "sparql-sectionsOfLine.json" (fun () -> Api.loadSectionOfLineData argv.[2])
+                    loadDataCached argv.[1] filename (fun () -> Api.loadSectionOfLineData argv.[2])
 
                 let tracks = readFile<Microdata> argv.[1] "sparql-tracks.json"
                 fprintfn stderr $"kg tracks: {tracks.items.Length}"
