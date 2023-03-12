@@ -63,5 +63,5 @@ ERA KG operational points with type station or passenger stop are compared with 
 |RInf ops|Count|
 |---|---:|
 |total|6542|
-|OSM data found|6249|
-|OSM data not found|293|
+|OSM data found|6195|
+|OSM data not found|347|

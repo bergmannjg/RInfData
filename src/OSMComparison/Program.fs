@@ -17,6 +17,8 @@ OPTIONS:
                           load OSM data.
     --Osm.Compare         <dataDir>
                           compare OSM data.
+    --Osm.Analyze         <dataDir>
+                          analyze not found operational points.
     --help                display this list of options.
 """
 
@@ -25,9 +27,21 @@ let readFile<'a> path name =
 
 let checkIsDir (path: string) = Directory.Exists path
 
+let server = "qlever.cs.uni-freiburg.de"
+
+let endpoint (server: string) = $"https://{server}/api/osm-germany"
+
 [<EntryPoint>]
 let main argv =
     try
+        let getServer () =
+            if argv.Length > 2 then
+                argv.[2]
+            else
+                server
+
+        let getEndpoint () = endpoint <| getServer ()
+
         if argv.Length = 0 then
             async { return printHelp () }
         else if argv.[0] = "--Osm"
@@ -37,7 +51,7 @@ let main argv =
                 let file = argv.[1] + $"sparql-osm.json"
 
                 if not (File.Exists file) then
-                    let! result = OSM.Sparql.Api.loadOsmData ()
+                    let! result = OSM.Sparql.Api.loadOsmData (getEndpoint ())
                     fprintfn stderr $"loadOsmData, {result.Length} bytes"
                     File.WriteAllText(file, result)
 
@@ -46,6 +60,18 @@ let main argv =
                 fprintfn stderr $"osm entries: {entries.Length}"
 
                 return JsonSerializer.Serialize entries
+            }
+        else if argv.[0] = "--Osm.Reload"
+                && argv.Length > 1
+                && checkIsDir argv.[1] then
+            async {
+                let file = argv.[1] + $"sparql-osm-new.json"
+
+                let! result = OSM.Sparql.Api.loadOsmData (getEndpoint ())
+                fprintfn stderr $"loadOsmData, {result.Length} bytes"
+                File.WriteAllText(file, result)
+
+                return ""
             }
         else if argv.[0] = "--Wikidata"
                 && argv.Length > 1
@@ -63,7 +89,7 @@ let main argv =
 
                 return JsonSerializer.Serialize entries
             }
-        else if argv.[0].StartsWith "--Wikidata.Compare"
+        else if argv.[0] = "--Wikidata.Compare"
                 && argv.Length > 1
                 && checkIsDir argv.[1] then
             async {
@@ -81,7 +107,7 @@ let main argv =
 
                 return ""
             }
-        else if argv.[0].StartsWith "--Osm.Compare"
+        else if argv.[0] = "--Osm.Compare"
                 && argv.Length > 1
                 && checkIsDir argv.[1] then
             async {
@@ -93,7 +119,28 @@ let main argv =
                 let osmEntries = readFile<Entry []> argv.[1] "OsmEntries.json"
                 fprintfn stderr $"kg osmEntries: {osmEntries.Length}"
 
-                compare (argv.[0] = "--Osm.Compare.Extra") operationalPoints osmEntries
+                let operationalPointsNotFound = compare operationalPoints osmEntries
+
+                File.WriteAllText(
+                    argv.[1] + "OperationalPointsNotFound.json",
+                    JsonSerializer.Serialize(operationalPointsNotFound)
+                )
+
+                return ""
+            }
+        else if argv.[0].StartsWith "--Osm.Analyze"
+                && argv.Length > 1
+                && checkIsDir argv.[1] then
+            async {
+                let operationalPointsNotFound =
+                    readFile<OperationalPoint []> argv.[1] "OperationalPointsNotFound.json"
+
+                fprintfn stderr $"kg operationalPoints to analyze: {operationalPointsNotFound.Length}"
+
+                let osmEntries = readFile<Entry []> argv.[1] "OsmEntries.json"
+                fprintfn stderr $"kg osmEntries: {osmEntries.Length}"
+
+                analyze (argv.[0].StartsWith "--Osm.Analyze.Extra") operationalPointsNotFound osmEntries
 
                 return ""
             }
@@ -114,6 +161,21 @@ let main argv =
                 |> Array.iter (fun entry ->
                     if entry.RailwayRef.IsSome then
                         printfn $"***** {entry.Stop} {entry.RailwayRef.Value}")
+
+                return ""
+            }
+        else if argv.[0].StartsWith "--Osm.Operator"
+                && argv.Length > 1
+                && checkIsDir argv.[1] then
+            async {
+                let osmEntries = readFile<Entry []> argv.[1] "OsmEntries.json"
+                fprintfn stderr $"kg osmEntries: {osmEntries.Length}"
+
+                osmEntries
+                |> Array.filter (fun entry -> entry.Operator.IsSome)
+                |> Array.groupBy (fun entry -> entry.Operator.Value)
+                |> Array.sortBy (fun (k, l) -> k)
+                |> Array.iter (fun (k, l) -> printfn $"operator {k} {l.Length}")
 
                 return ""
             }

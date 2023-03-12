@@ -67,4 +67,7 @@ module Api =
               Railway = maybeGetTag e "railway"
               RailwayRef = maybeGetTag e "railway:ref"
               UicRef = maybeGetTag e "uic_ref"
+              Operator = None
+              Latitude = e.lat |> Option.defaultValue 0.0
+              Longitude = e.lon |> Option.defaultValue 0.0
               OsmType = e.``type`` })
