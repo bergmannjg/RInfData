@@ -45,6 +45,7 @@ type GraphEdge =
       Line: string
       IMCode: string
       MaxSpeed: int
+      Electrified: bool
       StartKm: float
       EndKm: float
       Length: float }
@@ -97,6 +98,7 @@ module Graph =
               Line = line
               IMCode = imcode
               MaxSpeed = maxSpeed
+              Electrified = true
               StartKm = startKm
               EndKm = endKm
               Length = length }
@@ -145,12 +147,12 @@ module Graph =
                 |> Array.filter (fun edge -> edge.Node = n2)
                 |> Array.sortBy (fun e -> e.Cost)
 
-            let (cost, line, imcode, maxSpeed, startKm, endKm, length) =
+            let (cost, line, imcode, maxSpeed, electrified, startKm, endKm, length) =
                 edges
                 |> Seq.tryHead
                 |> Option.map (fun edge ->
-                    (edge.Cost, edge.Line, edge.IMCode, edge.MaxSpeed, edge.StartKm, edge.EndKm, edge.Length))
-                |> Option.defaultValue (0, "", "", 0, 0.0, 0.0, 0.0)
+                    (edge.Cost, edge.Line, edge.IMCode, edge.MaxSpeed, edge.Electrified, edge.StartKm, edge.EndKm, edge.Length))
+                |> Option.defaultValue (0, "", "", 0, false, 0.0, 0.0, 0.0)
 
             { Node = n1
               Edges =
@@ -159,6 +161,7 @@ module Graph =
                      Line = line
                      IMCode = imcode
                      MaxSpeed = maxSpeed
+                     Electrified = electrified
                      StartKm = startKm
                      EndKm = endKm
                      Length = length } |] }
@@ -243,6 +246,7 @@ module Graph =
                         edge1.MaxSpeed
                     else
                         edge2.MaxSpeed
+                  Electrified = edge1.Electrified && edge2.Electrified
                   StartKm = edge1.StartKm
                   EndKm = edge2.EndKm
                   Length = edge1.Length + edge2.Length }

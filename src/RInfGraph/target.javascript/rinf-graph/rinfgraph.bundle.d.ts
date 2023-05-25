@@ -46,6 +46,7 @@ export interface GraphEdge {
     Line: string;
     IMCode: string;
     MaxSpeed: number;
+    Electrified: boolean;
     StartKm: number;
     EndKm: number;
     Length: number;

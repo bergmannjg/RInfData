@@ -39,8 +39,9 @@ let loadDataCached<'a> path name (loader: unit -> Async<string>) =
             let! result = loader ()
             fprintfn stderr $"{name}, {result.Length} bytes"
             File.WriteAllText(file, result)
+            return readFile<'a> path name
 
-        return readFile<'a> path name
+        else return readFile<'a> path name
     }
 
 let kilometerOfLine (op: OperationalPoint) (line: string) =
@@ -269,6 +270,11 @@ let getMaxSpeed (sol: SectionOfLine) (defaultValue: int) =
     |> Array.tryHead
     |> Option.defaultValue defaultValue
 
+let isElectrified (sol: SectionOfLine) =
+    sol.Tracks
+    |> Array.choose (fun t -> t.contactLineSystem)
+    |> Array.forall (fun s -> not (s.Contains "not electrified"))
+
 let nullDefaultValue<'a when 'a: null> (defaultValue: 'a) (value: 'a) =
     if isNull value then
         defaultValue
@@ -312,6 +318,7 @@ let buildGraph (ops: OperationalPoint []) (sols: SectionOfLine []) =
                       Line = sol.LineIdentification
                       IMCode = sol.IMCode
                       MaxSpeed = maxSpeed
+                      Electrified = isElectrified sol
                       StartKm = kilometerOfLine opStart sol.LineIdentification
                       EndKm = kilometerOfLine opEnd sol.LineIdentification
                       Length = length sol }
@@ -326,6 +333,7 @@ let buildGraph (ops: OperationalPoint []) (sols: SectionOfLine []) =
                       Line = sol.LineIdentification
                       IMCode = sol.IMCode
                       MaxSpeed = maxSpeed
+                      Electrified = isElectrified sol
                       StartKm = kilometerOfLine opEnd sol.LineIdentification
                       EndKm = kilometerOfLine opStart sol.LineIdentification
                       Length = length sol }
@@ -349,6 +357,7 @@ let chooseItem (item: Item) =
     if item.id.StartsWith EraKG.Api.prefixTrack then
         [ EraKG.Api.propLabel
           EraKG.Api.propMaximumPermittedSpeed
+          EraKG.Api.propContactLineSystem
           EraKG.Api.propLoadCapability
           EraKG.Api.propTenClassification ]
         |> List.map (fun prop ->

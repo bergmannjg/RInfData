@@ -55,6 +55,11 @@ let toMap (opInfos: OpInfo []) =
             m)
         (Dictionary<string, OpInfo>())
 
+let isElectrified (sol: EraKG.SectionOfLine) =
+    sol.Tracks
+    |> Array.choose (fun t -> t.contactLineSystem)
+    |> Array.forall (fun s -> not (s.Contains "not electrified"))
+
 [<EntryPoint>]
 let main argv =
     try
@@ -239,7 +244,7 @@ let main argv =
                     match startOp, endOp with
                     | Some (startOp, startKm), Some (endOp, endKm) ->
                         printfn
-                            "%s/%s - %s/%s, start: %.1f, end: %.1f, length: %.1f, maxspeed: %d %s"
+                            "%s/%s - %s/%s, start: %.1f, end: %.1f, len: %.1f, speed: %d electrified: %b %s"
                             startOp.UOPID
                             startOp.Type
                             endOp.UOPID
@@ -248,8 +253,20 @@ let main argv =
                             endKm
                             (sol.Length / 1000.0)
                             (getMaxSpeed sol 50)
+                            (isElectrified sol)
                             sol.Name
                     | _ -> printfn "ops not found: %s" sol.Name)
+
+                return ""
+            }
+        else if argv.[0] = "--EraKG.SectionsOfLine.Electrified"
+                && argv.Length > 1 then
+            async {
+                let sols = readFile<EraKG.SectionOfLine []> argv.[1] "SectionsOfLines.json"
+
+                sols
+                |> Array.groupBy (fun sol -> isElectrified sol)
+                |> Array.iter (fun (k,sols) -> printfn "electrified: %s, length: %.0f" (if k then "true " else "false") (sols |> Array.sumBy(fun sol -> sol.Length)))
 
                 return ""
             }

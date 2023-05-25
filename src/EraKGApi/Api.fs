@@ -21,7 +21,8 @@ type Track =
     { id: string
       label: string
       maximumPermittedSpeed: int option
-      loadCapability: string option }
+      loadCapability: string option
+      contactLineSystem: string option }
 
 type RailwayLine =
     { LineIdentification: string
@@ -54,8 +55,10 @@ module Api =
     open Sparql
 
     let prefixTrack = "http://data.europa.eu/949/functionalInfrastructure/tracks/"
+    let prefixContactLineSystem = "http://data.europa.eu/949/functionalInfrastructure/contactLineSystems/"
     let propLabel = "http://www.w3.org/2000/01/rdf-schema#label"
     let propMaximumPermittedSpeed = "http://data.europa.eu/949/maximumPermittedSpeed"
+    let propContactLineSystem = "http://data.europa.eu/949/contactLineSystem"
     let propLoadCapability = "http://data.europa.eu/949/loadCapability"
     let propTenClassification = "http://data.europa.eu/949/tenClassification"
     let propNetElements = "http://data.europa.eu/949/topology/netElements/"
@@ -340,7 +343,10 @@ WHERE {{
                 |> Option.map int
               loadCapability =
                 getValue propLoadCapability
-                |> Option.map (fun s -> s.Substring(prefixLoadCapabilities.Length)) }
+                |> Option.map (fun s -> s.Substring(prefixLoadCapabilities.Length))
+              contactLineSystem =
+                getValue propContactLineSystem
+                |> Option.map (fun s -> (System.Web.HttpUtility.UrlDecode(s)).Substring(prefixContactLineSystem.Length))   }
         | None -> raise (System.Exception($"track {id} not found"))
 
     let toTunnels (sparql: QueryResults) : Tunnel [] =
