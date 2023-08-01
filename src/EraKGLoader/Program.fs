@@ -41,7 +41,8 @@ let loadDataCached<'a> path name (loader: unit -> Async<string>) =
             File.WriteAllText(file, result)
             return readFile<'a> path name
 
-        else return readFile<'a> path name
+        else
+            return readFile<'a> path name
     }
 
 let kilometerOfLine (op: OperationalPoint) (line: string) =
@@ -168,6 +169,24 @@ let buildLineInfo
     else
         [||]
 
+let reduceLineInfos (lineinfos: LineInfo []) : LineInfo [] =
+    let folder =
+        fun (s: LineInfo []) ((k, g): string * LineInfo []) ->
+            match g
+                  |> Array.tryFind (fun a ->
+                      g
+                      |> Array.forall (fun b ->
+                          a.StartKm < a.EndKm
+                          && a.StartKm <= b.StartKm
+                          && b.EndKm <= a.EndKm))
+                with
+            | Some span -> Array.concat [ [| span |]; s ]
+            | None -> Array.concat [ g; s ]
+
+    lineinfos
+    |> Array.groupBy (fun li -> li.Line)
+    |> Array.fold folder [||]
+
 let buildLineInfos (ops: OperationalPoint []) (nodes: GraphNode []) (tunnels: TunnelInfo []) : LineInfo [] =
     nodes
     |> Array.collect (fun sol ->
@@ -175,6 +194,7 @@ let buildLineInfos (ops: OperationalPoint []) (nodes: GraphNode []) (tunnels: Tu
         |> Array.map (fun e -> (e.IMCode, e.Line)))
     |> Array.distinct
     |> Array.collect (buildLineInfo ops nodes tunnels)
+    |> reduceLineInfos
     |> Array.sortBy (fun line -> line.Line)
 
 // see http://www.fssnip.net/7P8/title/Calculate-distance-between-two-GPS-latitudelongitude-points
@@ -461,10 +481,14 @@ let main argv =
                 && checkIsDir argv.[1] then
             async {
                 let! countries = checkIsCountry argv.[1] argv.[2]
-                let filename = if argv.Length > 3 then argv.[3] else "sparql-operationalPoints.json"
-                let! result =
-                    loadDataCached argv.[1] filename (fun () ->
-                        Api.loadOperationalPointData argv.[2])
+
+                let filename =
+                    if argv.Length > 3 then
+                        argv.[3]
+                    else
+                        "sparql-operationalPoints.json"
+
+                let! result = loadDataCached argv.[1] filename (fun () -> Api.loadOperationalPointData argv.[2])
 
                 let kgOps = Api.toOperationalPoints result countries
 
@@ -518,9 +542,14 @@ let main argv =
                 && checkIsDir argv.[1] then
             async {
                 let! _ = checkIsCountry argv.[1] argv.[2]
-                let filename = if argv.Length > 3 then argv.[3] else "sparql-sectionsOfLine.json"
-                let! result =
-                    loadDataCached argv.[1] filename (fun () -> Api.loadSectionOfLineData argv.[2])
+
+                let filename =
+                    if argv.Length > 3 then
+                        argv.[3]
+                    else
+                        "sparql-sectionsOfLine.json"
+
+                let! result = loadDataCached argv.[1] filename (fun () -> Api.loadSectionOfLineData argv.[2])
 
                 let tracks = readFile<Microdata> argv.[1] "sparql-tracks.json"
                 fprintfn stderr $"kg tracks: {tracks.items.Length}"
