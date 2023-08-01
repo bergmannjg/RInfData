@@ -55,7 +55,10 @@ module Api =
     open Sparql
 
     let prefixTrack = "http://data.europa.eu/949/functionalInfrastructure/tracks/"
-    let prefixContactLineSystem = "http://data.europa.eu/949/functionalInfrastructure/contactLineSystems/"
+
+    let prefixContactLineSystem =
+        "http://data.europa.eu/949/functionalInfrastructure/contactLineSystems/"
+
     let propLabel = "http://www.w3.org/2000/01/rdf-schema#label"
     let propMaximumPermittedSpeed = "http://data.europa.eu/949/maximumPermittedSpeed"
     let propContactLineSystem = "http://data.europa.eu/949/contactLineSystem"
@@ -120,10 +123,9 @@ PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 PREFIX era: <http://data.europa.eu/949/>
 PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
 
-SELECT distinct ?label, ?length, ?solNature, ?lineNationalId , ?imCode, ?startOp, ?endOp, ?track, ?country
+SELECT distinct ?sectionOfLine, ?length, ?solNature, ?lineNationalId , ?imCode, ?startOp, ?endOp, ?track, ?country
 WHERE {{
   ?sectionOfLine a era:SectionOfLine .
-  ?sectionOfLine rdfs:label ?label .
   ?sectionOfLine era:lineNationalId ?lineNationalId .
   ?sectionOfLine era:length ?length .
   ?sectionOfLine era:solNature ?solNature .
@@ -165,7 +167,15 @@ WHERE {{
 """
 
     let loadTrackData (country: string) (n: int) : Async<string> =
-        Request.GetAsync endpoint (trackQuery country n) Request.applicationMicrodata
+        async {
+            try
+                let! data = Request.GetAsync endpoint (trackQuery country n) Request.applicationMicrodata
+                return data
+            with
+            | e ->
+                fprintfn stderr "error: loadTrackData %s" e.Message
+                return "{\"items\":[]}"
+        }
 
     let private nationalRailwayLineQuery (country: string) =
         $"""
@@ -221,6 +231,9 @@ WHERE {{
 
     let private toCountryType (r: Rdf) : string =
         uriTypeToString r "http://publications.europa.eu/resource/authority/country/"
+
+    let private toSectionsOfLineId (r: Rdf) : string =
+        uriTypeToString r "http://data.europa.eu/949/functionalInfrastructure/sectionsOfLine/"
 
     let private toNationalLines (r: Rdf) : string =
         uriTypeToString r "http://data.europa.eu/949/functionalInfrastructure/nationalLines/"
@@ -346,8 +359,15 @@ WHERE {{
                 |> Option.map (fun s -> s.Substring(prefixLoadCapabilities.Length))
               contactLineSystem =
                 getValue propContactLineSystem
-                |> Option.map (fun s -> (System.Web.HttpUtility.UrlDecode(s)).Substring(prefixContactLineSystem.Length))   }
-        | None -> raise (System.Exception($"track {id} not found"))
+                |> Option.map (fun s ->
+                    (System.Web.HttpUtility.UrlDecode(s))
+                        .Substring(prefixContactLineSystem.Length)) }
+        | None ->
+            { id = System.Web.HttpUtility.UrlDecode(id.Substring(prefixTrack.Length))
+              label = "directional track"
+              maximumPermittedSpeed = Some 100
+              loadCapability = Some "rinf/90"
+              contactLineSystem = None }
 
     let toTunnels (sparql: QueryResults) : Tunnel [] =
         sparql.results.bindings
@@ -408,10 +428,11 @@ WHERE {{
         |> Array.fold
             (fun (sols: Map<string, SectionOfLine>) b ->
                 let lineNationalId = toNationalLines b.["lineNationalId"]
+                let sectionsOfLineId = toSectionsOfLineId b.["sectionOfLine"]
 
                 if hasPassendgerLineCategory lineNationalId lines then
                     sols.Change(
-                        b.["label"].value + lineNationalId,
+                        sectionsOfLineId,
                         fun sol ->
                             match sol with
                             | Some op ->
@@ -423,7 +444,7 @@ WHERE {{
                                     Some { op with Tracks = op.Tracks |> Array.append [| candidate |] }
                             | None ->
                                 Some
-                                    { Name = b.["label"].value
+                                    { Name = sectionsOfLineId
                                       Country = toCountryType b.["country"]
                                       Length = toFloat b.["length"]
                                       LineIdentification = toNationalLines b.["lineNationalId"]
