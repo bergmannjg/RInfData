@@ -9,9 +9,26 @@ type PoILocation =
       Longitude: float
       Content: string }
 
+type OperationalPointType =
+    { station: int
+      smallstation: int
+      passengerterminal: int
+      freightterminal: int
+      depotorworkshop: int
+      traintechnicalservices: int
+      passengerstop: int
+      junction: int
+      borderpoint: int
+      shuntingyard: int
+      technicalchange: int
+      switch: int
+      privatesiding: int
+      domesticborderpoint: int }
+
 type OpInfo =
     { UOPID: string
       Name: string
+      RinfType: int
       Latitude: float
       Longitude: float }
 
@@ -65,6 +82,24 @@ type PathElement =
       MaxSpeed: int }
 
 module Graph =
+
+    // Type of Operational Point, see https://www.era.europa.eu/system/files/2023-02/RINF%20Application%20guide%20V1.6.1.pdf
+    let operationalPointType: OperationalPointType =
+        { station = 10
+          smallstation = 20
+          passengerterminal = 30
+          freightterminal = 40
+          depotorworkshop = 50
+          traintechnicalservices = 60
+          passengerstop = 70
+          junction = 80
+          borderpoint = 90
+          shuntingyard = 100
+          technicalchange = 110
+          switch = 120
+          privatesiding = 130
+          domesticborderpoint = 140 }
+
     let private toVertex (node: GraphNode) =
         (node.Node,
          node.Edges
@@ -151,7 +186,14 @@ module Graph =
                 edges
                 |> Seq.tryHead
                 |> Option.map (fun edge ->
-                    (edge.Cost, edge.Line, edge.IMCode, edge.MaxSpeed, edge.Electrified, edge.StartKm, edge.EndKm, edge.Length))
+                    (edge.Cost,
+                     edge.Line,
+                     edge.IMCode,
+                     edge.MaxSpeed,
+                     edge.Electrified,
+                     edge.StartKm,
+                     edge.EndKm,
+                     edge.Length))
                 |> Option.defaultValue (0, "", "", 0, false, 0.0, 0.0, 0.0)
 
             { Node = n1
@@ -304,6 +346,30 @@ module Graph =
                 node.Edges.[0].Length
                 node.Edges.[0].MaxSpeed
                 node.Edges.[0].Cost)
+
+        printfn "%.1f %i" (lengthOfPath path) (costOfPath path)
+
+    let printPathEx (opInfos: System.Collections.Generic.Dictionary<string, OpInfo>) (path: GraphNode []) =
+        let mutable totalCost = 0
+        let mutable totalLength = 0.0
+        path
+        |> Array.iter (fun node ->
+            let opInfo = opInfos.[node.Node]
+            totalCost <- totalCost + node.Edges.[0].Cost
+            totalLength <- totalLength + node.Edges.[0].Length
+            printfn
+                "%s %s %s %.3f %.3f %.1f %i %i -- %s totalCost: %d totalLength %.3f"
+                node.Node
+                node.Edges.[0].Node
+                node.Edges.[0].Line
+                node.Edges.[0].StartKm
+                node.Edges.[0].EndKm
+                node.Edges.[0].Length
+                node.Edges.[0].MaxSpeed
+                node.Edges.[0].Cost
+                opInfo.Name
+                totalCost
+                totalLength)
 
         printfn "%.1f %i" (lengthOfPath path) (costOfPath path)
 
@@ -553,6 +619,7 @@ module Graph =
     let private getLocationsOfSolPath
         (g: GraphNode [])
         (opInfos: System.Collections.Generic.Dictionary<string, OpInfo>)
+        (excludedRinfTypes: int [])
         (path: GraphNode [])
         =
         if path.Length > 0 then
@@ -570,6 +637,13 @@ module Graph =
 
             let lonlats =
                 path
+                |> Array.filter (fun node ->
+                    if excludedRinfTypes.Length = 0 then
+                        true
+                    else
+                        excludedRinfTypes
+                        |> Array.contains (opInfos.[node.Node].RinfType)
+                        |> not)
                 |> Array.map (fun node ->
                     { Longitude = opInfos.[node.Node].Longitude
                       Latitude = opInfos.[node.Node].Latitude })
@@ -584,7 +658,17 @@ module Graph =
         (path: GraphNode [])
         =
         splitNodes isWalkingPath path
-        |> Array.map (getLocationsOfSolPath g opInfos)
+        |> Array.map (getLocationsOfSolPath g opInfos [||])
+        |> Array.filter (fun l -> l.Length > 0)
+
+    let getFilteredLocationsOfPath
+        (g: GraphNode [])
+        (opInfos: System.Collections.Generic.Dictionary<string, OpInfo>)
+        (path: GraphNode [])
+        (excludedRinfTypes: int [])
+        =
+        splitNodes isWalkingPath path
+        |> Array.map (getLocationsOfSolPath g opInfos excludedRinfTypes)
         |> Array.filter (fun l -> l.Length > 0)
 
     let toPathElement

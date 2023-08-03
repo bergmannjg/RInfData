@@ -7,9 +7,27 @@ export interface Location {
     Longitude: number;
 }
 
+export interface OperationalPointType {
+    readonly station: number;
+    readonly smallstation: number;
+    readonly passengerterminal: number;
+    readonly freightterminal: number;
+    readonly depotorworkshop: number;
+    readonly traintechnicalservices: number;
+    readonly passengerstop: number;
+    readonly junction: number;
+    readonly borderpoint: number;
+    readonly shuntingyard: number;
+    readonly technicalchange: number;
+    readonly switch: number;
+    readonly privatesiding: number;
+    readonly domesticborderpoint: number;
+}
+
 export interface OpInfo {
     UOPID: string;
     Name: string;
+    RinfType: number;
     Latitude: number;
     Longitude: number;
 }
@@ -71,6 +89,7 @@ export interface GraphNode {
 }
 
 export interface RInfGraph {
+    Graph_operationalPointType: OperationalPointType;
     Graph_toGraph: (g: Array<GraphNode>) => Map<string, any>;
     Graph_getShortestPathFromGraph: (g: Array<GraphNode>, graph: Map<string, any>, ids: Array<string>) => Array<GraphNode>
     Graph_getShortestPath: (g: Array<GraphNode>, ids: Array<string>) => Array<GraphNode>
@@ -81,6 +100,7 @@ export interface RInfGraph {
     Graph_getPathOfLine: (g: Array<GraphNode>, line: LineInfo) => Array<GraphNode>
     Graph_printPath: (path: Array<GraphNode>) => void
     Graph_getLocationsOfPath: (g: Array<GraphNode>, opInfos: Map<string, OpInfo>, path: Array<GraphNode>) => Array<Array<Location>>
+    Graph_getFilteredLocationsOfPath: (g: Array<GraphNode>, opInfos: Map<string, OpInfo>, path: Array<GraphNode>, excludedRinfTypes: Array<number>) => Array<Array<Location>>
     Graph_toPathElement: (opInfos: Map<string, OpInfo>, lineInfos: Map<string, LineInfo>, node: GraphNode) => PathElement
     Graph_isWalkingPath: (node: GraphNode) => boolean
 }

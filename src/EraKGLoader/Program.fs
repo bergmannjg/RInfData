@@ -287,6 +287,7 @@ let buildTunnelInfos
 let getMaxSpeed (sol: SectionOfLine) (defaultValue: int) =
     sol.Tracks
     |> Array.choose (fun t -> t.maximumPermittedSpeed)
+    |> Array.sortDescending
     |> Array.tryHead
     |> Option.defaultValue defaultValue
 
@@ -441,6 +442,7 @@ let main argv =
                     |> Array.map (fun op ->
                         { UOPID = op.UOPID
                           Name = op.Name
+                          RinfType = System.Int32.Parse (op.Type.Substring 5)
                           Latitude = op.Latitude
                           Longitude = op.Longitude })
 

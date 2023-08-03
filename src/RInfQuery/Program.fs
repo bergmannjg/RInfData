@@ -83,6 +83,7 @@ let main argv =
 
                         ({ UOPID = op.UOPID
                            Name = op.Name
+                           RinfType = System.Int32.Parse(op.Type.Substring 5)
                            Latitude = op.Latitude
                            Longitude = op.Longitude },
                          loc.Kilometer))
@@ -90,7 +91,7 @@ let main argv =
                     |> Array.distinct
 
                 opsOfLine
-                |> Array.iter (fun (op, km) -> printfn "%s, %s, Km: %.1f" op.Name op.UOPID km)
+                |> Array.iter (fun (op, km) -> printfn "%s, %s, rintype/%d, Km: %.1f" op.Name op.UOPID op.RinfType km)
 
                 opsOfLine
                 |> Array.map (fun (op, _) ->
@@ -120,6 +121,7 @@ let main argv =
 
                         ({ UOPID = op.UOPID
                            Name = op.Name
+                           RinfType = System.Int32.Parse(op.Type.Substring 5)
                            Latitude = op.Latitude
                            Longitude = op.Longitude },
                          loc.Kilometer))
@@ -266,7 +268,11 @@ let main argv =
 
                 sols
                 |> Array.groupBy (fun sol -> isElectrified sol)
-                |> Array.iter (fun (k,sols) -> printfn "electrified: %s, length: %.0f" (if k then "true " else "false") (sols |> Array.sumBy(fun sol -> sol.Length)))
+                |> Array.iter (fun (k, sols) ->
+                    printfn
+                        "electrified: %s, length: %.0f"
+                        (if k then "true " else "false")
+                        (sols |> Array.sumBy (fun sol -> sol.Length)))
 
                 return ""
             }
@@ -288,7 +294,7 @@ let main argv =
 
                     let path = Graph.getPathOfLineFromGraph g graph lineInfo
 
-                    Graph.printPath path
+                    Graph.printPathEx map path
 
                     Graph.getLocationsOfPath g map path
                     |> Array.iter (Graph.getBRouterUrl >> printfn "%s"))
@@ -308,14 +314,20 @@ let main argv =
 
                 let path = Graph.getShortestPath g args
 
+                if args.Length = 2
+                   && map.ContainsKey args.[0]
+                   && map.ContainsKey args.[1] then
+                    printfn "Path: %s to %s" map.[args.[0]].Name map.[args.[1]].Name
+                else
+                    printfn "Path:"
+
+                Graph.printPathEx map path
+
                 let getCompactPath path =
                     if useMaxSpeed then
                         Graph.getCompactPathWithMaxSpeed path g
                     else
                         Graph.getCompactPath path
-
-                printfn "Path:"
-                Graph.printPath path
 
                 printfn
                     "compact Path%s:"
@@ -342,7 +354,8 @@ let main argv =
 
                     Graph.printPath (getCompactPath cpath)
 
-                Graph.getLocationsOfPath g map path
+                printfn "brouter url of compactified path "
+                Graph.getLocationsOfPath g map cpath
                 |> Array.iter (Graph.getBRouterUrl >> printfn "%s")
 
                 return ""
