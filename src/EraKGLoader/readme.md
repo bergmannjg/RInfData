@@ -9,25 +9,11 @@ Load data from [ERA knowledge graph](https://era-web.linkeddata.es/sparql.html).
 ## Usage
 
 ```txt
-USAGE: EraKGLoader
-               [--help] [--SectionsOfLines] [--OperationalPoints]
-               [--Tracks] [--OpInfo.Build <dataDir>]
-               [--LineInfo.Build <dataDir>] [--Graph.Build <dataDir>]
+USAGE: EraKGLoader --Build <dataDir> <countries>          
+    
+        load OperationalPoints and SectionsOfLines of countries from knowledge graph 
+        and build graph of OperationalPoints and SectionsOfLines
 
-OPTIONS:
-
-    --SectionsOfLines     <country>
-                          load SectionsOfLines.
-    --OperationalPoints   <country>
-                          load OperationalPoints.
-    --Tracks              <country>
-                          load tracks for all SectionsOfLines
-    --OpInfo.Build <dataDir>
-                          build OpInfos from file OperationalPoints.json in <dataDir>.
-    --LineInfo.Build <dataDir>
-                          build LineInfos from files SectionsOfLines.json and OperationalPoints.json in <dataDir>.
-    --Graph.Build <dataDir>
-                          build graph of OperationalPoints and SectionsOfLines from files SectionsOfLines.json,
-                          OperationalPoints.json and SOLTrackParameters.json in <dataDir>.
-    --help                display this list of options.
+        <dataDir>: directory
+        <countries>: list of countries separated by semicolon
 ```

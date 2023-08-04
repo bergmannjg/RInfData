@@ -6,18 +6,19 @@ if [ ! -d "./scripts" ]; then
     exit 1
 fi
 
-# DATADIR=../../../rinf-data
-DATADIR=../../../erakg-data
+dotnet build src/EraKGLoader/EraKGLoader.fsproj
+
+dotnet publish src/EraKGLoader/EraKGLoader.fsproj
 
 pushd ./src/RInfGraph/target.javascript
 
-if [ ! -d "${DATADIR}" ]; then
-    echo "${DATADIR} not found"
+if [ ! -d "./rinf-graph" ]; then
+    echo "rinf-graph not found"
     exit 1
 fi
 
-if [ ! -d "./rinf-graph" ]; then
-    echo "rinf-data not found"
+if [ ! -d "./rinf-graph/data" ]; then
+    echo "rinf-graph/data not found"
     exit 1
 fi
 
@@ -35,7 +36,11 @@ npm install
 
 dotnet fable RInfGraph.fable.fsproj -o build --noCache --run webpack --mode production --no-devtool --config ./webpack.config.js
 
-cp ${DATADIR}/Graph.json ${DATADIR}/LineInfos.json ${DATADIR}/TunnelInfos.json ${DATADIR}/OpInfos.json rinf-graph/data/
+rm rinf-graph/data/*
+echo '[]' >  rinf-graph/data/Graph.json
+
+rm -rf rinf-graph/bin/
+cp -r ../../EraKGLoader/bin/Debug/net7.0/publish/ rinf-graph/bin/
 
 npm pack rinf-graph/
 

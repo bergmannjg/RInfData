@@ -7,35 +7,38 @@ open Sparql
 open EraKG
 
 let printHelp () =
-    """
+    let dataDirectory = AppDomain.CurrentDomain.BaseDirectory + "../data/"
+
+    $"""
 USAGE: EraKGLoader
 
 OPTIONS:
+    --Countries 
+        load all countries
 
-    --SectionsOfLine      <dataDir> <country>
-                          load SectionsOfLines.
-    --OperationalPoints   <dataDir> <country>
-                          load OperationalPoints.
-    --Tracks              <dataDir> <country>
-                          load tracks for all SectionsOfLines.
-    --OpInfo.Build        <dataDir>
-                          build OpInfos from file OperationalPoints.json in <dataDir>.
-    --LineInfo.Build      <dataDir>
-                          build LineInfos from files SectionsOfLines.json and OperationalPoints.json in <dataDir>.
-    --Graph.Build         <dataDir>
-                          build graph of OperationalPoints and SectionsOfLines from files SectionsOfLines.json,
-                          OperationalPoints.json and SOLTrackParameters.json in <dataDir>.
-    --help                display this list of options.
+    --Build <dataDir> <countries>
+        load OperationalPoints and SectionsOfLines of <countries> into <dataDir> and build graph of OperationalPoints and SectionsOfLines
+
+        <dataDir>: directory
+        <countries>: list of countries separated by semicolon
+
+    <countries>
+        load OperationalPoints and SectionsOfLines of <countries> into <dataDir> and build graph of OperationalPoints and SectionsOfLines
+
+        <dataDir>: {dataDirectory}
+        <countries>: list of countries separated by semicolon
 """
 
 let readFile<'a> path name =
     JsonSerializer.Deserialize<'a>(File.ReadAllText(path + name))
 
+let mutable cacheEnabled = true
+
 let loadDataCached<'a> path name (loader: unit -> Async<string>) =
     async {
         let file = path + name
 
-        if not (File.Exists file) then
+        if not cacheEnabled || not (File.Exists file) then
             let! result = loader ()
             fprintfn stderr $"{name}, {result.Length} bytes"
             File.WriteAllText(file, result)
@@ -397,6 +400,19 @@ let chooseItem (item: Item) =
 
 let checkIsDir (path: string) = Directory.Exists path
 
+let optCreateIsDir (path: string) =
+    if not (checkIsDir path) then
+        Directory.CreateDirectory path |> ignore
+
+let allowedCountries =
+    "EST;GRC;DEU;NLD;BEL;LUX;FRA;POL;LVA;HRV;HUN;FIN;SVN;ESP;BGR;AUT;ITA;NOR;SWE;DNK;ROU;SVK;CZE;CHE;GBR;PRT"
+
+let testIsCountry (countryArg: string) : bool =
+    let allCountries = allowedCountries.Split Api.countrySplitChars
+
+    countryArg.Split Api.countrySplitChars
+    |> Array.forall (fun country -> allCountries |> Array.contains country)
+
 let checkIsCountry (path: string) (countryArg: string) : Async<string []> =
     async {
 
@@ -411,206 +427,256 @@ let checkIsCountry (path: string) (countryArg: string) : Async<string []> =
             |> Array.forall (fun country -> allCountries |> Array.contains country)
 
         if not isCountry then
-            raise (System.ArgumentException($"unkown country {countryArg}"))
+            raise (System.ArgumentException($"unkown country {countryArg}, should be one of '{allowedCountries}'"))
 
         return countries
+    }
+
+let getCountries () : Async<string> =
+    async {
+
+        let! result = Api.loadCountriesData ()
+
+        let allCountries =
+            Api.toCountries (JsonSerializer.Deserialize<QueryResults>(result))
+
+        return String.concat ";" allCountries
+    }
+
+let execGraphBuild (path: string) : Async<string> =
+    async {
+        let ops = readFile<OperationalPoint []> path "OperationalPoints.json"
+
+        let sols = readFile<SectionOfLine []> path "SectionsOfLines.json"
+
+        let g = buildGraph ops sols
+
+        return JsonSerializer.Serialize g
+    }
+
+let execOpInfohBuild (path: string) : Async<string> =
+    async {
+        let ops =
+            readFile<OperationalPoint []> path "OperationalPoints.json"
+            |> Array.map (fun op ->
+                { UOPID = op.UOPID
+                  Name = op.Name
+                  RinfType = System.Int32.Parse(op.Type.Substring 5)
+                  Latitude = op.Latitude
+                  Longitude = op.Longitude })
+
+        return JsonSerializer.Serialize ops
+    }
+
+let execLineInfoBuild (path: string) : Async<string> =
+    async {
+        let ops = readFile<OperationalPoint []> path "OperationalPoints.json"
+
+        let nodes = readFile<GraphNode []> path "Graph.json"
+
+        let tunnels = readFile<TunnelInfo []> path "TunnelInfos.json"
+
+        let lineInfos = buildLineInfos ops nodes tunnels
+
+        return JsonSerializer.Serialize lineInfos
+    }
+
+let execTunnelInfoBuild (path: string) : Async<string> =
+    async {
+        let ops = readFile<OperationalPoint []> path "OperationalPoints.json"
+
+        let nodes = readFile<GraphNode []> path "Graph.json"
+
+        let sols = readFile<SectionOfLine []> path "SectionsOfLines.json"
+
+        let tunnels = readFile<Tunnel []> path "Tunnels.json"
+
+        let tunnelInfos = buildTunnelInfos sols ops nodes tunnels
+
+        return JsonSerializer.Serialize tunnelInfos
+    }
+
+let execOperationalPointsBuild (path: string) (countriesArg: string) : Async<string> =
+    async {
+        let! countries = checkIsCountry path countriesArg
+
+        let filename = "sparql-operationalPoints.json"
+
+        let! result = loadDataCached path filename (fun () -> Api.loadOperationalPointData countriesArg)
+
+        let kgOps = Api.toOperationalPoints result countries
+
+        fprintfn stderr $"kg ops: {kgOps.Length}"
+
+        return JsonSerializer.Serialize kgOps
+    }
+
+let execRailwayLineBuild (path: string) (countriesArg: string) : Async<string> =
+    async {
+        let! _ = checkIsCountry path countriesArg
+
+        let! result =
+            loadDataCached path "sparql-railwayline.json" (fun () -> Api.loadNationalRailwayLineData countriesArg)
+
+        let railwaylines = EraKG.Api.toRailwayLines result
+        fprintfn stderr $"kg railwaylines: {railwaylines.Length}"
+
+        return JsonSerializer.Serialize railwaylines
+    }
+
+let execTunnelBuild (path: string) (countriesArg: string) : Async<string> =
+    async {
+        let! _ = checkIsCountry path countriesArg
+
+        let! result = loadDataCached path "sparql-tunnel.json" (fun () -> Api.loadTunnelData countriesArg)
+
+        let tunnels =
+            EraKG.Api.toTunnels result
+            |> fun tunnels -> // filter double entries
+                tunnels
+                |> Array.filter (fun tunnel ->
+                    tunnels
+                    |> Array.filter (fun t ->
+                        t.Length = tunnel.Length
+                        && ``calculate distance``
+                            (t.StartLatitude, t.StartLongitude)
+                            (tunnel.StartLatitude, tunnel.StartLongitude) < 0.05)
+                    |> Array.sortBy (fun t -> t.Name.Length)
+                    |> fun filtered -> tunnel.Name = filtered.[0].Name)
+
+        fprintfn stderr $"kg tunnels: {tunnels.Length}"
+
+        return JsonSerializer.Serialize tunnels
+    }
+
+let execSectionsOfLineBuild (path: string) (countriesArg: string) : Async<string> =
+    async {
+        let! _ = checkIsCountry path countriesArg
+
+        let filename = "sparql-sectionsOfLine.json"
+
+        let! result = loadDataCached path filename (fun () -> Api.loadSectionOfLineData countriesArg)
+
+        let tracks = readFile<Microdata> path "sparql-tracks.json"
+        fprintfn stderr $"kg tracks: {tracks.items.Length}"
+
+        let railwaylines = readFile<RailwayLine []> path "Railwaylines.json"
+        fprintfn stderr $"kg railwaylines: {railwaylines.Length}"
+
+        let kgSols = EraKG.Api.toSectionsOfLine result railwaylines tracks
+
+        fprintfn stderr $"kg sols: {kgSols.Length}"
+
+        return JsonSerializer.Serialize kgSols
+    }
+
+let execTracksBuild (path: string) (countriesArg: string) : Async<string> =
+    let operations =
+        [ 1..9 ]
+        |> List.map (fun n ->
+            loadDataCached<Microdata> path $"sparql-tracks-{n}.json" (fun () -> Api.loadTrackData countriesArg n))
+
+    async {
+        let! _ = checkIsCountry path countriesArg
+
+        let! _ =
+            loadDataCached<Microdata> path $"sparql-tracks.json" (fun () ->
+                async {
+                    let items =
+                        operations
+                        |> Async.Sequential
+                        |> Async.RunSynchronously
+                        |> Array.collect (fun result -> result.items |> Array.choose chooseItem)
+
+                    return JsonSerializer.Serialize({ items = items })
+                })
+
+        return ""
+    }
+
+let execBuild (path: string) (countriesArg: string) : Async<string> =
+    async {
+        cacheEnabled <- false
+        let! _ = execTracksBuild path countriesArg
+
+        let! result = execRailwayLineBuild path countriesArg
+        File.WriteAllText(path + "Railwaylines.json", result)
+
+        let! result = execSectionsOfLineBuild path countriesArg
+        File.WriteAllText(path + "SectionsOfLines.json", result)
+
+        let! result = execOperationalPointsBuild path countriesArg
+        File.WriteAllText(path + "OperationalPoints.json", result)
+
+        let! result = execTunnelBuild path countriesArg
+        File.WriteAllText(path + "Tunnels.json", result)
+
+        let! result = execOpInfohBuild path
+        File.WriteAllText(path + "OpInfos.json", result)
+
+        let! result = execGraphBuild path
+        File.WriteAllText(path + "Graph.json", result)
+
+        let! result = execTunnelInfoBuild path
+        File.WriteAllText(path + "TunnelInfos.json", result)
+
+        let! result = execLineInfoBuild path
+        File.WriteAllText(path + "LineInfos.json", result)
+
+        return ""
     }
 
 [<EntryPoint>]
 let main argv =
     try
+        let dataDirectory = AppDomain.CurrentDomain.BaseDirectory + "../data/"
+
         if argv.Length = 0 then
             async { return printHelp () }
+        else if checkIsDir dataDirectory && testIsCountry argv.[0] then
+            async { return! execBuild dataDirectory argv.[0] }
+        else if argv.[0] = "--Countries" then
+            async { return! getCountries () }
+        else if argv.[0] = "--Build"
+                && checkIsDir argv.[1]
+                && argv.Length = 3 then
+            async { return! execBuild argv.[1] argv.[2] }
         else if argv.[0] = "--Graph.Build"
                 && argv.Length > 1
                 && checkIsDir argv.[1] then
-            async {
-                let ops = readFile<OperationalPoint []> argv.[1] "OperationalPoints.json"
-
-                let sols = readFile<SectionOfLine []> argv.[1] "SectionsOfLines.json"
-
-                let g = buildGraph ops sols
-
-                return JsonSerializer.Serialize g
-            }
+            async { return! execGraphBuild argv.[1] }
         else if argv.[0] = "--OpInfo.Build"
                 && argv.Length > 1
                 && checkIsDir argv.[1] then
-            async {
-                let ops =
-                    readFile<OperationalPoint []> argv.[1] "OperationalPoints.json"
-                    |> Array.map (fun op ->
-                        { UOPID = op.UOPID
-                          Name = op.Name
-                          RinfType = System.Int32.Parse (op.Type.Substring 5)
-                          Latitude = op.Latitude
-                          Longitude = op.Longitude })
-
-                return JsonSerializer.Serialize ops
-            }
+            async { return! execOpInfohBuild argv.[1] }
         else if argv.[0] = "--LineInfo.Build"
                 && argv.Length > 1
                 && checkIsDir argv.[1] then
-            async {
-                let ops = readFile<OperationalPoint []> argv.[1] "OperationalPoints.json"
-
-                let nodes = readFile<GraphNode []> argv.[1] "Graph.json"
-
-                let tunnels = readFile<TunnelInfo []> argv.[1] "TunnelInfos.json"
-
-                let lineInfos = buildLineInfos ops nodes tunnels
-
-                return JsonSerializer.Serialize lineInfos
-            }
+            async { return! execLineInfoBuild argv.[1] }
         else if argv.[0] = "--TunnelInfo.Build"
                 && argv.Length > 1
                 && checkIsDir argv.[1] then
-            async {
-                let ops = readFile<OperationalPoint []> argv.[1] "OperationalPoints.json"
-
-                let nodes = readFile<GraphNode []> argv.[1] "Graph.json"
-
-                let sols = readFile<SectionOfLine []> argv.[1] "SectionsOfLines.json"
-
-                let tunnels = readFile<Tunnel []> argv.[1] "Tunnels.json"
-
-                let tunnelInfos = buildTunnelInfos sols ops nodes tunnels
-
-                return JsonSerializer.Serialize tunnelInfos
-            }
+            async { return! execTunnelInfoBuild argv.[1] }
         else if argv.[0] = "--OperationalPoints"
                 && argv.Length > 2
                 && checkIsDir argv.[1] then
-            async {
-                let! countries = checkIsCountry argv.[1] argv.[2]
-
-                let filename =
-                    if argv.Length > 3 then
-                        argv.[3]
-                    else
-                        "sparql-operationalPoints.json"
-
-                let! result = loadDataCached argv.[1] filename (fun () -> Api.loadOperationalPointData argv.[2])
-
-                let kgOps = Api.toOperationalPoints result countries
-
-                fprintfn stderr $"kg ops: {kgOps.Length}"
-
-                return JsonSerializer.Serialize kgOps
-            }
+            async { return! execOperationalPointsBuild argv.[1] argv.[2] }
         else if argv.[0] = "--RailwayLine"
                 && argv.Length > 2
                 && checkIsDir argv.[1] then
-            async {
-                let! _ = checkIsCountry argv.[1] argv.[2]
-
-                let! result =
-                    loadDataCached argv.[1] "sparql-railwayline.json" (fun () ->
-                        Api.loadNationalRailwayLineData argv.[2])
-
-                let railwaylines = EraKG.Api.toRailwayLines result
-                fprintfn stderr $"kg railwaylines: {railwaylines.Length}"
-
-                return JsonSerializer.Serialize railwaylines
-            }
+            async { return! execRailwayLineBuild argv.[1] argv.[2] }
         else if argv.[0] = "--Tunnel"
                 && argv.Length > 2
                 && checkIsDir argv.[1] then
-            async {
-                let! _ = checkIsCountry argv.[1] argv.[2]
-
-                let! result = loadDataCached argv.[1] "sparql-tunnel.json" (fun () -> Api.loadTunnelData argv.[2])
-
-                let tunnels =
-                    EraKG.Api.toTunnels result
-                    |> fun tunnels -> // filter double entries
-                        tunnels
-                        |> Array.filter (fun tunnel ->
-                            tunnels
-                            |> Array.filter (fun t ->
-                                t.Length = tunnel.Length
-                                && ``calculate distance``
-                                    (t.StartLatitude, t.StartLongitude)
-                                    (tunnel.StartLatitude, tunnel.StartLongitude) < 0.05)
-                            |> Array.sortBy (fun t -> t.Name.Length)
-                            |> fun filtered -> tunnel.Name = filtered.[0].Name)
-
-                fprintfn stderr $"kg tunnels: {tunnels.Length}"
-
-                return JsonSerializer.Serialize tunnels
-            }
+            async { return! execTunnelBuild argv.[1] argv.[2] }
         else if argv.[0] = "--SectionsOfLine"
                 && argv.Length > 2
                 && checkIsDir argv.[1] then
-            async {
-                let! _ = checkIsCountry argv.[1] argv.[2]
-
-                let filename =
-                    if argv.Length > 3 then
-                        argv.[3]
-                    else
-                        "sparql-sectionsOfLine.json"
-
-                let! result = loadDataCached argv.[1] filename (fun () -> Api.loadSectionOfLineData argv.[2])
-
-                let tracks = readFile<Microdata> argv.[1] "sparql-tracks.json"
-                fprintfn stderr $"kg tracks: {tracks.items.Length}"
-
-                let railwaylines = readFile<RailwayLine []> argv.[1] "Railwaylines.json"
-                fprintfn stderr $"kg railwaylines: {railwaylines.Length}"
-
-                let kgSols = EraKG.Api.toSectionsOfLine result railwaylines tracks
-
-                fprintfn stderr $"kg sols: {kgSols.Length}"
-
-                if argv.Length > 3 && checkIsDir argv.[3] then
-                    let rinfSols = readFile<RInf.SectionOfLine []> argv.[3] "SectionsOfLines.json"
-                    fprintfn stderr $"rinf ops: {rinfSols.Length}"
-
-                    let matchOp (op1: string) (op2: string) =
-                        op1.Replace(" ", "0") = op2.Replace(" ", "0")
-
-                    rinfSols
-                    |> Array.filter (fun rinfSol ->
-                        kgSols
-                        |> Array.exists (fun kgSol ->
-                            kgSol.LineIdentification = rinfSol.LineIdentification
-                            && matchOp kgSol.StartOP rinfSol.StartOP.Value.UOPID
-                            && matchOp kgSol.EndOP rinfSol.EndOP.Value.UOPID)
-                        |> not)
-                    |> Array.iteri (fun i sol ->
-                        fprintfn
-                            stderr
-                            $"{(i + 1)}. notFound in kgSols: '{sol.LineIdentification}' '{sol.solName}' '{sol.StartOP.Value.UOPID}' '{sol.EndOP.Value.UOPID}'")
-
-                return JsonSerializer.Serialize kgSols
-            }
+            async { return! execSectionsOfLineBuild argv.[1] argv.[2] }
         else if argv.[0] = "--Tracks"
                 && argv.Length > 2
                 && checkIsDir argv.[1] then
-
-            let operations =
-                [ 1..9 ]
-                |> List.map (fun n ->
-                    loadDataCached<Microdata> argv.[1] $"sparql-tracks-{n}.json" (fun () -> Api.loadTrackData argv.[2] n))
-
-            async {
-                let! _ = checkIsCountry argv.[1] argv.[2]
-
-                let! _ =
-                    loadDataCached<Microdata> argv.[1] $"sparql-tracks.json" (fun () ->
-                        async {
-                            let items =
-                                operations
-                                |> Async.Sequential
-                                |> Async.RunSynchronously
-                                |> Array.collect (fun result -> result.items |> Array.choose chooseItem)
-
-                            return JsonSerializer.Serialize({ items = items })
-                        })
-
-                return ""
-            }
+            async { return! execTracksBuild argv.[1] argv.[2] }
         else
             async {
                 fprintfn stderr $"{argv.[0]} unexpected"
@@ -620,6 +686,6 @@ let main argv =
         |> fprintfn stdout "%s"
 
     with
-    | e -> fprintfn stderr "error: %s %s" e.Message e.StackTrace
+    | e -> fprintfn stderr "error: %s" e.Message
 
     0

@@ -4,12 +4,11 @@ Find shortest path for operational points, assumes that graph files are generate
 
 ## Compile to JavaScript via [Fable](https://github.com/fable-compiler/Fable)
 
-* run: restore-data.sh
 * run: build-package.sh
+* run: ./rinf-graph/bin/EraKGLoader --Build ./rinf-graph/data/ DEU
 * usage: node index.js rinf-graph/data/Graph.json "DE000HH;DE000AH"
 
 ## Build rinf-data module
 
-* run: restore-data.sh
 * run: build-package.sh
 * module is used by [FahrplanApp](https://github.com/bergmannjg/FahrplanApp)
