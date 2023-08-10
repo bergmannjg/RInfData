@@ -61,7 +61,7 @@ let findOpByOPID (ops: OperationalPoint []) opId =
     ops
     |> Array.tryFind (fun (op: OperationalPoint) -> op.UOPID = opId)
 
-let getLineInfo (name: string) ops (nodesOfLine: GraphNode list) (tunnels: TunnelInfo []) imcode line =
+let getLineInfo (name: string) ops (nodesOfLine: GraphNode list) (tunnels: TunnelInfo []) country line =
 
     let firstOp = findOpByOPID ops (nodesOfLine |> List.head).Node
 
@@ -89,7 +89,7 @@ let getLineInfo (name: string) ops (nodesOfLine: GraphNode list) (tunnels: Tunne
 
         Some
             { Line = line
-              IMCode = imcode
+              Country = country
               Name = name
               Length =
                 nodesOfLine
@@ -110,7 +110,7 @@ let buildLineInfo
     (ops: OperationalPoint [])
     (nodes: GraphNode [])
     (tunnels: TunnelInfo [])
-    (imcode: string, line: string)
+    (country: string, line: string)
     : LineInfo [] =
     let solsOfLine =
         nodes
@@ -118,7 +118,7 @@ let buildLineInfo
             sol.Edges
             |> Array.exists (fun e ->
                 e.Line = line
-                && e.IMCode = imcode
+                && e.Country = country
                 && e.StartKm < e.EndKm))
         |> Array.map (fun sol ->
             { sol with
@@ -126,7 +126,7 @@ let buildLineInfo
                     sol.Edges
                     |> Array.filter (fun e ->
                         e.Line = line
-                        && e.IMCode = imcode
+                        && e.Country = country
                         && e.StartKm < e.EndKm) })
         |> Array.sortBy (fun n -> n.Edges.[0].StartKm)
 
@@ -166,7 +166,7 @@ let buildLineInfo
         | Some firstOp, Some lastOp ->
             nextNodesLists
             |> Array.map (fun nextNodes ->
-                getLineInfo (firstOp.Name + " - " + lastOp.Name) ops nextNodes tunnels imcode line)
+                getLineInfo (firstOp.Name + " - " + lastOp.Name) ops nextNodes tunnels country line)
             |> Array.choose id
         | _ -> [||]
     else
@@ -194,7 +194,7 @@ let buildLineInfos (ops: OperationalPoint []) (nodes: GraphNode []) (tunnels: Tu
     nodes
     |> Array.collect (fun sol ->
         sol.Edges
-        |> Array.map (fun e -> (e.IMCode, e.Line)))
+        |> Array.map (fun e -> (e.Country, e.Line)))
     |> Array.distinct
     |> Array.collect (buildLineInfo ops nodes tunnels)
     |> reduceLineInfos
@@ -326,7 +326,31 @@ let buildGraph (ops: OperationalPoint []) (sols: SectionOfLine []) =
     let findOp opId =
         ops |> Array.tryFind (fun op -> op.UOPID = opId)
 
-    let length (sol: SectionOfLine) = sol.Length / 1000.0
+    let length (sol: SectionOfLine) =
+        if sol.Length = 0 then
+            let findRailwayLocation =
+                fun op ->
+                    op.RailwayLocations
+                    |> Array.tryFind (fun rl -> rl.NationalIdentNum = sol.LineIdentification)
+
+            let startLoc =
+                ops
+                |> Array.find (fun op -> op.UOPID = sol.StartOP)
+                |> findRailwayLocation
+
+            let endLoc =
+                ops
+                |> Array.find (fun op -> op.UOPID = sol.EndOP)
+                |> findRailwayLocation
+
+            match startLoc, endLoc with
+            | Some startLoc, Some endLoc -> Math.Abs(startLoc.Kilometer - endLoc.Kilometer)
+            | _, _ ->
+                fprintfn stderr $"sol startop endop not found, {sol.Name}"
+                0.0
+
+        else
+            sol.Length / 1000.0
 
     let addSol (sol: SectionOfLine) =
         match findOp sol.StartOP, findOp sol.EndOP with
@@ -340,7 +364,7 @@ let buildGraph (ops: OperationalPoint []) (sols: SectionOfLine []) =
                     { Node = opEnd.UOPID
                       Cost = cost
                       Line = sol.LineIdentification
-                      IMCode = sol.IMCode
+                      Country = sol.Country
                       MaxSpeed = maxSpeed
                       Electrified = isElectrified sol
                       StartKm = kilometerOfLine opStart sol.LineIdentification
@@ -355,7 +379,7 @@ let buildGraph (ops: OperationalPoint []) (sols: SectionOfLine []) =
                     { Node = opStart.UOPID
                       Cost = cost
                       Line = sol.LineIdentification
-                      IMCode = sol.IMCode
+                      Country = sol.Country
                       MaxSpeed = maxSpeed
                       Electrified = isElectrified sol
                       StartKm = kilometerOfLine opEnd sol.LineIdentification
@@ -594,9 +618,9 @@ let execTracksBuild (path: string) (countriesArg: string) : Async<string> =
         return ""
     }
 
-let execBuild (path: string) (countriesArg: string) : Async<string> =
+let execBuild (path: string) (countriesArg: string) (useCache: bool) : Async<string> =
     async {
-        cacheEnabled <- false
+        cacheEnabled <- useCache
         let! _ = execTracksBuild path countriesArg
 
         let! result = execRailwayLineBuild path countriesArg
@@ -631,16 +655,20 @@ let main argv =
     try
         let dataDirectory = AppDomain.CurrentDomain.BaseDirectory + "../data/"
 
+        let useCache =
+            argv
+            |> Array.exists (fun arg -> arg = "--useCache")
+
         if argv.Length = 0 then
             async { return printHelp () }
         else if checkIsDir dataDirectory && testIsCountry argv.[0] then
-            async { return! execBuild dataDirectory argv.[0] }
+            async { return! execBuild dataDirectory argv.[0] useCache }
         else if argv.[0] = "--Countries" then
             async { return! getCountries () }
         else if argv.[0] = "--Build"
                 && checkIsDir argv.[1]
                 && argv.Length = 3 then
-            async { return! execBuild argv.[1] argv.[2] }
+            async { return! execBuild argv.[1] argv.[2] useCache }
         else if argv.[0] = "--Graph.Build"
                 && argv.Length > 1
                 && checkIsDir argv.[1] then

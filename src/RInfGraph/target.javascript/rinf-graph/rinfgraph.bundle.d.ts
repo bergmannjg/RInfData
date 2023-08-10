@@ -34,7 +34,7 @@ export interface OpInfo {
 
 export interface LineInfo {
     Line: string;
-    IMCode: string;
+    Country: string;
     Name: string;
     Length: number;
     StartKm: number;
@@ -62,7 +62,7 @@ export interface GraphEdge {
     Node: string;
     Cost: number;
     Line: string;
-    IMCode: string;
+    Country: string;
     MaxSpeed: number;
     Electrified: boolean;
     StartKm: number;
@@ -77,7 +77,7 @@ export interface PathElement {
     ToOPID: string
     Line: string;
     LineText: string;
-    IMCode: string;
+    Country: string;
     StartKm: number;
     EndKm: number;
     MaxSpeed: number;
@@ -99,6 +99,8 @@ export interface RInfGraph {
     Graph_compactifyPath: (path: Array<GraphNode>, g: Array<GraphNode>) => Array<GraphNode>
     Graph_getPathOfLine: (g: Array<GraphNode>, line: LineInfo) => Array<GraphNode>
     Graph_printPath: (path: Array<GraphNode>) => void
+    Graph_lengthOfPath: (path: Array<GraphNode>) => number
+    Graph_costOfPath: (path: Array<GraphNode>) => number
     Graph_getLocationsOfPath: (g: Array<GraphNode>, opInfos: Map<string, OpInfo>, path: Array<GraphNode>) => Array<Array<Location>>
     Graph_getFilteredLocationsOfPath: (g: Array<GraphNode>, opInfos: Map<string, OpInfo>, path: Array<GraphNode>, excludedRinfTypes: Array<number>) => Array<Array<Location>>
     Graph_toPathElement: (opInfos: Map<string, OpInfo>, lineInfos: Map<string, LineInfo>, node: GraphNode) => PathElement
