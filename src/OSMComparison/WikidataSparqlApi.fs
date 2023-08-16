@@ -34,7 +34,7 @@ FILTER (LANG(?name) = "de")
     let loadOsmData () : Async<string> =
         EraKG.Request.GetAsync endpoint (osmQuery ()) EraKG.Request.applicationSparqlResults
 
-    let ToEntries (sparql: QueryResults) : Entry [] =
+    let ToEntries (sparql: QueryResults) : Entry[] =
         sparql.results.bindings
         |> Array.map (fun b ->
             { Station = b.["station"].value
@@ -44,8 +44,4 @@ FILTER (LANG(?name) = "de")
                     Some b.["stationCode"].value
                 else
                     None
-              IBNR =
-                if b.ContainsKey "IBNR" then
-                    Some b.["IBNR"].value
-                else
-                    None })
+              IBNR = if b.ContainsKey "IBNR" then Some b.["IBNR"].value else None })

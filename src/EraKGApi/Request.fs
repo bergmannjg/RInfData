@@ -24,9 +24,7 @@ module Request =
 
             let! response = client.GetAsync(url) |> Async.AwaitTask
 
-            let! body =
-                response.Content.ReadAsStringAsync()
-                |> Async.AwaitTask
+            let! body = response.Content.ReadAsStringAsync() |> Async.AwaitTask
 
             return
                 match response.IsSuccessStatusCode with
@@ -46,16 +44,14 @@ module Request =
             let client = new Http.HttpClient(createHandler ())
             client.DefaultRequestHeaders.Add("Accept", format)
 
-            let dict = new System.Collections.Generic.Dictionary<string, string>();
-            dict.Add("query", query);
-            
+            let dict = new System.Collections.Generic.Dictionary<string, string>()
+            dict.Add("query", query)
+
             use content = new Http.FormUrlEncodedContent(dict)
 
             let! response = client.PostAsync(url, content) |> Async.AwaitTask
 
-            let! body =
-                response.Content.ReadAsStringAsync()
-                |> Async.AwaitTask
+            let! body = response.Content.ReadAsStringAsync() |> Async.AwaitTask
 
             return
                 match response.IsSuccessStatusCode with

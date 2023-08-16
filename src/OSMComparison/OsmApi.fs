@@ -11,14 +11,14 @@ type Element =
       user: string
       tags: Map<string, string> option }
 
-type OsmJson = { elements: Element [] }
+type OsmJson = { elements: Element[] }
 
 module Api =
 
     open System.Net
     open System.Text.Json
     open OSM.Sparql
-    
+
     let applicationJson = "application/json"
 
     let private GetAsync (url: string) : Async<OsmJson option> =
@@ -29,9 +29,7 @@ module Api =
 
             let! response = client.GetAsync(url) |> Async.AwaitTask
 
-            let! body =
-                response.Content.ReadAsStringAsync()
-                |> Async.AwaitTask
+            let! body = response.Content.ReadAsStringAsync() |> Async.AwaitTask
 
             return
                 match response.IsSuccessStatusCode with
@@ -46,11 +44,7 @@ module Api =
 
     let private maybeGetTag (e: Element) (key: string) =
         match e.tags with
-        | Some tags ->
-            if tags.ContainsKey key then
-                Some tags.[key]
-            else
-                None
+        | Some tags -> if tags.ContainsKey key then Some tags.[key] else None
         | None -> None
 
     let private getTag (e: Element) (key: string) =
@@ -58,7 +52,7 @@ module Api =
         | Some v -> v
         | None -> ""
 
-    let ToEntries (json: OsmJson) : Entry [] =
+    let ToEntries (json: OsmJson) : Entry[] =
         json.elements
         |> Array.map (fun e ->
             { Stop = ""

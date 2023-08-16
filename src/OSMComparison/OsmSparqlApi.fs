@@ -45,32 +45,22 @@ SELECT distinct ?stop ?location ?public_transport ?railway ?name ?type ?railway_
         try
             let split =
                 if s.StartsWith "LINESTRING(" then
-                    s
-                        .Replace("LINESTRING(", "")
-                        .Replace(",", " ")
-                        .Split [| ' ' |]
+                    s.Replace("LINESTRING(", "").Replace(",", " ").Split [| ' ' |]
                 else if s.StartsWith "MULTIPOLYGON(((" then
-                    s
-                        .Replace("MULTIPOLYGON(((", "")
-                        .Replace(",", " ")
-                        .Split [| ' ' |]
+                    s.Replace("MULTIPOLYGON(((", "").Replace(",", " ").Split [| ' ' |]
                 else
-                    s
-                        .Replace("POINT(", "")
-                        .Replace(")", "")
-                        .Split [| ' ' |]
+                    s.Replace("POINT(", "").Replace(")", "").Split [| ' ' |]
 
             { Latitude = float split.[1]
               Longitude = float split.[0] }
-        with
-        | _ ->
+        with _ ->
             fprintfn stderr $"error parse point '{s}'"
             { Latitude = 0.0; Longitude = 0.0 }
 
-    let loadOsmData (endpoint : string) : Async<string> =
+    let loadOsmData (endpoint: string) : Async<string> =
         EraKG.Request.PostAsync endpoint (osmQuery ()) EraKG.Request.applicationSparqlResults
 
-    let ToEntries (sparql: QueryResults) : Entry [] =
+    let ToEntries (sparql: QueryResults) : Entry[] =
         sparql.results.bindings
         |> Array.map (fun b ->
             { Stop = b.["stop"].value

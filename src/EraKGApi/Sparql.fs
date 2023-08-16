@@ -4,7 +4,7 @@ namespace Sparql
 open System.Text.Json.Serialization
 open FSharp.Collections
 
-type Head = { vars: string [] }
+type Head = { vars: string[] }
 
 type Rdf =
     { ``type``: string
@@ -13,12 +13,12 @@ type Rdf =
       language: string option
       value: string }
 
-type Results = { bindings: Map<string, Rdf> [] }
+type Results = { bindings: Map<string, Rdf>[] }
 
 type QueryResults = { head: Head; results: Results }
 
 type Item =
     { id: string
-      properties: Map<string, obj []> }
+      properties: Map<string, obj[]> }
 
-type Microdata = { items: Item [] }
+type Microdata = { items: Item[] }

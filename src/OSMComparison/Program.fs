@@ -35,18 +35,13 @@ let endpoint (server: string) = $"https://{server}/api/osm-germany"
 let main argv =
     try
         let getServer () =
-            if argv.Length > 2 then
-                argv.[2]
-            else
-                server
+            if argv.Length > 2 then argv.[2] else server
 
         let getEndpoint () = endpoint <| getServer ()
 
         if argv.Length = 0 then
             async { return printHelp () }
-        else if argv.[0] = "--Osm"
-                && argv.Length > 1
-                && checkIsDir argv.[1] then
+        else if argv.[0] = "--Osm" && argv.Length > 1 && checkIsDir argv.[1] then
             async {
                 let file = argv.[1] + $"sparql-osm.json"
 
@@ -61,9 +56,7 @@ let main argv =
 
                 return JsonSerializer.Serialize entries
             }
-        else if argv.[0] = "--Osm.Reload"
-                && argv.Length > 1
-                && checkIsDir argv.[1] then
+        else if argv.[0] = "--Osm.Reload" && argv.Length > 1 && checkIsDir argv.[1] then
             async {
                 let file = argv.[1] + $"sparql-osm-new.json"
 
@@ -73,9 +66,7 @@ let main argv =
 
                 return ""
             }
-        else if argv.[0] = "--Wikidata"
-                && argv.Length > 1
-                && checkIsDir argv.[1] then
+        else if argv.[0] = "--Wikidata" && argv.Length > 1 && checkIsDir argv.[1] then
             async {
                 let file = argv.[1] + $"sparql-wikidata.json"
 
@@ -89,17 +80,15 @@ let main argv =
 
                 return JsonSerializer.Serialize entries
             }
-        else if argv.[0] = "--Wikidata.Compare"
-                && argv.Length > 1
-                && checkIsDir argv.[1] then
+        else if argv.[0] = "--Wikidata.Compare" && argv.Length > 1 && checkIsDir argv.[1] then
             async {
                 let operationalPoints =
-                    readFile<OperationalPoint []> argv.[1] "OperationalPoints.json"
+                    readFile<OperationalPoint[]> argv.[1] "OperationalPoints.json"
 
                 fprintfn stderr $"kg operationalPoints: {operationalPoints.Length}"
 
                 let wikidataEntries =
-                    readFile<Wikidata.Sparql.Entry []> argv.[1] "WikidataEntries.json"
+                    readFile<Wikidata.Sparql.Entry[]> argv.[1] "WikidataEntries.json"
 
                 fprintfn stderr $"kg wikidataEntries: {wikidataEntries.Length}"
 
@@ -107,16 +96,14 @@ let main argv =
 
                 return ""
             }
-        else if argv.[0] = "--Osm.Compare"
-                && argv.Length > 1
-                && checkIsDir argv.[1] then
+        else if argv.[0] = "--Osm.Compare" && argv.Length > 1 && checkIsDir argv.[1] then
             async {
                 let operationalPoints =
-                    readFile<OperationalPoint []> argv.[1] "OperationalPoints.json"
+                    readFile<OperationalPoint[]> argv.[1] "OperationalPoints.json"
 
                 fprintfn stderr $"kg operationalPoints: {operationalPoints.Length}"
 
-                let osmEntries = readFile<Entry []> argv.[1] "OsmEntries.json"
+                let osmEntries = readFile<Entry[]> argv.[1] "OsmEntries.json"
                 fprintfn stderr $"kg osmEntries: {osmEntries.Length}"
 
                 let operationalPointsNotFound = compare operationalPoints osmEntries
@@ -128,33 +115,27 @@ let main argv =
 
                 return ""
             }
-        else if argv.[0].StartsWith "--Osm.Analyze"
-                && argv.Length > 1
-                && checkIsDir argv.[1] then
+        else if argv.[0].StartsWith "--Osm.Analyze" && argv.Length > 1 && checkIsDir argv.[1] then
             async {
                 let operationalPointsNotFound =
-                    readFile<OperationalPoint []> argv.[1] "OperationalPointsNotFound.json"
+                    readFile<OperationalPoint[]> argv.[1] "OperationalPointsNotFound.json"
 
                 fprintfn stderr $"kg operationalPoints to analyze: {operationalPointsNotFound.Length}"
 
-                let osmEntries = readFile<Entry []> argv.[1] "OsmEntries.json"
+                let osmEntries = readFile<Entry[]> argv.[1] "OsmEntries.json"
                 fprintfn stderr $"kg osmEntries: {osmEntries.Length}"
 
                 analyze (argv.[0].StartsWith "--Osm.Analyze.Extra") operationalPointsNotFound osmEntries
 
                 return ""
             }
-        else if argv.[0].StartsWith "--Osm.Query"
-                && argv.Length > 2
-                && checkIsDir argv.[1] then
+        else if argv.[0].StartsWith "--Osm.Query" && argv.Length > 2 && checkIsDir argv.[1] then
             async {
-                let osmEntries = readFile<Entry []> argv.[1] "OsmEntries.json"
+                let osmEntries = readFile<Entry[]> argv.[1] "OsmEntries.json"
                 fprintfn stderr $"kg osmEntries: {osmEntries.Length}"
 
                 osmEntries
-                |> Array.filter (fun entry ->
-                    entry.Name = argv.[2]
-                    || entry.Stop.Contains argv.[2])
+                |> Array.filter (fun entry -> entry.Name = argv.[2] || entry.Stop.Contains argv.[2])
                 |> Array.map (fun entry ->
                     printfn $"{entry}"
                     entry)
@@ -164,11 +145,9 @@ let main argv =
 
                 return ""
             }
-        else if argv.[0].StartsWith "--Osm.Operator"
-                && argv.Length > 1
-                && checkIsDir argv.[1] then
+        else if argv.[0].StartsWith "--Osm.Operator" && argv.Length > 1 && checkIsDir argv.[1] then
             async {
-                let osmEntries = readFile<Entry []> argv.[1] "OsmEntries.json"
+                let osmEntries = readFile<Entry[]> argv.[1] "OsmEntries.json"
                 fprintfn stderr $"kg osmEntries: {osmEntries.Length}"
 
                 osmEntries
@@ -200,7 +179,7 @@ let main argv =
         |> Async.RunSynchronously
         |> fprintfn stdout "%s"
 
-    with
-    | e -> fprintfn stderr "error: %s %s" e.Message e.StackTrace
+    with e ->
+        fprintfn stderr "error: %s %s" e.Message e.StackTrace
 
     0

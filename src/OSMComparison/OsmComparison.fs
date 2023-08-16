@@ -18,10 +18,7 @@ let ``calculate distance`` (p1Latitude, p1Longitude) (p2Latitude, p2Longitude) =
 
     let a =
         Math.Sin(dLat / 2.0) * Math.Sin(dLat / 2.0)
-        + Math.Sin(dLon / 2.0)
-          * Math.Sin(dLon / 2.0)
-          * Math.Cos(lat1)
-          * Math.Cos(lat2)
+        + Math.Sin(dLon / 2.0) * Math.Sin(dLon / 2.0) * Math.Cos(lat1) * Math.Cos(lat2)
 
     let c = 2.0 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1.0 - a))
 
@@ -49,37 +46,32 @@ let private matchUOPID (railwayRef: string) (uOPID: string) =
 
     let _matchUOPID (railwayRef: string) (uOPID: string) =
         toOPID railwayRef = uOPID.Replace(" ", "0")
-        || if uOPID.Contains "  "
-              && railwayRef.Length = 4
-              && railwayRef.Contains " " then
+        || if uOPID.Contains "  " && railwayRef.Length = 4 && railwayRef.Contains " " then
                let railwayRefX = railwayRef.Replace(" ", "  ")
                toOPID railwayRefX = uOPID.Replace(" ", "0") // matches 'TU R' with 'DETU  R'
            else
                false
 
-    railwayRef.Split [| ';' |]
-    |> Array.exists (fun s -> _matchUOPID s uOPID)
+    railwayRef.Split [| ';' |] |> Array.exists (fun s -> _matchUOPID s uOPID)
 
 let private compareByUOPID
-    (operationalPoints: OperationalPoint [])
-    (osmEntries: Entry [])
-    : (OperationalPoint * Entry option) [] =
+    (operationalPoints: OperationalPoint[])
+    (osmEntries: Entry[])
+    : (OperationalPoint * Entry option)[] =
 
     operationalPoints
     |> Array.map (fun op ->
-        match osmEntries
-              |> Array.tryFind (fun entry ->
-                  entry.RailwayRef.IsSome
-                  && matchUOPID entry.RailwayRef.Value op.UOPID
-                  && ``calculate distance`` (op.Latitude, op.Longitude) (entry.Latitude, entry.Longitude) < 4.0)
-            with
+        match
+            osmEntries
+            |> Array.tryFind (fun entry ->
+                entry.RailwayRef.IsSome
+                && matchUOPID entry.RailwayRef.Value op.UOPID
+                && ``calculate distance`` (op.Latitude, op.Longitude) (entry.Latitude, entry.Longitude) < 4.0)
+        with
         | Some entry -> (op, Some entry)
         | None -> (op, None))
 
-let private filterByName
-    (operationalPoints: OperationalPoint [])
-    (osmEntries: Entry [])
-    : (OperationalPoint * Entry) [] =
+let private filterByName (operationalPoints: OperationalPoint[]) (osmEntries: Entry[]) : (OperationalPoint * Entry)[] =
     let projection (entry: Entry) =
         match entry.RailwayRef, entry.Railway with
         | Some _, _ -> 0
@@ -125,8 +117,7 @@ let private matchWithOnlineData (op: OperationalPoint) (entry: Entry) =
             try
                 let! osmjson = OSM.Api.loadOsmData osmType id
                 return tryMatch osmjson
-            with
-            | e ->
+            with e ->
                 fprintfn stderr $"error  {e}"
                 return false
         }
@@ -134,7 +125,7 @@ let private matchWithOnlineData (op: OperationalPoint) (entry: Entry) =
     else
         false
 
-let compare (allOperationalPoints: OperationalPoint []) (osmEntries: Entry []) =
+let compare (allOperationalPoints: OperationalPoint[]) (osmEntries: Entry[]) =
 
     allOperationalPoints
     |> Array.groupBy (fun op -> op.Type)
@@ -142,14 +133,11 @@ let compare (allOperationalPoints: OperationalPoint []) (osmEntries: Entry []) =
     |> Array.iter (fun (k, l) -> fprintfn stderr $"op type {k}, {l.Length} entries")
 
     let operationalPoints =
-        allOperationalPoints
-        |> Array.filter (fun op -> matchType op)
+        allOperationalPoints |> Array.filter (fun op -> matchType op)
 
     let result = compareByUOPID operationalPoints osmEntries
 
-    let operationalPointsFound =
-        result
-        |> Array.filter (fun (_, entry) -> entry.IsSome)
+    let operationalPointsFound = result |> Array.filter (fun (_, entry) -> entry.IsSome)
 
     operationalPointsFound
     |> Array.map (fun (op, entry) ->
@@ -184,9 +172,7 @@ let compare (allOperationalPoints: OperationalPoint []) (osmEntries: Entry []) =
         |> Array.iter (fun (k, l) -> fprintfn stderr $"  Railway {k}, found {l.Length}")
 
         l
-        |> Array.filter (fun (op, entry) ->
-            entry.Value.Railway.IsNone
-            && entry.Value.PublicTransport.IsSome)
+        |> Array.filter (fun (op, entry) -> entry.Value.Railway.IsNone && entry.Value.PublicTransport.IsSome)
         |> Array.groupBy (fun (op, entry) -> entry.Value.PublicTransport.Value)
         |> Array.iter (fun (k, l) -> fprintfn stderr $"  PublicTransport {k}, found {l.Length}"))
 
@@ -198,7 +184,7 @@ let compare (allOperationalPoints: OperationalPoint []) (osmEntries: Entry []) =
 
     operationalPointsNotFound
 
-let analyze (extra: bool) (operationalPointsNotFound: OperationalPoint []) (osmEntries: Entry []) =
+let analyze (extra: bool) (operationalPointsNotFound: OperationalPoint[]) (osmEntries: Entry[]) =
     let allOpsFoundByName = filterByName operationalPointsNotFound osmEntries
 
     if not extra then
@@ -213,9 +199,7 @@ let analyze (extra: bool) (operationalPointsNotFound: OperationalPoint []) (osmE
 
     let opsFoundByName =
         allOpsFoundByName
-        |> Array.filter (fun (op, entry) ->
-            entry.RailwayRef.IsNone
-            && not (matchWithOnlineData op entry))
+        |> Array.filter (fun (op, entry) -> entry.RailwayRef.IsNone && not (matchWithOnlineData op entry))
 
     let foundByName = opsFoundByName.Length
 

@@ -15,7 +15,7 @@ type OperationalPoint =
       UOPID: string
       Latitude: float
       Longitude: float
-      RailwayLocations: RailwayLocation [] }
+      RailwayLocations: RailwayLocation[] }
 
 type Track =
     { id: string
@@ -27,7 +27,7 @@ type Track =
 type RailwayLine =
     { LineIdentification: string
       Country: string
-      LineCategories: string [] }
+      LineCategories: string[] }
 
 type SectionOfLine =
     { Name: string
@@ -37,7 +37,7 @@ type SectionOfLine =
       IMCode: string
       StartOP: string
       EndOP: string
-      Tracks: Track [] }
+      Tracks: Track[] }
 
 type Tunnel =
     { Name: string
@@ -48,7 +48,7 @@ type Tunnel =
       StartLongitude: float
       EndLatitude: float
       EndLongitude: float
-      ContainingTracks: string [] }
+      ContainingTracks: string[] }
 
 module Api =
 
@@ -142,11 +142,7 @@ WHERE {{
         Request.GetAsync endpoint (sectionOfLineQuery country) Request.applicationSparqlResults
 
     let private trackQuery (country: string) (n: int) =
-        let filter =
-            if n < 9 then
-                n.ToString()
-            else
-                (n.ToString() + "a-z")
+        let filter = if n < 9 then n.ToString() else (n.ToString() + "a-z")
 
         let pattern = $"^[{filter}]"
 
@@ -171,8 +167,7 @@ WHERE {{
             try
                 let! data = Request.GetAsync endpoint (trackQuery country n) Request.applicationMicrodata
                 return data
-            with
-            | e ->
+            with e ->
                 fprintfn stderr "error: loadTrackData %s" e.Message
                 return "{\"items\":[]}"
         }
@@ -243,15 +238,15 @@ WHERE {{
 
     let private toLocation (r: Rdf) : (float * float) =
         let splits =
-            (uriTypeToString r "http://data.europa.eu/949/locations/")
-                .Split [| '/' |]
+            (uriTypeToString r "http://data.europa.eu/949/locations/").Split [| '/' |]
 
         (float splits.[0], float splits.[1])
 
     let private toRailwayLocation (r: Rdf) : RailwayLocation =
         let splits =
             (uriTypeToString r "http://data.europa.eu/949/functionalInfrastructure/lineReferences/")
-                .Split [| '_' |]
+                .Split
+                [| '_' |]
 
         { NationalIdentNum = splits.[0]
           Kilometer = float splits.[1] }
@@ -259,12 +254,11 @@ WHERE {{
     let private toFloat (r: Rdf) : float =
         try
             float r.value
-        with
-        | error ->
+        with error ->
             fprintfn stderr "%s" error.Message
             0.0
 
-    let toOperationalPoints (sparql: QueryResults) (countries: string []) : OperationalPoint [] =
+    let toOperationalPoints (sparql: QueryResults) (countries: string[]) : OperationalPoint[] =
         sparql.results.bindings
         |> Array.fold
             (fun (ops: Map<string, OperationalPoint>) b ->
@@ -283,9 +277,7 @@ WHERE {{
                                 else
                                     Some
                                         { op with
-                                            RailwayLocations =
-                                                op.RailwayLocations
-                                                |> Array.append [| candidate |] }
+                                            RailwayLocations = op.RailwayLocations |> Array.append [| candidate |] }
                             | None ->
                                 let lon, lat = toLocation b.["location"]
 
@@ -304,20 +296,18 @@ WHERE {{
         |> Map.values
         |> Seq.toArray
 
-    let toCountries (sparql: QueryResults) : string [] =
-        sparql.results.bindings
-        |> Array.map (fun b -> toCountryType b.["country"])
+    let toCountries (sparql: QueryResults) : string[] =
+        sparql.results.bindings |> Array.map (fun b -> toCountryType b.["country"])
 
-    let toRailwayLines (sparql: QueryResults) : RailwayLine [] =
+    let toRailwayLines (sparql: QueryResults) : RailwayLine[] =
         sparql.results.bindings
         |> Array.fold
             (fun (lines: Map<string, RailwayLine>) b ->
-                let addLineCategory (b: Map<string, Rdf>) (lineCategories: string []) : string [] =
+                let addLineCategory (b: Map<string, Rdf>) (lineCategories: string[]) : string[] =
                     if b |> Map.containsKey "lineCategory" then
                         lineCategories
-                        |> Array.append [| (uriTypeToString
-                                                b.["lineCategory"]
-                                                "http://data.europa.eu/949/concepts/line-category/") |]
+                        |> Array.append
+                            [| (uriTypeToString b.["lineCategory"] "http://data.europa.eu/949/concepts/line-category/") |]
                     else
                         lineCategories
 
@@ -325,7 +315,10 @@ WHERE {{
                     b.["label"].value,
                     fun line ->
                         match line with
-                        | Some line -> Some { line with LineCategories = addLineCategory b line.LineCategories }
+                        | Some line ->
+                            Some
+                                { line with
+                                    LineCategories = addLineCategory b line.LineCategories }
                         | None ->
                             Some
                                 { LineIdentification = b.["label"].value
@@ -337,9 +330,7 @@ WHERE {{
         |> Seq.toArray
 
     let toTrack (id: string) (tracks: Microdata) : Track =
-        match tracks.items
-              |> Array.tryFind (fun item -> item.id = id)
-            with
+        match tracks.items |> Array.tryFind (fun item -> item.id = id) with
         | Some item ->
             let prefixLoadCapabilities = "http://data.europa.eu/949/concepts/load-capabilities/"
 
@@ -351,17 +342,13 @@ WHERE {{
 
             { id = System.Web.HttpUtility.UrlDecode(id.Substring(prefixTrack.Length))
               label = getValue propLabel |> Option.defaultValue ""
-              maximumPermittedSpeed =
-                getValue propMaximumPermittedSpeed
-                |> Option.map int
+              maximumPermittedSpeed = getValue propMaximumPermittedSpeed |> Option.map int
               loadCapability =
                 getValue propLoadCapability
                 |> Option.map (fun s -> s.Substring(prefixLoadCapabilities.Length))
               contactLineSystem =
                 getValue propContactLineSystem
-                |> Option.map (fun s ->
-                    (System.Web.HttpUtility.UrlDecode(s))
-                        .Substring(prefixContactLineSystem.Length)) }
+                |> Option.map (fun s -> (System.Web.HttpUtility.UrlDecode(s)).Substring(prefixContactLineSystem.Length)) }
         | None ->
             { id = System.Web.HttpUtility.UrlDecode(id.Substring(prefixTrack.Length))
               label = "directional track"
@@ -369,7 +356,7 @@ WHERE {{
               loadCapability = Some "rinf/90"
               contactLineSystem = None }
 
-    let toTunnels (sparql: QueryResults) : Tunnel [] =
+    let toTunnels (sparql: QueryResults) : Tunnel[] =
         sparql.results.bindings
         |> Array.fold
             (fun (ops: Map<string, Tunnel>) b ->
@@ -388,9 +375,7 @@ WHERE {{
                             else
                                 Some
                                     { op with
-                                        ContainingTracks =
-                                            op.ContainingTracks
-                                            |> Array.append [| candidate |] }
+                                        ContainingTracks = op.ContainingTracks |> Array.append [| candidate |] }
                         | None ->
                             let startlon, startlat = toLocation b.["startlocation"]
                             let endlon, endlat = toLocation b.["endlocation"]
@@ -411,19 +396,16 @@ WHERE {{
         |> Map.values
         |> Seq.toArray
 
-    let private hasPassendgerLineCategory (lineIdentification: string) (lines: RailwayLine []) =
-        match lines
-              |> Array.tryFind (fun l -> l.LineIdentification = lineIdentification)
-            with
+    let private hasPassendgerLineCategory (lineIdentification: string) (lines: RailwayLine[]) =
+        match lines |> Array.tryFind (fun l -> l.LineIdentification = lineIdentification) with
         | Some line ->
             line.LineCategories.Length = 0
-            || line.LineCategories
-               |> Array.exists (fun cat -> cat.StartsWith "P")
+            || line.LineCategories |> Array.exists (fun cat -> cat.StartsWith "P")
         | None ->
             fprintfn stderr $"line {lineIdentification} not found"
             false
 
-    let toSectionsOfLine (sparql: QueryResults) (lines: RailwayLine []) (tracks: Microdata) : SectionOfLine [] =
+    let toSectionsOfLine (sparql: QueryResults) (lines: RailwayLine[]) (tracks: Microdata) : SectionOfLine[] =
         sparql.results.bindings
         |> Array.fold
             (fun (sols: Map<string, SectionOfLine>) b ->
@@ -441,7 +423,9 @@ WHERE {{
                                 if op.Tracks |> Array.contains candidate then
                                     Some op
                                 else
-                                    Some { op with Tracks = op.Tracks |> Array.append [| candidate |] }
+                                    Some
+                                        { op with
+                                            Tracks = op.Tracks |> Array.append [| candidate |] }
                             | None ->
                                 Some
                                     { Name = sectionsOfLineId

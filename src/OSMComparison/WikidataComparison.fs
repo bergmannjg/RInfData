@@ -22,43 +22,37 @@ let private matchUOPID (railwayRef: string) (uOPID: string) =
 
     let _matchUOPID (railwayRef: string) (uOPID: string) =
         toOPID railwayRef = uOPID.Replace(" ", "0")
-        || if uOPID.Contains "  "
-              && railwayRef.Length = 4
-              && railwayRef.Contains " " then
+        || if uOPID.Contains "  " && railwayRef.Length = 4 && railwayRef.Contains " " then
                let railwayRefX = railwayRef.Replace(" ", "  ")
                toOPID railwayRefX = uOPID.Replace(" ", "0") // matches 'TU R' with 'DETU  R'
            else
                false
 
-    railwayRef.Split [| ';' |]
-    |> Array.exists (fun s -> _matchUOPID s uOPID)
+    railwayRef.Split [| ';' |] |> Array.exists (fun s -> _matchUOPID s uOPID)
 
 let private compareByUOPID
-    (operationalPoints: OperationalPoint [])
-    (osmEntries: Entry [])
-    : (OperationalPoint * Entry option) [] =
+    (operationalPoints: OperationalPoint[])
+    (osmEntries: Entry[])
+    : (OperationalPoint * Entry option)[] =
 
     operationalPoints
     |> Array.map (fun op ->
-        match osmEntries
-              |> Array.tryFind (fun entry ->
-                  entry.stationCode.IsSome
-                  && matchUOPID entry.stationCode.Value op.UOPID)
-            with
+        match
+            osmEntries
+            |> Array.tryFind (fun entry -> entry.stationCode.IsSome && matchUOPID entry.stationCode.Value op.UOPID)
+        with
         | Some entry -> (op, Some entry)
         | None -> (op, None))
 
-let compare (extra: bool) (allOperationalPoints: OperationalPoint []) (osmEntries: Entry []) =
+let compare (extra: bool) (allOperationalPoints: OperationalPoint[]) (osmEntries: Entry[]) =
 
     let operationalPoints =
-        allOperationalPoints
-        |> Array.filter (fun op -> matchType op)
+        allOperationalPoints |> Array.filter (fun op -> matchType op)
 
     let result = compareByUOPID operationalPoints osmEntries
 
     let operationalPointsFoundPhase1 =
-        result
-        |> Array.filter (fun (_, entry) -> entry.IsSome)
+        result |> Array.filter (fun (_, entry) -> entry.IsSome)
 
     let operationalPointsNotFoundPhase1 =
         result
@@ -68,9 +62,9 @@ let compare (extra: bool) (allOperationalPoints: OperationalPoint []) (osmEntrie
     let operationalPointsFoundPhase2 = [||]
 
     let operationalPointsFound =
-        Array.concat [ operationalPointsFoundPhase1
-                       operationalPointsFoundPhase2
-                       |> Array.map (fun (op, entry) -> (op, Some entry)) ]
+        Array.concat
+            [ operationalPointsFoundPhase1
+              operationalPointsFoundPhase2 |> Array.map (fun (op, entry) -> (op, Some entry)) ]
 
     let countPointsFound = operationalPointsFound.Length
 
@@ -91,6 +85,4 @@ let compare (extra: bool) (allOperationalPoints: OperationalPoint []) (osmEntrie
     |> Array.groupBy (fun op -> op.Type)
     |> Array.iter (fun (k, l) -> fprintfn stderr $"type {k}, not found {l.Length}")
 
-    fprintfn
-        stderr
-        $"total {operationalPoints.Length}, found {countPointsFound}, not found {countPointsNotFound}"
+    fprintfn stderr $"total {operationalPoints.Length}, found {countPointsFound}, not found {countPointsNotFound}"

@@ -33,23 +33,20 @@ module internal Request =
                     let url = baseurl + "token"
 
                     let formVals =
-                        [ "grant_type", "password"
-                          "username", username
-                          "password", password ]
+                        [ "grant_type", "password"; "username", username; "password", password ]
                         |> List.map (fun (x, y) -> new KeyValuePair<string, string>(x, y))
 
                     let content = new Http.FormUrlEncodedContent(formVals)
 
                     let! response = client.PostAsync(url, content) |> Async.AwaitTask
 
-                    let! body =
-                        response.Content.ReadAsStringAsync()
-                        |> Async.AwaitTask
+                    let! body = response.Content.ReadAsStringAsync() |> Async.AwaitTask
 
                     return
                         match response.IsSuccessStatusCode with
                         | true -> JsonSerializer.Deserialize<Token> body
-                        | false -> raise (System.Exception((sprintf "%s, StatusCode: %A" "token failed" response.StatusCode)))
+                        | false ->
+                            raise (System.Exception((sprintf "%s, StatusCode: %A" "token failed" response.StatusCode)))
             }
 
         member __.Dispose() = client.Dispose()
@@ -72,9 +69,7 @@ module internal Request =
 
                 let! response = client.GetAsync(url) |> Async.AwaitTask
 
-                let! body =
-                    response.Content.ReadAsStringAsync()
-                    |> Async.AwaitTask
+                let! body = response.Content.ReadAsStringAsync() |> Async.AwaitTask
 
                 return
                     match response.IsSuccessStatusCode with

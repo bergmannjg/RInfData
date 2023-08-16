@@ -3,11 +3,10 @@ module ExtraEdges
 
 open RInfGraph
 
-let private imcode = "0080" 
+let private imcode = "0080"
 
 let private addWalkingEdge (opidFrom: string) (opidTo: string) (line: string) (graph: Map<string, GraphEdge list>) =
-    graph
-    |> Graph.addEdge opidFrom opidTo line imcode 1 10 0.0 0.1 0.1
+    graph |> Graph.addEdge opidFrom opidTo line imcode 1 10 0.0 0.1 0.1
 
 let private addWalkingEdges (graph: Map<string, GraphEdge list>) =
     graph

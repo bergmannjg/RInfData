@@ -40,12 +40,12 @@ let kilometerOfLine (op: OperationalPoint) (line: string) =
 let findOp ops opId =
     ops |> Array.find (fun op -> op.ID = opId)
 
-let findOpByOPID (ops: OperationalPoint []) opId =
+let findOpByOPID (ops: OperationalPoint[]) opId =
     match (Array.tryFind (fun (op: OperationalPoint) -> op.UOPID = opId) ops) with
     | Some op -> op
     | None -> raise (System.ArgumentException("opid not found: " + opId))
 
-let toMap (opInfos: OpInfo []) =
+let toMap (opInfos: OpInfo[]) =
     opInfos
     |> Array.fold
         (fun (m: Dictionary<string, OpInfo>) op ->
@@ -65,21 +65,18 @@ let main argv =
     try
         if argv.Length = 0 then
             async { return printHelp () }
-        else if argv.[0] = "--OperationalPoints.Line"
-                && argv.Length > 3 then
+        else if argv.[0] = "--OperationalPoints.Line" && argv.Length > 3 then
             async {
-                let ops = readFile<OperationalPoint []> argv.[1] "OperationalPoints.json"
+                let ops = readFile<OperationalPoint[]> argv.[1] "OperationalPoints.json"
 
                 let opsOfLine =
                     ops
                     |> Array.filter (fun op ->
                         argv.[2] = op.Country
-                        && op.RailwayLocations
-                           |> Array.exists (fun loc -> argv.[3] = loc.NationalIdentNum))
+                        && op.RailwayLocations |> Array.exists (fun loc -> argv.[3] = loc.NationalIdentNum))
                     |> Array.map (fun op ->
                         let loc =
-                            op.RailwayLocations
-                            |> Array.find (fun loc -> argv.[3] = loc.NationalIdentNum)
+                            op.RailwayLocations |> Array.find (fun loc -> argv.[3] = loc.NationalIdentNum)
 
                         ({ UOPID = op.UOPID
                            Name = op.Name
@@ -103,21 +100,18 @@ let main argv =
 
                 return ""
             }
-        else if argv.[0] = "--EraKG.OperationalPoints.Line"
-                && argv.Length > 3 then
+        else if argv.[0] = "--EraKG.OperationalPoints.Line" && argv.Length > 3 then
             async {
-                let ops = readFile<EraKG.OperationalPoint []> argv.[1] "OperationalPoints.json"
+                let ops = readFile<EraKG.OperationalPoint[]> argv.[1] "OperationalPoints.json"
 
                 let opsOfLine =
                     ops
                     |> Array.filter (fun op ->
                         argv.[2] = op.Country
-                        && op.RailwayLocations
-                           |> Array.exists (fun loc -> argv.[3] = loc.NationalIdentNum))
+                        && op.RailwayLocations |> Array.exists (fun loc -> argv.[3] = loc.NationalIdentNum))
                     |> Array.map (fun op ->
                         let loc =
-                            op.RailwayLocations
-                            |> Array.find (fun loc -> argv.[3] = loc.NationalIdentNum)
+                            op.RailwayLocations |> Array.find (fun loc -> argv.[3] = loc.NationalIdentNum)
 
                         ({ UOPID = op.UOPID
                            Name = op.Name
@@ -141,21 +135,18 @@ let main argv =
 
                 return ""
             }
-        else if argv.[0] = "--SectionsOfLine.Line"
-                && argv.Length > 3 then
+        else if argv.[0] = "--SectionsOfLine.Line" && argv.Length > 3 then
             async {
-                let sols = readFile<SectionOfLine []> argv.[1] "SectionsOfLines.json"
-                let ops = readFile<OperationalPoint []> argv.[1] "OperationalPoints.json"
+                let sols = readFile<SectionOfLine[]> argv.[1] "SectionsOfLines.json"
+                let ops = readFile<OperationalPoint[]> argv.[1] "OperationalPoints.json"
 
                 let opsOfLine =
                     ops
                     |> Array.filter (fun op ->
-                        op.RailwayLocations
-                        |> Array.exists (fun loc -> argv.[3] = loc.NationalIdentNum))
+                        op.RailwayLocations |> Array.exists (fun loc -> argv.[3] = loc.NationalIdentNum))
                     |> Array.map (fun op ->
                         let loc =
-                            op.RailwayLocations
-                            |> Array.find (fun loc -> argv.[3] = loc.NationalIdentNum)
+                            op.RailwayLocations |> Array.find (fun loc -> argv.[3] = loc.NationalIdentNum)
 
                         (op, loc.Kilometer))
                     |> Array.sortBy (fun (_, km) -> km)
@@ -163,28 +154,22 @@ let main argv =
 
                 let solsOfLine =
                     sols
-                    |> Array.filter (fun sol ->
-                        sol.IMCode = argv.[2]
-                        && sol.LineIdentification = argv.[3])
+                    |> Array.filter (fun sol -> sol.IMCode = argv.[2] && sol.LineIdentification = argv.[3])
                     |> Array.map (fun sol ->
                         (sol,
                          opsOfLine
-                         |> Array.tryFind (fun (op, _) ->
-                             sol.StartOP.IsSome
-                             && op.UOPID = sol.StartOP.Value.UOPID),
+                         |> Array.tryFind (fun (op, _) -> sol.StartOP.IsSome && op.UOPID = sol.StartOP.Value.UOPID),
                          opsOfLine
-                         |> Array.tryFind (fun (op, _) ->
-                             sol.EndOP.IsSome
-                             && op.UOPID = sol.EndOP.Value.UOPID)))
+                         |> Array.tryFind (fun (op, _) -> sol.EndOP.IsSome && op.UOPID = sol.EndOP.Value.UOPID)))
                     |> Array.sortBy (fun (_, startOp, _) ->
                         match startOp with
-                        | Some (_, km) -> km
+                        | Some(_, km) -> km
                         | None -> 0.0)
 
                 solsOfLine
                 |> Array.iter (fun (sol, startOp, endOp) ->
                     match startOp, endOp with
-                    | Some (startOp, startKm), Some (endOp, endKm) ->
+                    | Some(startOp, startKm), Some(endOp, endKm) ->
                         printfn
                             "%s/%s - %s/%s, start: %.1f, end: %.1f, length: %.1f, %s"
                             startOp.UOPID
@@ -199,21 +184,18 @@ let main argv =
 
                 return ""
             }
-        else if argv.[0] = "--EraKG.SectionsOfLine.Line"
-                && argv.Length > 3 then
+        else if argv.[0] = "--EraKG.SectionsOfLine.Line" && argv.Length > 3 then
             async {
-                let sols = readFile<EraKG.SectionOfLine []> argv.[1] "SectionsOfLines.json"
-                let ops = readFile<EraKG.OperationalPoint []> argv.[1] "OperationalPoints.json"
+                let sols = readFile<EraKG.SectionOfLine[]> argv.[1] "SectionsOfLines.json"
+                let ops = readFile<EraKG.OperationalPoint[]> argv.[1] "OperationalPoints.json"
 
                 let opsOfLine =
                     ops
                     |> Array.filter (fun op ->
-                        op.RailwayLocations
-                        |> Array.exists (fun loc -> argv.[3] = loc.NationalIdentNum))
+                        op.RailwayLocations |> Array.exists (fun loc -> argv.[3] = loc.NationalIdentNum))
                     |> Array.map (fun op ->
                         let loc =
-                            op.RailwayLocations
-                            |> Array.find (fun loc -> argv.[3] = loc.NationalIdentNum)
+                            op.RailwayLocations |> Array.find (fun loc -> argv.[3] = loc.NationalIdentNum)
 
                         (op, loc.Kilometer))
                     |> Array.sortBy (fun (_, km) -> km)
@@ -221,18 +203,14 @@ let main argv =
 
                 let solsOfLine =
                     sols
-                    |> Array.filter (fun sol ->
-                        sol.IMCode = argv.[2]
-                        && sol.LineIdentification = argv.[3])
+                    |> Array.filter (fun sol -> sol.IMCode = argv.[2] && sol.LineIdentification = argv.[3])
                     |> Array.map (fun sol ->
                         (sol,
-                         opsOfLine
-                         |> Array.tryFind (fun (op, _) -> op.UOPID = sol.StartOP),
-                         opsOfLine
-                         |> Array.tryFind (fun (op, _) -> op.UOPID = sol.EndOP)))
+                         opsOfLine |> Array.tryFind (fun (op, _) -> op.UOPID = sol.StartOP),
+                         opsOfLine |> Array.tryFind (fun (op, _) -> op.UOPID = sol.EndOP)))
                     |> Array.sortBy (fun (_, startOp, _) ->
                         match startOp with
-                        | Some (_, km) -> km
+                        | Some(_, km) -> km
                         | None -> 0.0)
 
                 let getMaxSpeed (sol: EraKG.SectionOfLine) (defaultValue: int) =
@@ -244,7 +222,7 @@ let main argv =
                 solsOfLine
                 |> Array.iter (fun (sol, startOp, endOp) ->
                     match startOp, endOp with
-                    | Some (startOp, startKm), Some (endOp, endKm) ->
+                    | Some(startOp, startKm), Some(endOp, endKm) ->
                         printfn
                             "%s/%s - %s/%s, start: %.1f, end: %.1f, len: %.1f, speed: %d electrified: %b %s"
                             startOp.UOPID
@@ -261,10 +239,9 @@ let main argv =
 
                 return ""
             }
-        else if argv.[0] = "--EraKG.SectionsOfLine.Electrified"
-                && argv.Length > 1 then
+        else if argv.[0] = "--EraKG.SectionsOfLine.Electrified" && argv.Length > 1 then
             async {
-                let sols = readFile<EraKG.SectionOfLine []> argv.[1] "SectionsOfLines.json"
+                let sols = readFile<EraKG.SectionOfLine[]> argv.[1] "SectionsOfLines.json"
 
                 sols
                 |> Array.groupBy (fun sol -> isElectrified sol)
@@ -278,15 +255,13 @@ let main argv =
             }
         else if argv.[0] = "--Graph.Line" && argv.Length > 2 then
             async {
-                let g = readFile<GraphNode []> argv.[1] "Graph.json"
+                let g = readFile<GraphNode[]> argv.[1] "Graph.json"
 
-                let map =
-                    readFile<OpInfo []> argv.[1] "OpInfos.json"
-                    |> toMap
+                let map = readFile<OpInfo[]> argv.[1] "OpInfos.json" |> toMap
 
                 let graph = Graph.toGraph g
 
-                readFile<LineInfo []> argv.[1] "LineInfos.json"
+                readFile<LineInfo[]> argv.[1] "LineInfos.json"
                 |> Array.filter (fun line -> line.Line = argv.[2])
                 |> Array.sortBy (fun line -> line.StartKm)
                 |> Array.iter (fun lineInfo ->
@@ -304,19 +279,15 @@ let main argv =
         else if argv.[0] = "--Graph.Route" && argv.Length >= 3 then
             async {
                 let useMaxSpeed = (argv.Length = 4 && argv.[3] = "--maxSpeed")
-                let g = readFile<GraphNode []> argv.[1] "Graph.json"
+                let g = readFile<GraphNode[]> argv.[1] "Graph.json"
 
-                let map =
-                    readFile<OpInfo []> argv.[1] "OpInfos.json"
-                    |> toMap
+                let map = readFile<OpInfo[]> argv.[1] "OpInfos.json" |> toMap
 
                 let args = argv.[2].Split ";"
 
                 let path = Graph.getShortestPath g args
 
-                if args.Length = 2
-                   && map.ContainsKey args.[0]
-                   && map.ContainsKey args.[1] then
+                if args.Length = 2 && map.ContainsKey args.[0] && map.ContainsKey args.[1] then
                     printfn "Path: %s to %s" map.[args.[0]].Name map.[args.[1]].Name
                 else
                     printfn "Path:"
@@ -329,32 +300,22 @@ let main argv =
                     else
                         Graph.getCompactPath path
 
-                printfn
-                    "compact Path%s:"
-                    (if useMaxSpeed then
-                         " with maxSpeed"
-                     else
-                         "")
+                printfn "compact Path%s:" (if useMaxSpeed then " with maxSpeed" else "")
 
                 Graph.printPath (getCompactPath path)
 
                 let cpath = Graph.compactifyPath path g
 
-                if (Graph.costOfPath path)
-                   <> (Graph.costOfPath cpath) then
+                if (Graph.costOfPath path) <> (Graph.costOfPath cpath) then
                     printfn "compactified Path:"
                     Graph.printPath cpath
 
-                    printfn
-                        "compactified compact Path%s:"
-                        (if useMaxSpeed then
-                             " with maxSpeed"
-                         else
-                             "")
+                    printfn "compactified compact Path%s:" (if useMaxSpeed then " with maxSpeed" else "")
 
                     Graph.printPath (getCompactPath cpath)
 
                 printfn "brouter url of compactified path "
+
                 Graph.getLocationsOfPath g map cpath
                 |> Array.iter (Graph.getBRouterUrl >> printfn "%s")
 
@@ -365,7 +326,7 @@ let main argv =
         |> Async.RunSynchronously
         |> fprintfn stdout "%s"
 
-    with
-    | e -> fprintfn stderr "error: %s %s" e.Message e.StackTrace
+    with e ->
+        fprintfn stderr "error: %s %s" e.Message e.StackTrace
 
     0

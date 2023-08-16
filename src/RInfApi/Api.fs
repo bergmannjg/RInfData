@@ -36,7 +36,7 @@ type SOLTunnel =
       ValidityDateStart: System.DateTime
       ValidityDateEnd: System.DateTime
       TrackID: int
-      SOLTunnelParameters: SOLTunnelParameter [] }
+      SOLTunnelParameters: SOLTunnelParameter[] }
 
 type SOLTrackParameter =
     { Value: string
@@ -51,8 +51,8 @@ and SOLTrack =
       SectionOfLineID: int
       VersionID: int
       TrackID: int
-      SOLTrackParameters: SOLTrackParameter []
-      SOLTunnels: SOLTunnel [] }
+      SOLTrackParameters: SOLTrackParameter[]
+      SOLTunnels: SOLTunnel[] }
 
 type RailwayLocation =
     { Id: int
@@ -71,7 +71,7 @@ type OPTrack =
       OperationalPointID: int
       VersionID: int
       TrackID: int
-      OPTrackParameters: OPTrackParameter [] }
+      OPTrackParameters: OPTrackParameter[] }
 
 type OperationalPoint =
     { ID: int
@@ -84,8 +84,8 @@ type OperationalPoint =
       Latitude: float
       Longitude: float
       UOPID: string
-      RailwayLocations: RailwayLocation []
-      OPTracks: OPTrack [] }
+      RailwayLocations: RailwayLocation[]
+      OPTracks: OPTrack[] }
 
 type SectionOfLine =
     { ID: int
@@ -102,7 +102,7 @@ type SectionOfLine =
       OPEndID: int
       StartOP: OperationalPoint option
       EndOP: OperationalPoint option
-      SOLTracks: SOLTrack [] }
+      SOLTracks: SOLTrack[] }
 
 type Node =
     { OperationalPoint: OperationalPoint
@@ -121,8 +121,8 @@ type Edge =
       Nature: string }
 
 type Route =
-    { Nodes: NodeContainer []
-      Edges: Edge [] }
+    { Nodes: NodeContainer[]
+      Edges: Edge[] }
 
 module Api =
 
@@ -136,8 +136,7 @@ module Api =
             let expand = defaultArg withExpand ""
 
             if expand = "SOLTrackParameters" then
-                prefix
-                + "$expand=SOLTracks($expand=SOLTrackParameters)"
+                prefix + "$expand=SOLTracks($expand=SOLTrackParameters)"
             else if expand = "SOLTunnels" then
                 prefix + "$expand=SOLTracks($expand=SOLTunnels)"
             else
@@ -145,8 +144,7 @@ module Api =
 
         let expandOPTrackParameters (withTrackParameters: bool option) (prefix: string) =
             if defaultArg withTrackParameters false then
-                prefix
-                + "$expand=OPTracks($expand=OPTrackParameters)"
+                prefix + "$expand=OPTracks($expand=OPTrackParameters)"
             else
                 ""
 
@@ -162,12 +160,10 @@ module Api =
             else
                 ""
 
-        let toString (arr: string []) =
-            arr
-            |> Array.map (fun s -> "'" + s + "'")
-            |> String.concat ","
+        let toString (arr: string[]) =
+            arr |> Array.map (fun s -> "'" + s + "'") |> String.concat ","
 
-        let getAllData (countries: string []) (getData: string [] -> int -> Async<'a []>) : Async<'a []> =
+        let getAllData (countries: string[]) (getData: string[] -> int -> Async<'a[]>) : Async<'a[]> =
             let rec loop skip (results: array<'a> list) =
                 async {
                     let! result = getData countries skip
@@ -191,12 +187,12 @@ module Api =
             async {
                 let! response = client.Get("DatasetImports")
 
-                let imports = JsonSerializer.Deserialize<OData<DatasetImport []>> response
+                let imports = JsonSerializer.Deserialize<OData<DatasetImport[]>> response
 
                 return imports.value
             }
 
-        member __.GetNextSectionsOfLines (countries: string []) (skip: int) =
+        member __.GetNextSectionsOfLines (countries: string[]) (skip: int) =
             async {
                 let expand = expandOP (Some true) "&"
 
@@ -209,12 +205,10 @@ module Api =
                         + expand
                     )
 
-                return
-                    (JsonSerializer.Deserialize<OData<SectionOfLine []>> response)
-                        .value
+                return (JsonSerializer.Deserialize<OData<SectionOfLine[]>> response).value
             }
 
-        member __.GetSectionsOfLines(countries: string []) =
+        member __.GetSectionsOfLines(countries: string[]) =
             getAllData countries __.GetNextSectionsOfLines
 
         member __.GetSectionsOfLine(keyID: int, keyVersionID: int, ?withExpand: string, ?logJson: bool) =
@@ -252,11 +246,7 @@ module Api =
                                                 SOLTrackParameters = [||]
                                                 SOLTunnels = [||] } })
 
-                        let tunnels =
-                            if isNull t.SOLTunnels then
-                                [||]
-                            else
-                                t.SOLTunnels
+                        let tunnels = if isNull t.SOLTunnels then [||] else t.SOLTunnels
 
                         { t with
                             SOLTrackParameters = parameters
@@ -265,7 +255,7 @@ module Api =
                 return { sol with SOLTracks = tracks }
             }
 
-        member __.GetNextOperationalPoints (countries: string []) (skip: int) =
+        member __.GetNextOperationalPoints (countries: string[]) (skip: int) =
             async {
                 let expand = expandRailwayLocations (Some true) "&"
 
@@ -278,12 +268,10 @@ module Api =
                         + expand
                     )
 
-                return
-                    (JsonSerializer.Deserialize<OData<OperationalPoint []>> response)
-                        .value
+                return (JsonSerializer.Deserialize<OData<OperationalPoint[]>> response).value
             }
 
-        member __.GetOperationalPoints(countries: string []) =
+        member __.GetOperationalPoints(countries: string[]) =
             getAllData countries __.GetNextOperationalPoints
 
         member __.GetOperationalPoint(keyID: int, keyVersionID: int, ?withTrackParameters: bool, ?logJson: bool) =

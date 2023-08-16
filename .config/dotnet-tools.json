@@ -8,8 +8,8 @@
         "fable"
       ]
     },
-    "fantomas-tool": {
-      "version": "4.7.9",
+    "fantomas": {
+      "version": "6.1.2",
       "commands": [
         "fantomas"
       ]

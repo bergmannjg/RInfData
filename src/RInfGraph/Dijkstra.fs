@@ -17,6 +17,7 @@ type Vertex =
       Cost: int
       Edges: Edge list
       Path: string list }
+
     interface IComparable<Vertex> with
         member this.CompareTo other = compare this.Cost other.Cost
 
@@ -37,9 +38,10 @@ type Path = { Nodes: string list; Cost: int }
 
 let addEdge vertex e =
     { vertex with
-          Edges = e :: vertex.Edges }
+        Edges = e :: vertex.Edges }
 
 type Vertex with
+
     member this.AddEdge = addEdge this
 
 let makeEdge (distance, destVertexId) =
@@ -54,8 +56,7 @@ let makeVertex vertexId edges =
 
 let shortestPath (graph: Map<string, Vertex>) (sourceId: string) (destinationId: string) =
 
-    let mutable graph0 =
-        graph.Add(sourceId, { graph.[sourceId] with Cost = 0 })
+    let mutable graph0 = graph.Add(sourceId, { graph.[sourceId] with Cost = 0 })
 
     let mutable pq = PriorityQueue.empty false
     pq <- pq.Insert(graph0.[sourceId])
@@ -67,10 +68,7 @@ let shortestPath (graph: Map<string, Vertex>) (sourceId: string) (destinationId:
         let vertex, newpq = pq.Pop()
         pq <- newpq
 
-        if
-            vertex.Cost <> Int32.MaxValue
-            && not (visited.ContainsKey(vertex.Id))
-        then
+        if vertex.Cost <> Int32.MaxValue && not (visited.ContainsKey(vertex.Id)) then
             if vertex.Id = destinationId then
                 dest <- Some(vertex)
 
@@ -84,8 +82,8 @@ let shortestPath (graph: Map<string, Vertex>) (sourceId: string) (destinationId:
                     if newDistance < destination.Cost then
                         let newDestination =
                             { destination with
-                                  Cost = newDistance
-                                  Path = destination.Id :: vertex.Path }
+                                Cost = newDistance
+                                Path = destination.Id :: vertex.Path }
 
                         pq <- pq.Insert newDestination
                         graph0 <- graph0.Add(destinationId, newDestination)
@@ -99,7 +97,7 @@ let shortestPath (graph: Map<string, Vertex>) (sourceId: string) (destinationId:
     let result =
         match dest with
         | Some dest ->
-            { Nodes = dest.Path |> List.rev |> fun l -> sourceId :: l
+            { Nodes = dest.Path |> List.rev |> (fun l -> sourceId :: l)
               Cost = dest.Cost }
             |> Some
         | None -> None
@@ -116,6 +114,7 @@ type Vertex<'a when 'a: equality> =
       Cost: int
       Edges: Edge<'a> list
       Path: 'a list }
+
     interface IComparable<Vertex<'a>> with
         member this.CompareTo other = compare this.Cost other.Cost
 
@@ -135,9 +134,11 @@ type Vertex<'a when 'a: equality> =
 type Path<'a> = { Nodes: 'a list; Cost: int }
 
 let addEdge vertex e =
-    { vertex with Edges = e :: vertex.Edges }
+    { vertex with
+        Edges = e :: vertex.Edges }
 
 type Vertex<'a when 'a: equality> with
+
     member this.AddEdge = addEdge this
 
 let makeEdge (distance, destVertexId) =
@@ -168,10 +169,7 @@ let shortestPath<'a when 'a: equality and 'a: comparison>
         let vertex, newpq = pq.Pop()
         pq <- newpq
 
-        if
-            vertex.Cost <> Int32.MaxValue
-            && not (visited.ContainsKey(vertex.Id))
-        then
+        if vertex.Cost <> Int32.MaxValue && not (visited.ContainsKey(vertex.Id)) then
             if vertex.Id = destinationId then
                 dest <- Some(vertex)
 
@@ -200,7 +198,7 @@ let shortestPath<'a when 'a: equality and 'a: comparison>
     let result =
         match dest with
         | Some dest ->
-            { Nodes = dest.Path |> List.rev |> fun l -> sourceId :: l
+            { Nodes = dest.Path |> List.rev |> (fun l -> sourceId :: l)
               Cost = dest.Cost }
             |> Some
         | None -> None
@@ -208,4 +206,3 @@ let shortestPath<'a when 'a: equality and 'a: comparison>
     result
 
 #endif
-

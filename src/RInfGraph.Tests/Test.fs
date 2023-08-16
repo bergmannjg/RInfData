@@ -14,14 +14,14 @@ type Source =
     | Rinfdata
     | EraKGdata
 
-let TestPath (source: Source) (ids: string []) (expectedPath: (string * string * int) []) (expectedCost: int) =
+let TestPath (source: Source) (ids: string[]) (expectedPath: (string * string * int)[]) (expectedCost: int) =
     let dir =
         if source = Source.Rinfdata then
             "../../../../../rinf-data/"
         else
             "../../../../../erakg-data/"
 
-    let g = readFile<GraphNode []> dir "Graph.json"
+    let g = readFile<GraphNode[]> dir "Graph.json"
     let path = Graph.getShortestPath g ids
     let cpath = Graph.compactifyPath path g
     let ccpath = Graph.getCompactPath cpath
@@ -48,18 +48,14 @@ let TestPath (source: Source) (ids: string []) (expectedPath: (string * string *
 let sources = [ Source.Rinfdata; Source.EraKGdata ]
 
 let switch (source: Source) =
-    if source = Source.Rinfdata then
-        "DE00FFU"
-    else
-        "DE95441" // op new in era kg
+    if source = Source.Rinfdata then "DE00FFU" else "DE95441" // op new in era kg
 
 [<TestCaseSource(nameof (sources))>]
 let TestHHToFF (source: Source) =
     TestPath
         source
         [| "DE000HH"; "DE000FF" |]
-        [| ("DE000HH", switch source, 1733)
-           (switch source, "DE000FF", 3600) |]
+        [| ("DE000HH", switch source, 1733); (switch source, "DE000FF", 3600) |]
         15245
 
 [<TestCaseSource(nameof (sources))>]
@@ -67,8 +63,7 @@ let TestFFToHH (source: Source) =
     TestPath
         source
         [| "DE000FF"; "DE000HH" |]
-        [| ("DE000FF", switch source, 3600)
-           (switch source, "DE000HH", 1733) |]
+        [| ("DE000FF", switch source, 3600); (switch source, "DE000HH", 1733) |]
         15245
 
 [<TestCaseSource(nameof (sources))>]
