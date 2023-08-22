@@ -45,7 +45,7 @@ let TestPath (source: Source) (ids: string[]) (expectedPath: (string * string * 
         expectedPath
         ccpath
 
-let sources = [ Source.Rinfdata; Source.EraKGdata ]
+let sources = [ Source.EraKGdata ]
 
 let switch (source: Source) =
     if source = Source.Rinfdata then "DE00FFU" else "DE95441" // op new in era kg

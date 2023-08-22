@@ -3,6 +3,7 @@
 namespace EraKG
 
 open FSharp.Collections
+open System.Text.Json
 
 type RailwayLocation =
     { NationalIdentNum: string
@@ -53,6 +54,9 @@ type Tunnel =
 module Api =
 
     open Sparql
+
+    // got Virtuoso 22023 Error SR580 for these lines in trackOfLineQuery
+    let linesWithError: (string * string)[] = [| "014000-1", "FRA"; "850000-1", "FRA" |]
 
     let prefixTrack = "http://data.europa.eu/949/functionalInfrastructure/tracks/"
 
@@ -141,8 +145,67 @@ WHERE {{
     let loadSectionOfLineData (country: string) : Async<string> =
         Request.GetAsync endpoint (sectionOfLineQuery country) Request.applicationSparqlResults
 
+    let private trackOfLineQuery (lineName: string) (country: string) =
+        $"""
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX era: <http://data.europa.eu/949/>
+
+DESCRIBE ?track
+WHERE {{
+  ?sectionOfLine a era:SectionOfLine .
+  ?sectionOfLine era:track ?track .
+
+  ?sectionOfLine era:lineNationalId ?lineNationalId .
+  ?lineNationalId rdfs:label "{lineName}" .
+  ?sectionOfLine era:inCountry <http://publications.europa.eu/resource/authority/country/{country}> . 
+}}
+"""
+
+    let loadTracksOfLine (lineName: string) (country: string) : Async<string> =
+        async {
+            try
+                let! data = Request.GetAsync endpoint (trackOfLineQuery lineName country) Request.applicationMicrodata
+                return data
+            with e ->
+                fprintfn stderr "error: loadTrackData %s" e.Message
+                return "{\"items\":[]}"
+        }
+
+    let private trackIdQuery (trackId: string) =
+        let id = trackId.Replace(" ", "%20")
+        let s = $"<http://data.europa.eu/949/functionalInfrastructure/tracks/{id}>"
+
+        $"""
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX era: <http://data.europa.eu/949/>
+
+SELECT ?p ?o WHERE {{
+    VALUES ?p {{
+        era:maximumPermittedSpeed
+        era:contactLineSystem
+    }}
+
+    {s} ?p ?o
+}}
+"""
+
+    let loadTrackIdData (trackId: string) : Async<string> =
+        async {
+            try
+                let! data = Request.GetAsync endpoint (trackIdQuery trackId) Request.applicationSparqlResults
+                return data
+            with e ->
+                fprintfn stderr "error: loadTrackData %s" e.Message
+                return "{\"items\":[]}"
+        }
+
     let private trackQuery (country: string) (n: int) =
         let filter = if n < 9 then n.ToString() else (n.ToString() + "a-z")
+
+        let toFilter () : string =
+            linesWithError
+            |> Array.map (fun (line, _) -> $" FILTER(?line != \"{line}\") . ")
+            |> String.concat ""
 
         let pattern = $"^[{filter}]"
 
@@ -157,6 +220,7 @@ WHERE {{
   
   ?sectionOfLine era:lineNationalId ?lineNationalId .
   ?lineNationalId rdfs:label ?line .
+  {toFilter ()}
   FILTER(regex(?line, "{pattern}", "i")) .
   {toCountryQuery "?sectionOfLine" country}
 }}
@@ -356,6 +420,9 @@ WHERE {{
               loadCapability = Some "rinf/90"
               contactLineSystem = None }
 
+    let toTracks (tracks: Microdata) : Track[] =
+        tracks.items |> Array.map (fun item -> toTrack item.id tracks)
+
     let toTunnels (sparql: QueryResults) : Tunnel[] =
         sparql.results.bindings
         |> Array.fold
@@ -404,6 +471,115 @@ WHERE {{
         | None ->
             fprintfn stderr $"line {lineIdentification} not found"
             false
+
+    let private getValue (sparql: QueryResults) (prop: string) =
+        sparql.results.bindings
+        |> Array.map (fun b ->
+            match b.TryGetValue "p", b.TryGetValue "o" with
+            | (true, p), (true, o) when p.value = prop -> Some o.value
+            | _ -> None)
+        |> Array.choose id
+        |> Array.tryHead
+
+    let private toIntValue (v: string option) =
+        match v with
+        | Some v ->
+            match System.Int32.TryParse v with
+            | true, value -> Some value
+            | _ -> None
+        | None -> None
+
+    let reloadTrack (track: Track) : Async<Track> =
+        async {
+            let! res = loadTrackIdData track.id
+
+            let queryResults: QueryResults = JsonSerializer.Deserialize res
+
+            let maximumPermittedSpeed = getValue queryResults propMaximumPermittedSpeed |> toIntValue
+
+            let contactLineSystem =
+                getValue queryResults propContactLineSystem
+                |> Option.map (fun s -> (System.Web.HttpUtility.UrlDecode(s)).Substring(prefixContactLineSystem.Length))
+
+            let newTrack =
+                { track with
+                    maximumPermittedSpeed =
+                        match maximumPermittedSpeed with
+                        | Some _ -> maximumPermittedSpeed
+                        | None -> track.maximumPermittedSpeed
+                    contactLineSystem =
+                        match maximumPermittedSpeed with
+                        | Some _ -> contactLineSystem
+                        | None -> track.contactLineSystem }
+
+            return newTrack
+        }
+
+    let private reloadTracksOfSectionOfLine (sol: SectionOfLine) : Async<Track[]> =
+        let operations = sol.Tracks |> Array.map (fun track -> reloadTrack track)
+
+        async {
+            let tracks = operations |> Async.Sequential |> Async.RunSynchronously
+
+            return tracks
+        }
+
+    let private reloadTracksOfSectionOfLines (sols: SectionOfLine[]) : Async<Map<string, Track>> =
+        let operations = sols |> Array.map (fun sol -> reloadTracksOfSectionOfLine sol)
+
+        async {
+            let sols =
+                operations
+                |> Async.Sequential
+                |> Async.RunSynchronously
+                |> Array.concat
+                |> Array.fold (fun (map: Map<string, Track>) track -> map.Add(track.id, track)) Map.empty
+
+            return sols
+        }
+
+    let remapTracksOfLines (sols: SectionOfLine[]) : Async<SectionOfLine[]> =
+        let solsOfLine2Load =
+            sols
+            |> Array.filter (fun sol ->
+                linesWithError
+                |> Array.exists (fun (line, country) -> sol.LineIdentification = line && sol.Country = country))
+
+        solsOfLine2Load
+        |> Array.groupBy (fun sol -> sol.LineIdentification)
+        |> Array.iter (fun (k, _) -> fprintfn stderr $"remapTracksOfLine {k}")
+
+        async {
+            let! tracks = reloadTracksOfSectionOfLines solsOfLine2Load
+
+            let changeTrack (track: Track) : Track =
+                if tracks.ContainsKey track.id then
+                    tracks[track.id]
+                else
+                    track
+
+            return
+                sols
+                |> Array.map (fun sol ->
+                    { sol with
+                        Tracks = sol.Tracks |> Array.map changeTrack })
+        }
+
+    let loadTracksOfLines (lineNames: string[]) (country: string) : Async<Microdata[]> =
+        let operations =
+            lineNames |> Array.map (fun lineName -> loadTracksOfLine lineName country)
+
+        async {
+            let data =
+                operations
+                |> Async.Sequential
+                |> Async.RunSynchronously
+                |> Array.map (fun res ->
+                    let data: Microdata = JsonSerializer.Deserialize res
+                    data)
+
+            return data
+        }
 
     let toSectionsOfLine (sparql: QueryResults) (lines: RailwayLine[]) (tracks: Microdata) : SectionOfLine[] =
         sparql.results.bindings

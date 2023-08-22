@@ -311,6 +311,8 @@ let buildGraph (ops: OperationalPoint[]) (sols: SectionOfLine[]) =
         else
             sol.Length / 1000.0
 
+    let nextYear = (System.DateTime.Now.Year + 1).ToString()
+
     let addSol (sol: SectionOfLine) =
         match findOp sol.StartOP, findOp sol.EndOP with
         | Some(opStart), Some(opEnd) ->
@@ -346,7 +348,13 @@ let buildGraph (ops: OperationalPoint[]) (sols: SectionOfLine[]) =
                       Length = length sol }
                     :: graph.[opEnd.UOPID]
                 )
-        | _ -> fprintfn stderr "not found, %A or %A" sol.StartOP sol.EndOP
+        | _ ->
+            // ignore 'meta' inf in op names
+            if
+                not (sol.StartOP.Contains("/" + nextYear))
+                && not (sol.EndOP.Contains("/" + nextYear))
+            then
+                fprintfn stderr "not found, %A or %A" sol.StartOP sol.EndOP
 
     ops |> Array.iter addOp
 
@@ -546,16 +554,54 @@ let execSectionsOfLineBuild (path: string) (countriesArg: string) : Async<string
         let railwaylines = readFile<RailwayLine[]> path "Railwaylines.json"
         fprintfn stderr $"kg railwaylines: {railwaylines.Length}"
 
-        let kgSols = EraKG.Api.toSectionsOfLine result railwaylines tracks
+        let sols = EraKG.Api.toSectionsOfLine result railwaylines tracks
 
-        fprintfn stderr $"kg sols: {kgSols.Length}"
+        let! sols = EraKG.Api.remapTracksOfLines sols
 
-        return JsonSerializer.Serialize kgSols
+        fprintfn stderr $"kg sols: {sols.Length}"
+
+        return JsonSerializer.Serialize sols
     }
+
+let execTracksOfLinesLoad (path: string) (linePrefix: string) (country: string) : Async<string> =
+    async {
+        let lineInfos =
+            readFile<LineInfo[]> path "LineInfos.json"
+            |> Array.filter (fun line -> line.Line.StartsWith(linePrefix) && line.Country = country)
+            |> Array.map (fun line -> line.Line)
+
+        fprintfn stderr $"lineInfos {lineInfos.Length}"
+
+        let! data = EraKG.Api.loadTracksOfLines lineInfos country
+
+        return JsonSerializer.Serialize data
+    }
+
+let execTrackLoad (path: string) (trackId: string) : Async<string> =
+    async {
+        let tracks =
+            readFile<Microdata> path "sparql-tracks.json"
+            |> EraKG.Api.toTracks
+            |> Array.filter (fun track -> track.id.EndsWith(trackId))
+
+        fprintfn stderr $"tracks {tracks.Length}"
+
+        let! data =
+            if tracks.Length > 0 then
+                async {
+                    let! track = EraKG.Api.reloadTrack tracks[0]
+                    return Some track
+                }
+            else
+                async { return None }
+
+        return JsonSerializer.Serialize data
+    }
+
 
 let execTracksBuild (path: string) (countriesArg: string) : Async<string> =
     let operations =
-        [ 1..9 ]
+        [ 0..9 ]
         |> List.map (fun n ->
             loadDataCached<Microdata> path $"sparql-tracks-{n}.json" (fun () -> Api.loadTrackData countriesArg n))
 
@@ -640,6 +686,10 @@ let main argv =
             async { return! execTunnelBuild argv.[1] argv.[2] }
         else if argv.[0] = "--SectionsOfLine" && argv.Length > 2 && checkIsDir argv.[1] then
             async { return! execSectionsOfLineBuild argv.[1] argv.[2] }
+        else if argv.[0] = "--TracksOfLinesLoad" && argv.Length > 3 && checkIsDir argv.[1] then
+            async { return! execTracksOfLinesLoad argv.[1] argv.[2] argv.[3] }
+        else if argv.[0] = "--TrackLoad" && argv.Length > 2 && checkIsDir argv.[1] then
+            async { return! execTrackLoad argv.[1] argv.[2] }
         else if argv.[0] = "--Tracks" && argv.Length > 2 && checkIsDir argv.[1] then
             async { return! execTracksBuild argv.[1] argv.[2] }
         else
