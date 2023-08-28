@@ -100,6 +100,7 @@ let main argv =
             async {
                 let operationalPoints =
                     readFile<OperationalPoint[]> argv.[1] "OperationalPoints.json"
+                    |> Array.filter (fun op -> op.Country = "DEU")
 
                 fprintfn stderr $"kg operationalPoints: {operationalPoints.Length}"
 
