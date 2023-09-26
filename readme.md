@@ -10,7 +10,7 @@ F# program to access the ERA (EU Agency for Railways) Register of Infrastructure
 
 ## Package
 
-The rinf-graph JavaScript package contains the RInfGraph JavaScript code and the EraKGLoader executable 
+The rinf-graph JavaScript package contains the RInfGraph JavaScript code and the EraKGLoader executable
 to load data from the knowledge graph ([build-package](./scripts/build-package.sh)).
 
 Installation in JavaScript project:
@@ -21,8 +21,6 @@ Installation in JavaScript project:
 
 ## Program
 
-* [RInfApi](src/RInfApi): implements the API
-* [RInfLoader](src/RInfLoader): loads the data.
 * [ERAKGApi](src/EraKGApi): API for the knowledge graph.
 * [ERAKGLoader](src/EraKGLoader): loads the data via the knowledge graph.
 * [RInfQuery](src/RInfQuery): query cached data.

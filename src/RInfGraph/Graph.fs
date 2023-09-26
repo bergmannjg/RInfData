@@ -40,7 +40,8 @@ type LineInfo =
       StartKm: float
       EndKm: float
       UOPIDs: string[]
-      Tunnels: string[] }
+      Tunnels: string[]
+      Wikipedia: string Option }
 
 type TunnelInfo =
     { Tunnel: string

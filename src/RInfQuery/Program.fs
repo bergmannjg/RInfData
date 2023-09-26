@@ -272,7 +272,11 @@ let main argv =
                     Graph.printPathEx map path
 
                     Graph.getLocationsOfPath g map path
-                    |> Array.iter (Graph.getBRouterUrl >> printfn "%s"))
+                    |> Array.iter (Graph.getBRouterUrl >> printfn "%s")
+
+                    if lineInfo.Wikipedia.IsSome then
+                        let path = lineInfo.Wikipedia.Value.Replace(" ", "%20")
+                        printfn $"https://de.wikipedia.org/wiki/{path}")
 
                 return ""
             }

@@ -41,6 +41,7 @@ export interface LineInfo {
     EndKm: number;
     UOPIDs: Array<string>;
     Tunnels: Array<string>;
+    Wikipedia?: string;
 }
 
 export interface TunnelInfo {

@@ -60,7 +60,15 @@ let findOp ops opId =
 let findOpByOPID (ops: OperationalPoint[]) opId =
     ops |> Array.tryFind (fun (op: OperationalPoint) -> op.UOPID = opId)
 
-let getLineInfo (name: string) ops (nodesOfLine: GraphNode list) (tunnels: TunnelInfo[]) country line =
+let getLineInfo
+    (name: string)
+    ops
+    (tunnels: TunnelInfo[])
+    (osmRoutes: OSM.Sparql.Entry[])
+    (country: string)
+    line
+    (nodesOfLine: GraphNode list)
+    =
 
     let firstOp = findOpByOPID ops (nodesOfLine |> List.head).Node
 
@@ -86,6 +94,24 @@ let getLineInfo (name: string) ops (nodesOfLine: GraphNode list) (tunnels: Tunne
             |> Array.map (fun t -> t.Tunnel)
             |> Array.distinct
 
+        let countryPrefixes = [| "DEU", "de:"; "FRA", "fr:" |]
+
+        // i.e. "574000-1" == "574 000" should match
+        let matchLine (rinfLine: string) (osmLine: string) =
+            rinfLine = osmLine
+            || country = "FRA"
+               && rinfLine.EndsWith "-1"
+               && osmLine.Length = 7
+               && rinfLine.Substring(0, 3) = osmLine.Substring(0, 3)
+
+        let wikipedia =
+            osmRoutes
+            |> Array.tryFind (fun r ->
+                matchLine line r.Ref
+                && countryPrefixes
+                   |> Array.exists (fun (c, p) -> c = country && r.Wikipedia.StartsWith p))
+            |> Option.map (fun r -> r.Wikipedia)
+
         Some
             { Line = line
               Country = country
@@ -98,13 +124,15 @@ let getLineInfo (name: string) ops (nodesOfLine: GraphNode list) (tunnels: Tunne
               StartKm = kilometerOfLine firstOp line
               EndKm = kilometerOfLine lastOp line
               UOPIDs = uOPIDs
-              Tunnels = tunnelsOfLine }
+              Tunnels = tunnelsOfLine
+              Wikipedia = wikipedia }
     | _ -> None
 
 let buildLineInfo
     (ops: OperationalPoint[])
     (nodes: GraphNode[])
     (tunnels: TunnelInfo[])
+    (osmRoutes: OSM.Sparql.Entry[])
     (country: string, line: string)
     : LineInfo[] =
     let solsOfLine =
@@ -147,8 +175,7 @@ let buildLineInfo
         match firstOp, lastOp with
         | Some firstOp, Some lastOp ->
             nextNodesLists
-            |> Array.map (fun nextNodes ->
-                getLineInfo (firstOp.Name + " - " + lastOp.Name) ops nextNodes tunnels country line)
+            |> Array.map (getLineInfo (firstOp.Name + " - " + lastOp.Name) ops tunnels osmRoutes country line)
             |> Array.choose id
         | _ -> [||]
     else
@@ -168,11 +195,16 @@ let reduceLineInfos (lineinfos: LineInfo[]) : LineInfo[] =
 
     lineinfos |> Array.groupBy (fun li -> li.Line) |> Array.fold folder [||]
 
-let buildLineInfos (ops: OperationalPoint[]) (nodes: GraphNode[]) (tunnels: TunnelInfo[]) : LineInfo[] =
+let buildLineInfos
+    (ops: OperationalPoint[])
+    (nodes: GraphNode[])
+    (tunnels: TunnelInfo[])
+    (osmRoutes: OSM.Sparql.Entry[])
+    : LineInfo[] =
     nodes
     |> Array.collect (fun sol -> sol.Edges |> Array.map (fun e -> (e.Country, e.Line)))
     |> Array.distinct
-    |> Array.collect (buildLineInfo ops nodes tunnels)
+    |> Array.collect (buildLineInfo ops nodes tunnels osmRoutes)
     |> reduceLineInfos
     |> Array.sortBy (fun line -> line.Line)
 
@@ -434,6 +466,22 @@ let getCountries () : Async<string> =
         return String.concat ";" allCountries
     }
 
+let getOsmRoutes () : Async<string> =
+    async {
+
+        let! result = OSM.Sparql.Api.loadWikipediaArticles ()
+
+        let entries1 =
+            OSM.Sparql.Api.ToEntries(JsonSerializer.Deserialize<QueryResults>(result))
+
+        let! result = OSM.Sparql.Api.loadWikidataArticles ()
+
+        let entries2 =
+            OSM.Sparql.Api.ToEntries(JsonSerializer.Deserialize<QueryResults>(result))
+
+        return JsonSerializer.Serialize (Array.append entries1 entries2)
+    }
+
 let execGraphBuild (path: string) : Async<string> =
     async {
         let ops = readFile<OperationalPoint[]> path "OperationalPoints.json"
@@ -467,7 +515,9 @@ let execLineInfoBuild (path: string) : Async<string> =
 
         let tunnels = readFile<TunnelInfo[]> path "TunnelInfos.json"
 
-        let lineInfos = buildLineInfos ops nodes tunnels
+        let osmRoutes = readFile<OSM.Sparql.Entry[]> path "OsmRoutes.json"
+
+        let lineInfos = buildLineInfos ops nodes tunnels osmRoutes
 
         return JsonSerializer.Serialize lineInfos
     }
@@ -649,6 +699,9 @@ let execBuild (path: string) (countriesArg: string) (useCache: bool) : Async<str
         let! result = execTunnelInfoBuild path
         File.WriteAllText(path + "TunnelInfos.json", result)
 
+        let! result = getOsmRoutes ()
+        File.WriteAllText(path + "OsmRoutes.json", result)
+
         let! result = execLineInfoBuild path
         File.WriteAllText(path + "LineInfos.json", result)
 
@@ -668,7 +721,9 @@ let main argv =
             async { return! execBuild dataDirectory argv.[0] useCache }
         else if argv.[0] = "--Countries" then
             async { return! getCountries () }
-        else if argv.[0] = "--Build" && checkIsDir argv.[1] && argv.Length = 3 then
+        else if argv.[0] = "--OsmRoutes" then
+            async { return! getOsmRoutes () }
+        else if argv.[0] = "--Build" && checkIsDir argv.[1] && argv.Length >= 3 then
             async { return! execBuild argv.[1] argv.[2] useCache }
         else if argv.[0] = "--Graph.Build" && argv.Length > 1 && checkIsDir argv.[1] then
             async { return! execGraphBuild argv.[1] }
