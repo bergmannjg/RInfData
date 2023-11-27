@@ -318,8 +318,23 @@ let buildGraph (ops: OperationalPoint[]) (sols: SectionOfLine[]) =
         if not (graph.ContainsKey op.UOPID) then
             graph <- graph.Add(op.UOPID, List.empty)
 
-    let findOp opId =
-        ops |> Array.tryFind (fun op -> op.UOPID = opId)
+    // opId in SectionOfLine sometime contains validity dates
+    // ex: "DE/EU00059/2024-01-01_2024-12-31" or "DEASBRS/2024-01-01_2024-12-31"
+    // normalize to opId
+    let normalizeOpId (opId: string) =
+        let splits = opId.Split "/"
+
+        if splits.Length > 1 then
+            if splits.[1].StartsWith "18" || splits.[1].StartsWith "20" then // century
+                splits.[0]
+            else
+                splits.[1]
+        else
+            opId
+
+    let findOp (opId: string) =
+        let opIdNormalized = normalizeOpId opId
+        ops |> Array.tryFind (fun op -> op.UOPID = opIdNormalized)
 
     let length (sol: SectionOfLine) =
         if sol.Length = 0 then
@@ -329,10 +344,14 @@ let buildGraph (ops: OperationalPoint[]) (sols: SectionOfLine[]) =
                     |> Array.tryFind (fun rl -> rl.NationalIdentNum = sol.LineIdentification)
 
             let startLoc =
-                ops |> Array.find (fun op -> op.UOPID = sol.StartOP) |> findRailwayLocation
+                ops
+                |> Array.find (fun op -> op.UOPID = normalizeOpId sol.StartOP)
+                |> findRailwayLocation
 
             let endLoc =
-                ops |> Array.find (fun op -> op.UOPID = sol.EndOP) |> findRailwayLocation
+                ops
+                |> Array.find (fun op -> op.UOPID = normalizeOpId sol.EndOP)
+                |> findRailwayLocation
 
             match startLoc, endLoc with
             | Some startLoc, Some endLoc -> Math.Abs(startLoc.Kilometer - endLoc.Kilometer)
@@ -342,8 +361,6 @@ let buildGraph (ops: OperationalPoint[]) (sols: SectionOfLine[]) =
 
         else
             sol.Length / 1000.0
-
-    let nextYear = (System.DateTime.Now.Year + 1).ToString()
 
     let addSol (sol: SectionOfLine) =
         match findOp sol.StartOP, findOp sol.EndOP with
@@ -380,13 +397,7 @@ let buildGraph (ops: OperationalPoint[]) (sols: SectionOfLine[]) =
                       Length = length sol }
                     :: graph.[opEnd.UOPID]
                 )
-        | _ ->
-            // ignore 'meta' inf in op names
-            if
-                not (sol.StartOP.Contains("/" + nextYear))
-                && not (sol.EndOP.Contains("/" + nextYear))
-            then
-                fprintfn stderr "not found, %A or %A" sol.StartOP sol.EndOP
+        | _ -> fprintfn stderr "addSol, not found %A or %A" sol.StartOP sol.EndOP
 
     ops |> Array.iter addOp
 
@@ -479,7 +490,7 @@ let getOsmRoutes () : Async<string> =
         let entries2 =
             OSM.Sparql.Api.ToEntries(JsonSerializer.Deserialize<QueryResults>(result))
 
-        return JsonSerializer.Serialize (Array.append entries1 entries2)
+        return JsonSerializer.Serialize(Array.append entries1 entries2)
     }
 
 let execGraphBuild (path: string) : Async<string> =

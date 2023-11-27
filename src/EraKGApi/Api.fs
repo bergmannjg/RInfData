@@ -295,7 +295,8 @@ WHERE {{
         uriTypeToString r "http://data.europa.eu/949/functionalInfrastructure/sectionsOfLine/"
 
     let private toNationalLines (r: Rdf) : string =
-        uriTypeToString r "http://data.europa.eu/949/functionalInfrastructure/nationalLines/"
+        let splits = (uriTypeToString r "http://data.europa.eu/949/functionalInfrastructure/nationalLines/").Split [| '/' |]
+        Array.last splits // ignore country
 
     let private toUOPID (r: Rdf) : string =
         uriTypeToString r "http://data.europa.eu/949/functionalInfrastructure/operationalPoints/"
