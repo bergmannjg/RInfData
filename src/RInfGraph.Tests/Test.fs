@@ -51,19 +51,19 @@ let switch (source: Source) =
     if source = Source.Rinfdata then "DE00FFU" else "DE95441" // op new in era kg
 
 [<TestCaseSource(nameof (sources))>]
-let TestHHToFF (source: Source) =
+let TestHHToFFU (source: Source) =
     TestPath
         source
-        [| "DE000HH"; "DE000FF" |]
-        [| ("DE000HH", switch source, 1733); (switch source, "DE000FF", 3600) |]
+        [| "DE000HH"; "DE00FFU" |]
+        [| ("DE000HH", "DE00FFU", 1733) |]
         15245
 
 [<TestCaseSource(nameof (sources))>]
-let TestFFToHH (source: Source) =
+let TestFFUToFF (source: Source) =
     TestPath
         source
-        [| "DE000FF"; "DE000HH" |]
-        [| ("DE000FF", switch source, 3600); (switch source, "DE000HH", 1733) |]
+        [| "DE00FFU"; "DE000FF" |]
+        [| ("DE00FFU", "DE000FF", 3600) |]
         15245
 
 [<TestCaseSource(nameof (sources))>]
@@ -71,9 +71,18 @@ let TestHHToNN (source: Source) =
     TestPath
         source
         [| "DE000HH"; "DE000NN" |]
-        [| ("DE000HH", "DE00NWH", 1733)
-           ("DE00NWH", "DE000NF", 5910)
-           ("DE000NF", "DE000NN", 5900) |]
+        [| 
+           // ("DE000HH", "DE00NWH", 1733)
+           // ("DE00NWH", "DE000NF", 5910)
+           // ("DE000NF", "DE000NN", 5900)
+           
+           ("DE000HH", "DE00NWH", 1733)
+           ("DE00NWH", "DE97637", 5209)
+           ("DE97637", "DE0NRTD", 5102)
+           ("DE0NRTD", "DE000NF", 5910)
+           ("DE000NF", "DENF  G", 5972)
+           ("DENF  G", "DE000NN", 5900)
+            |]
         18167
 
 [<TestCaseSource(nameof (sources))>]

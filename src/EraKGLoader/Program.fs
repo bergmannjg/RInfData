@@ -336,8 +336,10 @@ let buildGraph (ops: OperationalPoint[]) (sols: SectionOfLine[]) =
         let opIdNormalized = normalizeOpId opId
         ops |> Array.tryFind (fun op -> op.UOPID = opIdNormalized)
 
+    // the field sol.Length is for some lines not correct
+    // use the length data of OperationalPoints
     let length (sol: SectionOfLine) =
-        if sol.Length = 0 then
+        if true then // sol.Length = 0
             let findRailwayLocation =
                 fun op ->
                     op.RailwayLocations
@@ -601,6 +603,19 @@ let execTunnelBuild (path: string) (countriesArg: string) : Async<string> =
         return JsonSerializer.Serialize tunnels
     }
 
+// ad hoc
+let missingSols : SectionOfLine [] =
+    [|
+        { Name = "3600_DE0FSUE_DE00FFD"
+          Country = "DEU"
+          Length = 11.0
+          LineIdentification = "3600"
+          IMCode = "0080"
+          StartOP = "DE0FSUE"
+          EndOP = "DE00FFD"
+          Tracks = [||] }
+    |]
+
 let execSectionsOfLineBuild (path: string) (countriesArg: string) : Async<string> =
     async {
         let! _ = checkIsCountry path countriesArg
@@ -616,6 +631,9 @@ let execSectionsOfLineBuild (path: string) (countriesArg: string) : Async<string
         fprintfn stderr $"kg railwaylines: {railwaylines.Length}"
 
         let sols = EraKG.Api.toSectionsOfLine result railwaylines tracks
+
+        let missingSols = missingSols |> Array.filter  (fun sol -> countriesArg.Contains sol.Country)
+        let sols = Array.concat [ sols; missingSols ] 
 
         let! sols = EraKG.Api.remapTracksOfLines sols
 
@@ -767,6 +785,6 @@ let main argv =
         |> fprintfn stdout "%s"
 
     with e ->
-        fprintfn stderr "error: %s" e.Message
+        fprintfn stderr "error: %s %s" e.Message e.StackTrace
 
     0

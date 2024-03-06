@@ -1,5 +1,6 @@
 // see ERA knowledge graph  https://zenodo.org/record/6516745/files/Marina-Aguado-Pitch-@GIRO.pdf
-// see sparql endpoint https://linked.ec-dataplatform.eu/sparql/
+// see https://data-interop.era.europa.eu/endpoint
+// see sparql endpoint https://virtuoso.ecdp.tech.ec.europa.eu/sparql/
 namespace EraKG
 
 open FSharp.Collections
@@ -70,7 +71,7 @@ module Api =
     let propTenClassification = "http://data.europa.eu/949/tenClassification"
     let propNetElements = "http://data.europa.eu/949/topology/netElements/"
 
-    let private endpoint = "https://linked.ec-dataplatform.eu/sparql"
+    let private endpoint = "https://virtuoso.ecdp.tech.ec.europa.eu/sparql"
 
     let countrySplitChars = [| ';' |]
 
@@ -308,13 +309,22 @@ WHERE {{
         (float splits.[0], float splits.[1])
 
     let private toRailwayLocation (r: Rdf) : RailwayLocation =
-        let splits =
-            (uriTypeToString r "http://data.europa.eu/949/functionalInfrastructure/lineReferences/")
-                .Split
-                [| '_' |]
+        let line = uriTypeToString r "http://data.europa.eu/949/functionalInfrastructure/lineReferences/"
+        let index = line.LastIndexOf '_'
 
-        { NationalIdentNum = splits.[0]
-          Kilometer = float splits.[1] }
+        if index > 0 then
+            let km = line.Substring(index+1)
+            { NationalIdentNum = line.Substring(0, index)
+              Kilometer = 
+                try float km
+                with e -> 
+                    fprintfn stderr "error: '%s' %s" km e.Message
+                    0.0 
+            }
+        else 
+            { NationalIdentNum = line
+              Kilometer = 0.0 
+            }
 
     let private toFloat (r: Rdf) : float =
         try
