@@ -52,37 +52,33 @@ let switch (source: Source) =
 
 [<TestCaseSource(nameof (sources))>]
 let TestHHToFFU (source: Source) =
-    TestPath
-        source
-        [| "DE000HH"; "DE00FFU" |]
-        [| ("DE000HH", "DE00FFU", 1733) |]
-        15245
+    TestPath source [| "DE000HH"; "DE00FFU" |] [| ("DE000HH", "DE00FFU", 1733) |] 15245
+
+[<TestCaseSource(nameof (sources))>]
+let TestHHToFF (source: Source) =
+    TestPath source [| "DE000HH"; "DE000FF" |] [| ("DE000HH", "DE00FFU", 1733); ("DE00FFU", "DE000FF", 3600) |] 15245
+
+[<TestCaseSource(nameof (sources))>]
+let TestRKToRF (source: Source) =
+    TestPath source [| "DE000RK"; "DE000RF" |] [| ("DE000RK", "DE97164", 4020); ("DE97164", "DE000RF", 4000) |] 15245
 
 [<TestCaseSource(nameof (sources))>]
 let TestFFUToFF (source: Source) =
-    TestPath
-        source
-        [| "DE00FFU"; "DE000FF" |]
-        [| ("DE00FFU", "DE000FF", 3600) |]
-        15245
+    TestPath source [| "DE00FFU"; "DE000FF" |] [| ("DE00FFU", "DE000FF", 3600) |] 15245
+
+[<TestCaseSource(nameof (sources))>]
+let TestRMToRK (source: Source) =
+    TestPath source [| "DE000RM"; "DE000RK" |] [| ("DE000RM", "DE000RK", 4020) |] 15245
+
 
 [<TestCaseSource(nameof (sources))>]
 let TestHHToNN (source: Source) =
     TestPath
         source
         [| "DE000HH"; "DE000NN" |]
-        [| 
-           // ("DE000HH", "DE00NWH", 1733)
-           // ("DE00NWH", "DE000NF", 5910)
-           // ("DE000NF", "DE000NN", 5900)
-           
-           ("DE000HH", "DE00NWH", 1733)
-           ("DE00NWH", "DE97637", 5209)
-           ("DE97637", "DE0NRTD", 5102)
-           ("DE0NRTD", "DE000NF", 5910)
-           ("DE000NF", "DENF  G", 5972)
-           ("DENF  G", "DE000NN", 5900)
-            |]
+        [| ("DE000HH", "DE00NWH", 1733)
+           ("DE00NWH", "DE000NF", 5910)
+           ("DE000NF", "DE000NN", 5900) |]
         18167
 
 [<TestCaseSource(nameof (sources))>]

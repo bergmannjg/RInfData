@@ -603,18 +603,16 @@ let execTunnelBuild (path: string) (countriesArg: string) : Async<string> =
         return JsonSerializer.Serialize tunnels
     }
 
-// ad hoc
-let missingSols : SectionOfLine [] =
-    [|
-        { Name = "3600_DE0FSUE_DE00FFD"
-          Country = "DEU"
-          Length = 11.0
-          LineIdentification = "3600"
-          IMCode = "0080"
-          StartOP = "DE0FSUE"
-          EndOP = "DE00FFD"
-          Tracks = [||] }
-    |]
+// adhoc, add missing sols
+let missingSols: SectionOfLine[] =
+    [| { Name = "3600_DE0FSUE_DE00FFD"
+         Country = "DEU"
+         Length = 11.0
+         LineIdentification = "3600"
+         IMCode = "0080"
+         StartOP = "DE0FSUE"
+         EndOP = "DE00FFD"
+         Tracks = [||] } |]
 
 let execSectionsOfLineBuild (path: string) (countriesArg: string) : Async<string> =
     async {
@@ -632,8 +630,21 @@ let execSectionsOfLineBuild (path: string) (countriesArg: string) : Async<string
 
         let sols = EraKG.Api.toSectionsOfLine result railwaylines tracks
 
-        let missingSols = missingSols |> Array.filter  (fun sol -> countriesArg.Contains sol.Country)
-        let sols = Array.concat [ sols; missingSols ] 
+        let missingSols =
+            missingSols
+            |> Array.filter (fun msol ->
+                sols
+                |> Array.exists (fun sol -> sol.StartOP = msol.StartOP && sol.EndOP = msol.EndOP)
+                |> not)
+
+        let missingSols =
+            missingSols |> Array.filter (fun sol -> countriesArg.Contains sol.Country)
+
+        if missingSols.Length > 0 then
+            missingSols
+            |> Array.iter (fun sol -> fprintfn stderr $"add missing sol: {sol.LineIdentification} {sol.StartOP} {sol.EndOP}")
+
+        let sols = Array.concat [ sols; missingSols ]
 
         let! sols = EraKG.Api.remapTracksOfLines sols
 

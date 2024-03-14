@@ -84,6 +84,8 @@ type PathElement =
 
 module Graph =
 
+    let mutable verbose = false
+
     // Type of Operational Point, see https://www.era.europa.eu/system/files/2023-02/RINF%20Application%20guide%20V1.6.1.pdf
     let operationalPointType: OperationalPointType =
         { station = 10
@@ -308,6 +310,7 @@ module Graph =
         |> List.rev
         |> List.toArray
 
+    /// path with folded lines
     let getCompactPath (path: GraphNode[]) = internalGetCompactPath path false
 
     let getLineOfGraphNode (node: GraphNode) =
@@ -362,6 +365,35 @@ module Graph =
         printfn "%.1f %i" (lengthOfPath path) (costOfPath path)
 
     type internal Candidate = (string * string * string * string * string)
+
+    let getNodeLength (node: GraphNode) = node.Edges[0].Length
+
+    let isNodeOnLine (node: GraphNode) (line: string) (graphNodes: GraphNode[]) =
+        graphNodes
+        |> Array.exists (fun n1 -> n1.Node = node.Node && (n1.Edges |> Array.exists (fun n2 -> n2.Line = line)))
+
+    let private getCandidateFirstNodeToLine (cpath: GraphNode[]) (graphNodes: GraphNode[]) (choosen: Candidate list) =
+        let ccpath = getCompactPath cpath
+
+        let windowed = ccpath |> Array.windowed 3
+
+        let chooser (xs: GraphNode[]) =
+            if
+                getNodeLength xs[0] + getNodeLength xs[1] < 10.0
+                && getNodeLength xs[2] > 50.0
+                && isNodeOnLine xs[0] xs[2].Edges[0].Line graphNodes
+            then
+                let candidate =
+                    ("CandidateFirstNodeToLine", xs[2].Edges[0].Country, xs[2].Edges[0].Line, xs[0].Node, xs[2].Node)
+
+                if choosen |> List.contains candidate then
+                    None
+                else
+                    Some candidate
+            else
+                None
+
+        windowed |> Array.choose chooser |> Array.tryHead
 
     // find 2 entries of same line in cpath
     let private getCandidateSameLine (cpath: GraphNode[]) (graphNodes: GraphNode[]) (choosen: Candidate list) =
@@ -477,11 +509,7 @@ module Graph =
             with
             | Some n ->
                 let candidate =
-                    ("getCandidateSameLineWithFirstNode",
-                     n.Edges[0].Country,
-                     n.Edges[0].Line,
-                     firstNode,
-                     n.Edges[0].Node)
+                    ("CandidateSameLineWithFirstNode", n.Edges[0].Country, n.Edges[0].Line, firstNode, n.Edges[0].Node)
 
                 if choosen |> List.contains candidate then
                     None
@@ -496,10 +524,17 @@ module Graph =
 
         if cpath.Length > 2 then
             [| getCandidateSameLine
+               getCandidateFirstNodeToLine
                getCandidateReplaceSmallEdge
                getCandidateSameLineWithLastNode
                getCandidateLineToFirstNode |]
-            |> Array.tryPick (fun s -> s cpath graphNodes choosen)
+            |> Array.tryPick (fun s ->
+                let picked = s cpath graphNodes choosen
+
+                if false && verbose && picked.IsSome then
+                    printfn "picked candidate %A" picked
+
+                picked)
         else
             None
 
@@ -514,6 +549,9 @@ module Graph =
 
             if spath.Length > 0 then
 
+                let lengthOfCompactPath = lengthOfPath spath
+                let costOfCompactPath = costOfPath spath
+
                 let fromIndex = path |> Array.tryFindIndex (fun n -> n.Edges.[0].Node = fromNode)
 
                 let toIndex = path |> Array.tryFindIndex (fun n -> n.Node = toNode)
@@ -522,36 +560,95 @@ module Graph =
 
                 let isPathToLastNode = (getLastNode path) = (getLastNode spath)
 
-                match fromIndex, toIndex, isPathFromFirstNode, isPathToLastNode with
-                | Some fromIndex, Some toIndex, _, _ ->
-                    let n1 = path |> Array.take (fromIndex + 1)
-                    let n2 = path |> Array.skip toIndex
-                    Some(Array.concat [ n1; spath; n2 ], candidate)
-                | Some fromIndex, None, _, true ->
-                    let n1 = path |> Array.take (fromIndex + 1)
-                    Some(Array.concat [ n1; spath ], candidate)
-                | None, Some toIndex, true, _ ->
-                    let n2 = path |> Array.skip toIndex
-                    Some(Array.concat [ spath; n2 ], candidate)
-                | None, None, true, true -> Some(spath, candidate)
-                | _ -> None
+                let pathParts =
+                    match fromIndex, toIndex, isPathFromFirstNode, isPathToLastNode with
+                    | Some fromIndex, Some toIndex, _, _ ->
+                        let n1 = path |> Array.take (fromIndex + 1)
+                        let n2 = path |> Array.skip (fromIndex + 1) |> Array.take (toIndex - fromIndex)
+                        let n3 = path |> Array.skip toIndex
+                        Some(n1, n2, n3)
+                    | Some fromIndex, None, _, true ->
+                        let n1 = path |> Array.take (fromIndex + 1)
+                        let n2 = path |> Array.skip (fromIndex + 1)
+                        Some(n1, n2, [||])
+                    | None, Some toIndex, true, _ ->
+                        let n2 = path |> Array.take toIndex
+                        let n3 = path |> Array.skip toIndex
+                        Some([||], n2, n3)
+                    | None, None, true, true -> Some([||], path, [||])
+                    | _ ->
+                        if verbose then
+                            printfn "unexpected candidate failure %s, line %s, from %s, to %s" s line fromNode toNode
+
+                        None
+
+                match pathParts with
+                | Some(left, middle, right) ->
+                    let lengthOfOrigPath = lengthOfPath middle
+                    let costOfOrigPath = costOfPath middle
+
+                    let costRatio =
+                        if costOfOrigPath > 0 then
+                            (float costOfCompactPath) / (float costOfOrigPath)
+                        else
+                            1.0
+
+                    let lengthRatio =
+                        if lengthOfOrigPath > 0 then
+                            (float lengthOfCompactPath) / (float lengthOfOrigPath)
+                        else
+                            1.0
+
+                    if verbose then
+                        printfn
+                            "candidate %s, line %s, from %s, to %s, costRatio %.3f, lengthRatio %.3f, lengthOfCompactPath %.3f"
+                            s
+                            line
+                            fromNode
+                            toNode
+                            costRatio
+                            lengthRatio
+                            lengthOfCompactPath
+
+                    if costRatio < 1.2 || lengthRatio < 1.2 || lengthOfCompactPath < 5.0 then
+                        Some(Array.concat [ left; spath; right ], candidate)
+                    else
+                        None
+                | None -> None
             else
+                if verbose then
+                    printfn "failed candidate %s, line %s, from %s, to %s" s line fromNode toNode
+
                 Some(path, candidate)
         | None -> None
 
+    /// path with sligthly more costs (at most 20%) but fewer lines
     let compactifyPath (path: GraphNode[]) (graphNodes: GraphNode[]) =
         let lengthOfOrigPath = lengthOfPath path
 
         let rec multiCompactifyPath path graphNodes maxDepth choosen =
+            if verbose then
+                printfn "multiCompactifyPath, maxDepth %d" maxDepth
+
             match tryCompactifyPath path graphNodes choosen with
-            | Some(cpath, candidate) when System.Math.Abs(lengthOfOrigPath - (lengthOfPath cpath)) < 10.0 ->
-                if maxDepth > 0 then
-                    multiCompactifyPath cpath graphNodes (maxDepth - 1) (candidate :: choosen)
+            | Some(cpath, candidate) ->
+                let pathlen = System.Math.Abs(lengthOfOrigPath - (lengthOfPath cpath))
+
+                if pathlen < 15.0 then
+                    if maxDepth > 0 then
+                        multiCompactifyPath cpath graphNodes (maxDepth - 1) (candidate :: choosen)
+                    else
+                        cpath
                 else
-                    cpath
+                    if verbose then
+                        printfn
+                            "candidate path length incr %.3f"
+                            (System.Math.Abs(lengthOfOrigPath - (lengthOfPath cpath)))
+
+                    path
             | _ -> path
 
-        multiCompactifyPath path graphNodes 5 []
+        multiCompactifyPath path graphNodes 7 []
 
     let private enhancePathNodeWithMaxSpeed (n: GraphNode) (graphNodes: GraphNode[]) =
         let imcode = n.Edges.[0].Country

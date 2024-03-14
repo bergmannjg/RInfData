@@ -38,6 +38,9 @@ dotnet fable RInfGraph.fable.fsproj -o build --noCache --run webpack --mode prod
 
 rm rinf-graph/data/*
 echo '[]' >  rinf-graph/data/Graph.json
+echo '[]' >  rinf-graph/data/OpInfos.json
+echo '[]' >  rinf-graph/data/LineInfos.json
+echo '[]' >  rinf-graph/data/TunnelInfos.json
 
 rm -rf rinf-graph/bin/
 cp -r ../../EraKGLoader/bin/Debug/net7.0/publish/ rinf-graph/bin/

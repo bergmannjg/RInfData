@@ -298,6 +298,7 @@ let main argv =
 
                 Graph.printPathEx map path
 
+                Graph.verbose <- true
                 let getCompactPath path =
                     if useMaxSpeed then
                         Graph.getCompactPathWithMaxSpeed path g
@@ -310,13 +311,12 @@ let main argv =
 
                 let cpath = Graph.compactifyPath path g
 
-                if (Graph.costOfPath path) <> (Graph.costOfPath cpath) then
-                    printfn "compactified Path:"
-                    Graph.printPath cpath
+                printfn "compactified Path:"
+                Graph.printPath cpath
 
-                    printfn "compactified compact Path%s:" (if useMaxSpeed then " with maxSpeed" else "")
+                printfn "compactified compact Path%s:" (if useMaxSpeed then " with maxSpeed" else "")
 
-                    Graph.printPath (getCompactPath cpath)
+                Graph.printPath (getCompactPath cpath)
 
                 printfn "brouter url of compactified path "
 
