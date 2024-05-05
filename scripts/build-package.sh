@@ -43,7 +43,8 @@ echo '[]' >  rinf-graph/data/LineInfos.json
 echo '[]' >  rinf-graph/data/TunnelInfos.json
 
 rm -rf rinf-graph/bin/
-cp -r ../../EraKGLoader/bin/Debug/net7.0/publish/ rinf-graph/bin/
+VERSION=$(grep TargetFramework ../../EraKGLoader/EraKGLoader.fsproj | sed 's/[<>]/ /g' | awk '{print $2}')
+cp -r ../../EraKGLoader/bin/Release/${VERSION}/publish/ rinf-graph/bin/
 
 npm pack rinf-graph/
 
