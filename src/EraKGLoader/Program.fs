@@ -479,18 +479,22 @@ let getCountries () : Async<string> =
         return String.concat ";" allCountries
     }
 
-let getOsmRoutes () : Async<string> =
+let getOsmRoutesFrom (loader: string -> Async<string>) : Async<OSM.Sparql.Entry[]> =
     async {
 
-        let! result = OSM.Sparql.Api.loadWikipediaArticles ()
+        try
+            let! result = loader EraKG.Request.applicationSparqlResults
 
-        let entries1 =
-            OSM.Sparql.Api.ToEntries(JsonSerializer.Deserialize<QueryResults>(result))
+            return OSM.Sparql.Api.fromQueryResults (JsonSerializer.Deserialize<QueryResults>(result))
+        with e ->
+            fprintfn stderr "getOsmRoutesFrom, error: %s" e.Message
+            return Array.empty
+    }
 
-        let! result = OSM.Sparql.Api.loadWikidataArticles ()
-
-        let entries2 =
-            OSM.Sparql.Api.ToEntries(JsonSerializer.Deserialize<QueryResults>(result))
+let getOsmRoutes () : Async<string> =
+    async {
+        let! entries1 = getOsmRoutesFrom OSM.Sparql.Api.loadWikipediaArticles
+        let! entries2 = getOsmRoutesFrom OSM.Sparql.Api.loadWikidataArticles
 
         return JsonSerializer.Serialize(Array.append entries1 entries2)
     }
@@ -642,7 +646,8 @@ let execSectionsOfLineBuild (path: string) (countriesArg: string) : Async<string
 
         if missingSols.Length > 0 then
             missingSols
-            |> Array.iter (fun sol -> fprintfn stderr $"add missing sol: {sol.LineIdentification} {sol.StartOP} {sol.EndOP}")
+            |> Array.iter (fun sol ->
+                fprintfn stderr $"add missing sol: {sol.LineIdentification} {sol.StartOP} {sol.EndOP}")
 
         let sols = Array.concat [ sols; missingSols ]
 

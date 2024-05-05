@@ -52,15 +52,24 @@ SELECT distinct ?id ?ref ?wikidata ?wikipedia WHERE {
 }
 """
 
-    let loadWikipediaArticles () : Async<string> =
-        EraKG.Request.PostAsync endpointPlanet (osmWikipediaQuery ()) EraKG.Request.applicationSparqlResults
+    type QleverResults = { query: string; res: (string[])[] }
 
-    let loadWikidataArticles () : Async<string> =
-        EraKG.Request.PostAsync endpointGermany (osmWikidataQuery ()) EraKG.Request.applicationSparqlResults
+    let loadWikipediaArticles (format: string) : Async<string> =
+        EraKG.Request.PostAsync endpointPlanet (osmWikipediaQuery ()) format
 
-    let ToEntries (sparql: QueryResults) : Entry[] =
+    let loadWikidataArticles (format: string) : Async<string> =
+        EraKG.Request.PostAsync endpointGermany (osmWikidataQuery ()) format
+
+    let fromQueryResults (sparql: QueryResults) : Entry[] =
         sparql.results.bindings
         |> Array.map (fun b ->
             { Url = b.["id"].value
               Ref = b.["ref"].value
               Wikipedia = b.["wikipedia"].value.Replace("https://de.wikipedia.org/wiki/", "de:") })
+
+    let fromQleverResults (sparql: QleverResults) : Entry[] =
+        sparql.res
+        |> Array.map (fun b ->
+            { Url = b.[0]
+              Ref = b.[1]
+              Wikipedia = b.[2] })
