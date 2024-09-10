@@ -5,7 +5,7 @@ module Request =
     open System.Net
 
     let applicationQleverResults = "application/qlever-results+json"
-    
+
     let applicationSparqlResults = "application/sparql-results+json"
 
     let applicationMicrodata = "application/microdata+json"

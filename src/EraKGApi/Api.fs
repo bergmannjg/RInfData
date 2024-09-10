@@ -1,6 +1,6 @@
 // see ERA knowledge graph  https://zenodo.org/record/6516745/files/Marina-Aguado-Pitch-@GIRO.pdf
 // see https://data-interop.era.europa.eu/endpoint
-// see sparql endpoint https://virtuoso.ecdp.tech.ec.europa.eu/sparql/
+// see sparql endpoint https://era.linkeddata.es/sparql/
 namespace EraKG
 
 open FSharp.Collections
@@ -71,7 +71,7 @@ module Api =
     let propTenClassification = "http://data.europa.eu/949/tenClassification"
     let propNetElements = "http://data.europa.eu/949/topology/netElements/"
 
-    let private endpoint = "https://virtuoso.ecdp.tech.ec.europa.eu/sparql"
+    let private endpoint = "https://era.linkeddata.es/sparql"
 
     let countrySplitChars = [| ';' |]
 
@@ -89,9 +89,11 @@ WHERE {{
 }}
 """
 
-    let loadCountriesData () : Async<string> =
-        Request.GetAsync endpoint (countriesQuery ()) Request.applicationSparqlResults
-
+    let loadCountriesData () : Async<QueryResults> =
+        async {
+            let! data = Request.GetAsync endpoint (countriesQuery ()) Request.applicationSparqlResults
+            return JsonSerializer.Deserialize(data)
+        }
 
     let private toCountryQuery (item: string) (countryArg: string) : string =
         countryArg.Split countrySplitChars
@@ -99,7 +101,7 @@ WHERE {{
             $"{{ {item} era:inCountry <http://publications.europa.eu/resource/authority/country/{country}> . }}")
         |> String.concat " UNION "
 
-    let private operationalPointQuery (country: string) =
+    let private operationalPointQuery (country: string) (limit: int) (offset: int) =
         $"""
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 PREFIX era: <http://data.europa.eu/949/>
@@ -116,13 +118,18 @@ WHERE {{
   ?operationalPoint era:opType ?opType .
   ?operationalPoint era:inCountry ?country .
   {toCountryQuery "?operationalPoint" country}
-}}
+}} LIMIT {limit} OFFSET {offset}
 """
 
-    let loadOperationalPointData (country: string) : Async<string> =
-        Request.GetAsync endpoint (operationalPointQuery country) Request.applicationSparqlResults
+    let loadOperationalPointData (country: string) (limit: int) (offset: int) : Async<QueryResults> =
+        async {
+            let! data =
+                Request.GetAsync endpoint (operationalPointQuery country limit offset) Request.applicationSparqlResults
 
-    let private sectionOfLineQuery (country: string) =
+            return JsonSerializer.Deserialize(data)
+        }
+
+    let private sectionOfLineQuery (country: string) (limit: int) (offset: int) =
         $"""
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 PREFIX era: <http://data.europa.eu/949/>
@@ -140,11 +147,16 @@ WHERE {{
   ?sectionOfLine era:track ?track .
   ?sectionOfLine era:inCountry ?country .
   {toCountryQuery "?sectionOfLine" country}
-}}
+}} LIMIT {limit} OFFSET {offset}
 """
 
-    let loadSectionOfLineData (country: string) : Async<string> =
-        Request.GetAsync endpoint (sectionOfLineQuery country) Request.applicationSparqlResults
+    let loadSectionOfLineData (country: string) (limit: int) (offset: int) : Async<QueryResults> =
+        async {
+            let! data =
+                Request.GetAsync endpoint (sectionOfLineQuery country limit offset) Request.applicationSparqlResults
+
+            return JsonSerializer.Deserialize(data)
+        }
 
     let private trackOfLineQuery (lineName: string) (country: string) =
         $"""
@@ -200,16 +212,7 @@ SELECT ?p ?o WHERE {{
                 return "{\"items\":[]}"
         }
 
-    let private trackQuery (country: string) (n: int) =
-        let filter = if n < 9 then n.ToString() else (n.ToString() + "a-z")
-
-        let toFilter () : string =
-            linesWithError
-            |> Array.map (fun (line, _) -> $" FILTER(?line != \"{line}\") . ")
-            |> String.concat ""
-
-        let pattern = $"^[{filter}]"
-
+    let private trackQuery (country: string) (limit: int) (offset: int) =
         $"""
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 PREFIX era: <http://data.europa.eu/949/>
@@ -221,20 +224,18 @@ WHERE {{
   
   ?sectionOfLine era:lineNationalId ?lineNationalId .
   ?lineNationalId rdfs:label ?line .
-  {toFilter ()}
-  FILTER(regex(?line, "{pattern}", "i")) .
   {toCountryQuery "?sectionOfLine" country}
-}}
+}} LIMIT {limit} OFFSET {offset}
 """
 
-    let loadTrackData (country: string) (n: int) : Async<string> =
+    let loadTrackData (country: string) (limit: int) (offset: int) : Async<Microdata> =
         async {
             try
-                let! data = Request.GetAsync endpoint (trackQuery country n) Request.applicationMicrodata
-                return data
+                let! data = Request.GetAsync endpoint (trackQuery country limit offset) Request.applicationMicrodata
+                return JsonSerializer.Deserialize<Microdata>(data)
             with e ->
                 fprintfn stderr "error: loadTrackData %s" e.Message
-                return "{\"items\":[]}"
+                return Microdata.empty
         }
 
     let private nationalRailwayLineQuery (country: string) =
@@ -255,8 +256,11 @@ WHERE {{
 }}
 """
 
-    let loadNationalRailwayLineData (country: string) : Async<string> =
-        Request.GetAsync endpoint (nationalRailwayLineQuery country) Request.applicationSparqlResults
+    let loadNationalRailwayLineData (country: string) : Async<QueryResults> =
+        async {
+            let! data = Request.GetAsync endpoint (nationalRailwayLineQuery country) Request.applicationSparqlResults
+            return JsonSerializer.Deserialize(data)
+        }
 
     let private tunnelQuery (country: string) =
         $"""
@@ -277,8 +281,11 @@ WHERE {{
 }}
 """
 
-    let loadTunnelData (country: string) : Async<string> =
-        Request.GetAsync endpoint (tunnelQuery country) Request.applicationSparqlResults
+    let loadTunnelData (country: string) : Async<QueryResults> =
+        async {
+            let! data = Request.GetAsync endpoint (tunnelQuery country) Request.applicationSparqlResults
+            return JsonSerializer.Deserialize(data)
+        }
 
     let private uriTypeToString (r: Rdf) (prefix: string) : string =
         if r.``type`` = "uri" then
@@ -296,7 +303,11 @@ WHERE {{
         uriTypeToString r "http://data.europa.eu/949/functionalInfrastructure/sectionsOfLine/"
 
     let private toNationalLines (r: Rdf) : string =
-        let splits = (uriTypeToString r "http://data.europa.eu/949/functionalInfrastructure/nationalLines/").Split [| '/' |]
+        let splits =
+            (uriTypeToString r "http://data.europa.eu/949/functionalInfrastructure/nationalLines/")
+                .Split
+                [| '/' |]
+
         Array.last splits // ignore country
 
     let private toUOPID (r: Rdf) : string =
@@ -309,22 +320,24 @@ WHERE {{
         (float splits.[0], float splits.[1])
 
     let private toRailwayLocation (r: Rdf) : RailwayLocation =
-        let line = uriTypeToString r "http://data.europa.eu/949/functionalInfrastructure/lineReferences/"
+        let line =
+            uriTypeToString r "http://data.europa.eu/949/functionalInfrastructure/lineReferences/"
+
         let index = line.LastIndexOf '_'
 
         if index > 0 then
-            let km = line.Substring(index+1)
+            let km = line.Substring(index + 1)
+
             { NationalIdentNum = line.Substring(0, index)
-              Kilometer = 
-                try float km
-                with e -> 
+              Kilometer =
+                try
+                    float km
+                with e ->
                     fprintfn stderr "error: '%s' %s" km e.Message
-                    0.0 
-            }
-        else 
+                    0.0 }
+        else
             { NationalIdentNum = line
-              Kilometer = 0.0 
-            }
+              Kilometer = 0.0 }
 
     let private toFloat (r: Rdf) : float =
         try
@@ -404,6 +417,11 @@ WHERE {{
         |> Map.values
         |> Seq.toArray
 
+    // may conatin extra data until '_'
+    let stripContactLineSystem (s: string) : string =
+        let index = s.LastIndexOf '_'
+        if (index <> -1) then s.Substring(index + 1) else s
+
     let toTrack (id: string) (tracks: Microdata) : Track =
         match tracks.items |> Array.tryFind (fun item -> item.id = id) with
         | Some item ->
@@ -423,7 +441,10 @@ WHERE {{
                 |> Option.map (fun s -> s.Substring(prefixLoadCapabilities.Length))
               contactLineSystem =
                 getValue propContactLineSystem
-                |> Option.map (fun s -> (System.Web.HttpUtility.UrlDecode(s)).Substring(prefixContactLineSystem.Length)) }
+                |> Option.map (fun s ->
+                    stripContactLineSystem (
+                        (System.Web.HttpUtility.UrlDecode(s)).Substring(prefixContactLineSystem.Length)
+                    )) }
         | None ->
             { id = System.Web.HttpUtility.UrlDecode(id.Substring(prefixTrack.Length))
               label = "directional track"
@@ -506,7 +527,8 @@ WHERE {{
 
             let queryResults: QueryResults = JsonSerializer.Deserialize res
 
-            let maximumPermittedSpeed = getValue queryResults propMaximumPermittedSpeed |> toIntValue
+            let maximumPermittedSpeed =
+                getValue queryResults propMaximumPermittedSpeed |> toIntValue
 
             let contactLineSystem =
                 getValue queryResults propContactLineSystem

@@ -11,19 +11,22 @@ module Api =
 
     // https://qlever.cs.uni-freiburg.de/osm-planet
     let endpointPlanet = $"https://qlever.cs.uni-freiburg.de/api/osm-planet"
-    let endpointGermany = $"https://qlever.cs.uni-freiburg.de/api/osm-germany"
 
+    // get wikipedia article of railway routes in germany
     let private osmWikipediaQuery () =
         """
 PREFIX osmkey: <https://www.openstreetmap.org/wiki/Key:>
+PREFIX osmrel: <https://www.openstreetmap.org/relation/>
+PREFIX ogc: <http://www.opengis.net/rdf#>
 SELECT distinct ?id ?ref ?wikipedia WHERE {
+  osmrel:51477 ogc:sfContains ?id .
   ?id osmkey:type 'route' .
   { ?id osmkey:route 'tracks' . }
   UNION
   { ?id osmkey:route 'railway' . }
   ?id osmkey:ref ?ref .
   ?id osmkey:wikipedia ?wikipedia .
-}
+} LIMIT 2000
 """
 
     // get wikipedia article via wikidata
@@ -49,7 +52,7 @@ SELECT distinct ?id ?ref ?wikidata ?wikipedia WHERE {
     ?wikipedia schema:about ?wikidata .
     ?wikipedia schema:isPartOf <https://de.wikipedia.org/> .
   }
-}
+} LIMIT 2000
 """
 
     type QleverResults = { query: string; res: (string[])[] }
@@ -58,7 +61,7 @@ SELECT distinct ?id ?ref ?wikidata ?wikipedia WHERE {
         EraKG.Request.PostAsync endpointPlanet (osmWikipediaQuery ()) format
 
     let loadWikidataArticles (format: string) : Async<string> =
-        EraKG.Request.PostAsync endpointGermany (osmWikidataQuery ()) format
+        EraKG.Request.PostAsync endpointPlanet (osmWikidataQuery ()) format
 
     let fromQueryResults (sparql: QueryResults) : Entry[] =
         sparql.results.bindings

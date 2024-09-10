@@ -372,7 +372,11 @@ module Graph =
         graphNodes
         |> Array.exists (fun n1 -> n1.Node = node.Node && (n1.Edges |> Array.exists (fun n2 -> n2.Line = line)))
 
-    let private getCandidateFirstNodeToLine (cpath: GraphNode[]) (graphNodes: GraphNode[]) (choosen: Candidate list) =
+    let private getCandidateFirstNodeToSameLine
+        (cpath: GraphNode[])
+        (graphNodes: GraphNode[])
+        (choosen: Candidate list)
+        =
         let ccpath = getCompactPath cpath
 
         let windowed = ccpath |> Array.windowed 3
@@ -384,7 +388,7 @@ module Graph =
                 && isNodeOnLine xs[0] xs[2].Edges[0].Line graphNodes
             then
                 let candidate =
-                    ("CandidateFirstNodeToLine", xs[2].Edges[0].Country, xs[2].Edges[0].Line, xs[0].Node, xs[2].Node)
+                    ("CandidateFirstNodeToSameLine", xs[2].Edges[0].Country, xs[2].Edges[0].Line, xs[0].Node, xs[2].Node)
 
                 if choosen |> List.contains candidate then
                     None
@@ -399,7 +403,7 @@ module Graph =
     let private getCandidateSameLine (cpath: GraphNode[]) (graphNodes: GraphNode[]) (choosen: Candidate list) =
         let groups = cpath |> Array.groupBy (fun p -> getLineOfGraphNode p)
 
-        match groups |> Array.tryFind (fun (_, l) -> l.Length = 2) with
+        match groups |> Array.tryFind (fun (_, l) -> l.Length >= 2) with
         | Some((imcode, line), l) ->
             let fromNode = l.[0].Edges.[0].Node
             let toNode = l.[1].Node
@@ -432,7 +436,11 @@ module Graph =
             let edgeOfLast = xs[1].Edges.[0]
             let edgeOfFirst = xs[0].Edges.[0]
 
-            if edgeOfLast.Length < 10.0 && edgeOfLast.Length * 5.0 < edgeOfFirst.Length then
+            if
+                edgeOfLast.Length < 10.0
+                && edgeOfLast.Length * 5.0 < edgeOfFirst.Length
+                && edgeOfLast.Line <> edgeOfFirst.Line
+            then
                 let candidate =
                     ("CandidateReplaceSmallEdge",
                      edgeOfFirst.Country,
@@ -462,7 +470,7 @@ module Graph =
 
     let private getLastNode (cpath: GraphNode[]) = (getLastEdge cpath).Node
 
-    let private getCandidateSameLineWithLastNode
+    let private getCandidateSameLineToLastNode
         (cpath: GraphNode[])
         (graphNodes: GraphNode[])
         (choosen: Candidate list)
@@ -482,7 +490,7 @@ module Graph =
             with
             | Some node ->
                 let candidate =
-                    ("CandidateSameLineWithLastNode", node.Edges.[0].Country, node.Edges.[0].Line, node.Node, lastNode)
+                    ("CandidateSameLineToLastNode", node.Edges.[0].Country, node.Edges.[0].Line, node.Node, lastNode)
 
                 if choosen |> List.contains candidate then
                     None
@@ -492,7 +500,11 @@ module Graph =
         else
             None
 
-    let private getCandidateLineToFirstNode (cpath: GraphNode[]) (graphNodes: GraphNode[]) (choosen: Candidate list) =
+    let private getCandidateSameLineToFirstNode
+        (cpath: GraphNode[])
+        (graphNodes: GraphNode[])
+        (choosen: Candidate list)
+        =
         if cpath.Length > 2 then
             let firstNode = cpath.[0].Node
 
@@ -509,7 +521,7 @@ module Graph =
             with
             | Some n ->
                 let candidate =
-                    ("CandidateSameLineWithFirstNode", n.Edges[0].Country, n.Edges[0].Line, firstNode, n.Edges[0].Node)
+                    ("CandidateSameLineToFirstNode", n.Edges[0].Country, n.Edges[0].Line, firstNode, n.Edges[0].Node)
 
                 if choosen |> List.contains candidate then
                     None
@@ -522,19 +534,13 @@ module Graph =
     let private getCompactifyCandidate (path: GraphNode[]) (graphNodes: GraphNode[]) (choosen: Candidate list) =
         let cpath = getCompactPath path
 
-        if cpath.Length > 2 then
+        if cpath.Length > 1 then
             [| getCandidateSameLine
-               getCandidateFirstNodeToLine
+               getCandidateFirstNodeToSameLine
                getCandidateReplaceSmallEdge
-               getCandidateSameLineWithLastNode
-               getCandidateLineToFirstNode |]
-            |> Array.tryPick (fun s ->
-                let picked = s cpath graphNodes choosen
-
-                if false && verbose && picked.IsSome then
-                    printfn "picked candidate %A" picked
-
-                picked)
+               getCandidateSameLineToLastNode
+               getCandidateSameLineToFirstNode |]
+            |> Array.tryPick (fun s -> s cpath graphNodes choosen)
         else
             None
 
@@ -646,9 +652,13 @@ module Graph =
                             (System.Math.Abs(lengthOfOrigPath - (lengthOfPath cpath)))
 
                     path
-            | _ -> path
+            | _ ->
+                if verbose then
+                    printfn "tryCompactifyPath found none"
 
-        multiCompactifyPath path graphNodes 7 []
+                path
+
+        multiCompactifyPath path graphNodes 9 []
 
     let private enhancePathNodeWithMaxSpeed (n: GraphNode) (graphNodes: GraphNode[]) =
         let imcode = n.Edges.[0].Country

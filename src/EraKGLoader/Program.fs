@@ -1,10 +1,12 @@
 open System
 open System.IO
 open System.Text.Json
+open System.Text.RegularExpressions
 
 open RInfGraph
 open Sparql
 open EraKG
+
 
 let printHelp () =
     let dataDirectory = AppDomain.CurrentDomain.BaseDirectory + "../data/"
@@ -34,19 +36,40 @@ let readFile<'a> path name =
 
 let mutable cacheEnabled = true
 
-let loadDataCached<'a> path name (loader: unit -> Async<string>) =
+let loadDataCached<'a> path name (loader: unit -> Async<'a>) =
     async {
         let file = path + name
 
         if not cacheEnabled || not (File.Exists file) then
             let! result = loader ()
-            fprintfn stderr $"{name}, {result.Length} bytes"
-            File.WriteAllText(file, result)
+            File.WriteAllText(file, JsonSerializer.Serialize(result))
             return readFile<'a> path name
 
         else
             return readFile<'a> path name
     }
+
+let loadPaged<'T> (limit: int) (loader: int -> int -> Async<'T>) (concat: 'T[] -> 'T) (length: 'T -> int) : Async<'T> =
+    async {
+        let mutable offset = 0
+        let mutable arr = Array.empty
+
+        while 0 <= offset do
+            let! data = loader limit offset
+            fprintfn stderr $"loadPaged {typeof<'T>.Name}, limit {limit}, offset {offset}, length {length data}"
+            arr <- Array.concat [ arr; [| data |] ]
+
+            offset <-
+                if offset < 20 * limit && 0 < length data then
+                    limit + offset
+                else
+                    -1
+
+        return concat arr
+    }
+
+let loadQueryResultsPaged (loader: (int -> int -> Async<QueryResults>)) : Async<QueryResults> =
+    loadPaged 10000 loader QueryResults.fold QueryResults.length
 
 let kilometerOfLine (op: OperationalPoint) (line: string) =
     op.RailwayLocations
@@ -250,6 +273,16 @@ let estimateKilometres
         | None -> None, None
     | None -> None, None
 
+// ex. 2800_DE0EALN_opposite track_DE0EWHL
+let splitTunnelContainingTrack (input: String) : (String * String * String) Option =
+    let pattern = "([0-9]{4})_([0-9A-Z]{7})_.*_([0-9A-Z]{7})"
+    let m = Regex.Match(input, pattern)
+
+    if m.Success && m.Groups.Count = 4 then
+        Some(m.Groups[1].Value, m.Groups[2].Value, m.Groups[3].Value)
+    else
+        None
+
 let buildTunnelInfos
     (sols: SectionOfLine[])
     (ops: OperationalPoint[])
@@ -262,7 +295,13 @@ let buildTunnelInfos
             sols
             |> Array.tryFind (fun sol ->
                 sol.Tracks
-                |> Array.exists (fun track -> t.ContainingTracks |> Array.exists (fun t -> track.id = t)))
+                |> Array.exists (fun track ->
+                    t.ContainingTracks
+                    |> Array.exists (fun t ->
+                        track.id = t
+                        || match splitTunnelContainingTrack t with
+                           | Some(n, op1, op2) -> n = sol.LineIdentification && op1 = sol.StartOP && op2 = sol.EndOP
+                           | None -> false)))
         with
         | Some sol ->
             let startKm, endKm = estimateKilometres sol.StartOP sol.EndOP ops nodes t
@@ -473,8 +512,7 @@ let getCountries () : Async<string> =
 
         let! result = Api.loadCountriesData ()
 
-        let allCountries =
-            Api.toCountries (JsonSerializer.Deserialize<QueryResults>(result))
+        let allCountries = Api.toCountries result
 
         return String.concat ";" allCountries
     }
@@ -495,7 +533,8 @@ let getOsmRoutes () : Async<string> =
     async {
         let! entries1 = getOsmRoutesFrom OSM.Sparql.Api.loadWikipediaArticles
         let! entries2 = getOsmRoutesFrom OSM.Sparql.Api.loadWikidataArticles
-
+        fprintfn stderr "getOsmRoutes from wikiarticles, count %d" entries1.Length
+        fprintfn stderr "getOsmRoutes from wikidata, count %d" entries2.Length
         return JsonSerializer.Serialize(Array.append entries1 entries2)
     }
 
@@ -560,7 +599,8 @@ let execOperationalPointsBuild (path: string) (countriesArg: string) : Async<str
 
         let filename = "sparql-operationalPoints.json"
 
-        let! result = loadDataCached path filename (fun () -> Api.loadOperationalPointData countriesArg)
+        let! result =
+            loadDataCached path filename (fun () -> loadQueryResultsPaged (Api.loadOperationalPointData countriesArg))
 
         let kgOps = Api.toOperationalPoints result countries
 
@@ -624,7 +664,8 @@ let execSectionsOfLineBuild (path: string) (countriesArg: string) : Async<string
 
         let filename = "sparql-sectionsOfLine.json"
 
-        let! result = loadDataCached path filename (fun () -> Api.loadSectionOfLineData countriesArg)
+        let! result =
+            loadDataCached path filename (fun () -> loadQueryResultsPaged (Api.loadSectionOfLineData countriesArg))
 
         let tracks = readFile<Microdata> path "sparql-tracks.json"
         fprintfn stderr $"kg tracks: {tracks.items.Length}"
@@ -693,27 +734,16 @@ let execTrackLoad (path: string) (trackId: string) : Async<string> =
         return JsonSerializer.Serialize data
     }
 
+let loadMicrodataPaged (loader: (int -> int -> Async<Microdata>)) : Async<Microdata> =
+    loadPaged 5000 loader (Microdata.fold chooseItem) Microdata.length
 
 let execTracksBuild (path: string) (countriesArg: string) : Async<string> =
-    let operations =
-        [ 0..9 ]
-        |> List.map (fun n ->
-            loadDataCached<Microdata> path $"sparql-tracks-{n}.json" (fun () -> Api.loadTrackData countriesArg n))
-
     async {
         let! _ = checkIsCountry path countriesArg
 
         let! _ =
             loadDataCached<Microdata> path $"sparql-tracks.json" (fun () ->
-                async {
-                    let items =
-                        operations
-                        |> Async.Sequential
-                        |> Async.RunSynchronously
-                        |> Array.collect (fun result -> result.items |> Array.choose chooseItem)
-
-                    return JsonSerializer.Serialize({ items = items })
-                })
+                loadMicrodataPaged (Api.loadTrackData countriesArg))
 
         return ""
     }
@@ -778,6 +808,8 @@ let main argv =
             async { return! execLineInfoBuild argv.[1] }
         else if argv.[0] = "--TunnelInfo.Build" && argv.Length > 1 && checkIsDir argv.[1] then
             async { return! execTunnelInfoBuild argv.[1] }
+        else if argv.[0] = "--OperationalPoints" && argv.Length > 2 && checkIsDir argv.[1] then
+            async { return! execOperationalPointsBuild argv.[1] argv.[2] }
         else if argv.[0] = "--OperationalPoints" && argv.Length > 2 && checkIsDir argv.[1] then
             async { return! execOperationalPointsBuild argv.[1] argv.[2] }
         else if argv.[0] = "--RailwayLine" && argv.Length > 2 && checkIsDir argv.[1] then

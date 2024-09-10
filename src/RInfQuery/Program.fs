@@ -299,6 +299,7 @@ let main argv =
                 Graph.printPathEx map path
 
                 Graph.verbose <- true
+
                 let getCompactPath path =
                     if useMaxSpeed then
                         Graph.getCompactPathWithMaxSpeed path g
