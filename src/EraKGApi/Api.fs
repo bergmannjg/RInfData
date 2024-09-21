@@ -23,7 +23,6 @@ type Track =
     { id: string
       label: string
       maximumPermittedSpeed: int option
-      loadCapability: string option
       contactLineSystem: string option }
 
 type RailwayLine =
@@ -214,28 +213,27 @@ SELECT ?p ?o WHERE {{
 
     let private trackQuery (country: string) (limit: int) (offset: int) =
         $"""
+
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 PREFIX era: <http://data.europa.eu/949/>
 
-DESCRIBE ?track
+SELECT ?track ?label ?contactLineSystem ?maximumPermittedSpeed
 WHERE {{
   ?sectionOfLine a era:SectionOfLine .
   ?sectionOfLine era:track ?track .
   
-  ?sectionOfLine era:lineNationalId ?lineNationalId .
-  ?lineNationalId rdfs:label ?line .
+  OPTIONAL {{ ?track rdfs:label ?label . }}
+  OPTIONAL {{ ?track era:contactLineSystem ?contactLineSystem . }}
+  OPTIONAL {{ ?track era:maximumPermittedSpeed ?maximumPermittedSpeed . }}
+
   {toCountryQuery "?sectionOfLine" country}
 }} LIMIT {limit} OFFSET {offset}
 """
 
-    let loadTrackData (country: string) (limit: int) (offset: int) : Async<Microdata> =
+    let loadTrackData (country: string) (limit: int) (offset: int) : Async<QueryResults> =
         async {
-            try
-                let! data = Request.GetAsync endpoint (trackQuery country limit offset) Request.applicationMicrodata
-                return JsonSerializer.Deserialize<Microdata>(data)
-            with e ->
-                fprintfn stderr "error: loadTrackData %s" e.Message
-                return Microdata.empty
+            let! data = Request.GetAsync endpoint (trackQuery country limit offset) Request.applicationSparqlResults
+            return JsonSerializer.Deserialize(data)
         }
 
     let private nationalRailwayLineQuery (country: string) =
@@ -422,38 +420,31 @@ WHERE {{
         let index = s.LastIndexOf '_'
         if (index <> -1) then s.Substring(index + 1) else s
 
-    let toTrack (id: string) (tracks: Microdata) : Track =
-        match tracks.items |> Array.tryFind (fun item -> item.id = id) with
-        | Some item ->
-            let prefixLoadCapabilities = "http://data.europa.eu/949/concepts/load-capabilities/"
-
-            let getValue (prop: string) =
-                if item.properties.ContainsKey prop then
-                    Some(item.properties.[prop].[0].ToString())
-                else
-                    None
-
-            { id = System.Web.HttpUtility.UrlDecode(id.Substring(prefixTrack.Length))
-              label = getValue propLabel |> Option.defaultValue ""
-              maximumPermittedSpeed = getValue propMaximumPermittedSpeed |> Option.map int
-              loadCapability =
-                getValue propLoadCapability
-                |> Option.map (fun s -> s.Substring(prefixLoadCapabilities.Length))
-              contactLineSystem =
-                getValue propContactLineSystem
-                |> Option.map (fun s ->
-                    stripContactLineSystem (
-                        (System.Web.HttpUtility.UrlDecode(s)).Substring(prefixContactLineSystem.Length)
-                    )) }
+    let toTrack (id: string) (tracks: QueryResults) : Track =
+        match tracks.results.bindings |> Array.tryFind (fun b -> b["track"].value = id) with
+        | Some b ->
+            { id = System.Web.HttpUtility.UrlDecode(b["track"].value.Substring(prefixTrack.Length))
+              label = b["label"].value
+              maximumPermittedSpeed =
+                match b.TryGetValue "maximumPermittedSpeed" with
+                | true, rdf ->
+                    match System.Int32.TryParse rdf.value with
+                    | true, value -> Some value
+                    | _ -> Some 100
+                | false, _ -> Some 100
+              contactLineSystem = 
+                match b.TryGetValue "contactLineSystem" with
+                | true, rdf -> Some (stripContactLineSystem rdf.value)
+                | false, _ -> None }
         | None ->
+            fprintfn stderr "track not found %s" id
             { id = System.Web.HttpUtility.UrlDecode(id.Substring(prefixTrack.Length))
               label = "directional track"
               maximumPermittedSpeed = Some 100
-              loadCapability = Some "rinf/90"
               contactLineSystem = None }
 
-    let toTracks (tracks: Microdata) : Track[] =
-        tracks.items |> Array.map (fun item -> toTrack item.id tracks)
+    let toTracks (tracks: QueryResults) : Track[] =
+        tracks.results.bindings |> Array.map (fun b -> toTrack b["track"].value tracks)
 
     let toTunnels (sparql: QueryResults) : Tunnel[] =
         sparql.results.bindings
@@ -614,7 +605,7 @@ WHERE {{
             return data
         }
 
-    let toSectionsOfLine (sparql: QueryResults) (lines: RailwayLine[]) (tracks: Microdata) : SectionOfLine[] =
+    let toSectionsOfLine (sparql: QueryResults) (lines: RailwayLine[]) (tracks: QueryResults) : SectionOfLine[] =
         sparql.results.bindings
         |> Array.fold
             (fun (sols: Map<string, SectionOfLine>) b ->

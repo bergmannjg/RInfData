@@ -667,8 +667,8 @@ let execSectionsOfLineBuild (path: string) (countriesArg: string) : Async<string
         let! result =
             loadDataCached path filename (fun () -> loadQueryResultsPaged (Api.loadSectionOfLineData countriesArg))
 
-        let tracks = readFile<Microdata> path "sparql-tracks.json"
-        fprintfn stderr $"kg tracks: {tracks.items.Length}"
+        let tracks = readFile<QueryResults> path "sparql-tracks.json"
+        fprintfn stderr $"kg tracks: {tracks.results.bindings.Length}"
 
         let railwaylines = readFile<RailwayLine[]> path "Railwaylines.json"
         fprintfn stderr $"kg railwaylines: {railwaylines.Length}"
@@ -716,7 +716,7 @@ let execTracksOfLinesLoad (path: string) (linePrefix: string) (country: string) 
 let execTrackLoad (path: string) (trackId: string) : Async<string> =
     async {
         let tracks =
-            readFile<Microdata> path "sparql-tracks.json"
+            readFile<QueryResults> path "sparql-tracks.json"
             |> EraKG.Api.toTracks
             |> Array.filter (fun track -> track.id.EndsWith(trackId))
 
@@ -742,8 +742,8 @@ let execTracksBuild (path: string) (countriesArg: string) : Async<string> =
         let! _ = checkIsCountry path countriesArg
 
         let! _ =
-            loadDataCached<Microdata> path $"sparql-tracks.json" (fun () ->
-                loadMicrodataPaged (Api.loadTrackData countriesArg))
+            loadDataCached<QueryResults> path $"sparql-tracks.json" (fun () ->
+                loadQueryResultsPaged (Api.loadTrackData countriesArg))
 
         return ""
     }
