@@ -3,9 +3,8 @@
 F# program to access the ERA (EU Agency for Railways) Register of Infrastructure database and the ERA knowledge graph.
 
 * [RInf](https://www.era.europa.eu/domains/registers/rinf_en) Register of Railway Infrastructure
-* [API](https://rinf.era.europa.eu/API/Help) to the the RINF database
 * ERA [vocabulary](https://data-interop.era.europa.eu/era-vocabulary/)
-* [ERA knowledge graph](https://era-web.linkeddata.es/sparql.html).
+* Find entities in the [ERA knowledge graph](https://data-interop.era.europa.eu/).
 * Linked data in the knowledge graph: [Berlin Hauptbahnhof](http://data.europa.eu/949/functionalInfrastructure/operationalPoints/DE000BL).
 
 ## Package
