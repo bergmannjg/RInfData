@@ -60,7 +60,7 @@ let TestHHToFF (source: Source) =
 
 [<TestCaseSource(nameof (sources))>]
 let TestRKToRF (source: Source) =
-    TestPath source [| "DE000RK"; "DE000RF" |] [| ("DE000RK", "DE97164", 4020); ("DE97164", "DE000RF", 4000) |] 15245
+    TestPath source [| "DE000RK"; "DE000RF" |] [| ("DE000RK", "DE00RRA", 4020); ("DE00RRA", "DE000RF", 4000) |] 15245
 
 [<TestCaseSource(nameof (sources))>]
 let TestFFUToFF (source: Source) =

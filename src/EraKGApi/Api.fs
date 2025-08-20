@@ -1,6 +1,5 @@
-// see ERA knowledge graph  https://zenodo.org/record/6516745/files/Marina-Aguado-Pitch-@GIRO.pdf
-// see https://data-interop.era.europa.eu/endpoint
-// see sparql endpoint https://era.linkeddata.es/sparql/
+// see interactive endpoint https://data-interop.era.europa.eu/endpoint
+// see sparql endpoint https://data-interop.era.europa.eu/api/sparql
 namespace EraKG
 
 open FSharp.Collections
@@ -70,7 +69,7 @@ module Api =
     let propTenClassification = "http://data.europa.eu/949/tenClassification"
     let propNetElements = "http://data.europa.eu/949/topology/netElements/"
 
-    let private endpoint = "https://era.linkeddata.es/sparql"
+    let private endpoint = "https://data-interop.era.europa.eu/api/sparql"
 
     let countrySplitChars = [| ';' |]
 
