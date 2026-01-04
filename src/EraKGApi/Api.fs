@@ -264,7 +264,7 @@ WHERE {{
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 PREFIX era: <http://data.europa.eu/949/>
 
-SELECT distinct ?tunnel ?tunnelIdentification ?length ?startlocation ?endlocation ?netElement ?country
+SELECT distinct ?tunnel ?tunnelIdentification ?length ?startlocation ?endlocation ?track ?country
 WHERE {{
   ?tunnel a era:Tunnel.
 
@@ -272,7 +272,7 @@ WHERE {{
   ?tunnel era:length ?length .
   ?tunnel era:startLocation ?startlocation .
   ?tunnel era:endLocation ?endlocation .
-  ?tunnel era:netElement ?netElement.
+  ?track era:passesThroughTunnel ?tunnel.
   ?tunnel era:inCountry ?country .
   {toCountryQuery "?tunnel" country}
 }}
@@ -301,9 +301,7 @@ WHERE {{
 
     let private toNationalLines (r: Rdf) : string =
         let splits =
-            (uriTypeToString r "http://data.europa.eu/949/functionalInfrastructure/nationalLines/")
-                .Split
-                [| '/' |]
+            (uriTypeToString r "http://data.europa.eu/949/functionalInfrastructure/nationalLines/").Split [| '/' |]
 
         Array.last splits // ignore country
 
@@ -431,12 +429,13 @@ WHERE {{
                     | true, value -> Some value
                     | _ -> Some 100
                 | false, _ -> Some 100
-              contactLineSystem = 
+              contactLineSystem =
                 match b.TryGetValue "contactLineSystem" with
-                | true, rdf -> Some (stripContactLineSystem rdf.value)
+                | true, rdf -> Some(stripContactLineSystem rdf.value)
                 | false, _ -> None }
         | None ->
             fprintfn stderr "track not found %s" id
+
             { id = System.Web.HttpUtility.UrlDecode(id.Substring(prefixTrack.Length))
               label = "directional track"
               maximumPermittedSpeed = Some 100
@@ -445,19 +444,30 @@ WHERE {{
     let toTracks (tracks: QueryResults) : Track[] =
         tracks.results.bindings |> Array.map (fun b -> toTrack b["track"].value tracks)
 
-    let toTunnels (sparql: QueryResults) : Tunnel[] =
+    let toTunnels (sparql: QueryResults) (sols: SectionOfLine array) : Tunnel[] =
         sparql.results.bindings
         |> Array.fold
             (fun (ops: Map<string, Tunnel>) b ->
                 let toTrackLabel (netElement: string) =
-                    System.Web.HttpUtility.UrlDecode(netElement.Substring(propNetElements.Length))
+                    System.Web.HttpUtility.UrlDecode(netElement.Substring(prefixTrack.Length))
+
+                let findLine (track: string) =
+                    match
+                        sols
+                        |> Array.tryFind (fun sol ->
+                            match sol.Tracks |> Array.tryFind (fun t -> t.id = track) with
+                            | Some track -> true
+                            | None -> false)
+                    with
+                    | Some sol -> sol.LineIdentification
+                    | None -> ""
 
                 ops.Change(
                     b.["tunnelIdentification"].value,
                     fun op ->
                         match op with
                         | Some op ->
-                            let candidate = toTrackLabel b.["netElement"].value
+                            let candidate = toTrackLabel b.["track"].value
 
                             if op.ContainingTracks |> Array.contains candidate then
                                 Some op
@@ -468,12 +478,12 @@ WHERE {{
                         | None ->
                             let startlon, startlat = toLocation b.["startlocation"]
                             let endlon, endlat = toLocation b.["endlocation"]
-                            let trackLabel = toTrackLabel b.["netElement"].value
+                            let trackLabel = toTrackLabel b.["track"].value
 
                             Some
                                 { Name = b.["tunnelIdentification"].value
                                   Country = toCountryType b.["country"]
-                                  LineIdentification = trackLabel.Substring(0, 4)
+                                  LineIdentification = findLine trackLabel
                                   Length = float b.["length"].value
                                   StartLatitude = startlat
                                   StartLongitude = startlon

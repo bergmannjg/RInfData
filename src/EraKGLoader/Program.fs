@@ -628,8 +628,10 @@ let execTunnelBuild (path: string) (countriesArg: string) : Async<string> =
 
         let! result = loadDataCached path "sparql-tunnel.json" (fun () -> Api.loadTunnelData countriesArg)
 
+        let sols = readFile<SectionOfLine[]> path "SectionsOfLines.json"
+
         let tunnels =
-            EraKG.Api.toTunnels result
+            EraKG.Api.toTunnels result sols
             |> fun tunnels -> // filter double entries
                 tunnels
                 |> Array.filter (fun tunnel ->
