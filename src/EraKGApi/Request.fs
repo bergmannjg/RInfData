@@ -31,7 +31,9 @@ module Request =
             return
                 match response.IsSuccessStatusCode with
                 | true -> body
-                | false -> raise (System.InvalidOperationException(body))
+                | false -> 
+                    fprintfn stderr $"query {query}"
+                    raise (System.InvalidOperationException(body))
         }
 
     let PostAsync (endpoint: string) (query: string) (format: string) : Async<string> =

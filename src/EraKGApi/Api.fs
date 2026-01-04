@@ -105,7 +105,7 @@ PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 PREFIX era: <http://data.europa.eu/949/>
 PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
 
-SELECT distinct ?opName, ?uopid, ?opType, ?location, ?lineReference, ?country
+SELECT distinct ?opName ?uopid ?opType ?location ?lineReference ?country
 WHERE {{
   ?operationalPoint a era:OperationalPoint .
   ?operationalPoint rdfs:label ?opName .
@@ -133,7 +133,7 @@ PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 PREFIX era: <http://data.europa.eu/949/>
 PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
 
-SELECT distinct ?sectionOfLine, ?length, ?solNature, ?lineNationalId , ?imCode, ?startOp, ?endOp, ?track, ?country
+SELECT distinct ?sectionOfLine ?length ?solNature ?lineNationalId ?imCode ?startOp ?endOp ?track ?country
 WHERE {{
   ?sectionOfLine a era:SectionOfLine .
   ?sectionOfLine era:lineNationalId ?lineNationalId .
@@ -240,7 +240,7 @@ WHERE {{
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 PREFIX era: <http://data.europa.eu/949/>
 
-SELECT distinct ?label, ?lineCategory, ?country
+SELECT distinct ?label ?lineCategory ?country
 WHERE {{
   ?nationalRailwayLine a era:NationalRailwayLine.
   ?nationalRailwayLine rdfs:label ?label .
@@ -264,7 +264,7 @@ WHERE {{
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 PREFIX era: <http://data.europa.eu/949/>
 
-SELECT distinct ?tunnel, ?tunnelIdentification, ?length, ?startlocation, ?endlocation, ?netElement, ?country
+SELECT distinct ?tunnel ?tunnelIdentification ?length ?startlocation ?endlocation ?netElement ?country
 WHERE {{
   ?tunnel a era:Tunnel.
 
