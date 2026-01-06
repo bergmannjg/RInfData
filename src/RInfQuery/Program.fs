@@ -3,8 +3,8 @@ open System.IO
 open System.Text.Json
 open System.Collections.Generic
 
-open RInf
 open RInfGraph
+open EraKG
 
 let printHelp () =
     """
@@ -36,9 +36,6 @@ let kilometerOfLine (op: OperationalPoint) (line: string) =
     |> Array.tryFind (fun loc -> loc.NationalIdentNum = line)
     |> Option.map (fun loc -> loc.Kilometer)
     |> Option.defaultValue 0.0
-
-let findOp ops opId =
-    ops |> Array.find (fun op -> op.ID = opId)
 
 let findOpByOPID (ops: OperationalPoint[]) opId =
     match (Array.tryFind (fun (op: OperationalPoint) -> op.UOPID = opId) ops) with
@@ -156,11 +153,11 @@ let main argv =
                     sols
                     |> Array.filter (fun sol -> sol.IMCode = argv.[2] && sol.LineIdentification = argv.[3])
                     |> Array.map (fun sol ->
-                        (sol,
-                         opsOfLine
-                         |> Array.tryFind (fun (op, _) -> sol.StartOP.IsSome && op.UOPID = sol.StartOP.Value.UOPID),
-                         opsOfLine
-                         |> Array.tryFind (fun (op, _) -> sol.EndOP.IsSome && op.UOPID = sol.EndOP.Value.UOPID)))
+                        sol,
+                        opsOfLine
+                        |> Array.tryFind (fun (op, _) -> op.UOPID = sol.StartOP),
+                        opsOfLine
+                        |> Array.tryFind (fun (op, _) -> op.UOPID = sol.EndOP))
                     |> Array.sortBy (fun (_, startOp, _) ->
                         match startOp with
                         | Some(_, km) -> km
@@ -179,8 +176,8 @@ let main argv =
                             startKm
                             endKm
                             sol.Length
-                            sol.solName
-                    | _ -> printfn "ops not found: %s" sol.solName)
+                            sol.Name
+                    | _ -> printfn "ops not found: %s" sol.Name)
 
                 return ""
             }

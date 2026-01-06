@@ -13,7 +13,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../RInfApi/RInfApi.fsproj"/>
     <ProjectReference Include="../RInfGraph/target.dotnet/RInfGraph.fsproj"/>
   </ItemGroup>
 

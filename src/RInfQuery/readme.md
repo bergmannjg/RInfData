@@ -32,7 +32,7 @@ OPTIONS:
 Compute the route from Hannover to Berlin:
 
 ```txt
-RInfQuery --Graph.Route ../../rinf-data/ "DE000HH;DE000BL"
+RInfQuery --Graph.Route ../../erakg-data/ "DE000HH;DE000BL"
 ```
 
 Output as table (with links to the [ERA Knowledge Graph](https://linked.ec-dataplatform.eu/sparql?default-graph-uri=https%3A%2F%2Flinked.ec-dataplatform.eu\%2Fera)):
