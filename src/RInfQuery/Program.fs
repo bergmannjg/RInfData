@@ -154,10 +154,8 @@ let main argv =
                     |> Array.filter (fun sol -> sol.IMCode = argv.[2] && sol.LineIdentification = argv.[3])
                     |> Array.map (fun sol ->
                         sol,
-                        opsOfLine
-                        |> Array.tryFind (fun (op, _) -> op.UOPID = sol.StartOP),
-                        opsOfLine
-                        |> Array.tryFind (fun (op, _) -> op.UOPID = sol.EndOP))
+                        opsOfLine |> Array.tryFind (fun (op, _) -> op.UOPID = sol.StartOP),
+                        opsOfLine |> Array.tryFind (fun (op, _) -> op.UOPID = sol.EndOP))
                     |> Array.sortBy (fun (_, startOp, _) ->
                         match startOp with
                         | Some(_, km) -> km

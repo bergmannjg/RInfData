@@ -33,15 +33,15 @@ let TestPath (source: Source) (ids: string[]) (expectedPath: (string * string * 
     printfn "Cost: %d" cost
 
     if source = Source.Rinfdata then
-        Assert.AreEqual(expectedCost, cost)
+        Assert.That((expectedCost = cost))
 
-    Assert.AreEqual(expectedPath.Length, ccpath.Length)
+    Assert.That((expectedPath.Length = ccpath.Length))
 
     Array.iter2
         (fun (fromNode, toNode, line) graphNode ->
-            Assert.AreEqual(fromNode, graphNode.Node)
-            Assert.AreEqual(toNode, graphNode.Edges.[0].Node)
-            Assert.AreEqual(line.ToString(), graphNode.Edges.[0].Line))
+            Assert.That((fromNode = graphNode.Node))
+            Assert.That((toNode = graphNode.Edges.[0].Node))
+            Assert.That((line.ToString() = graphNode.Edges.[0].Line)))
         expectedPath
         ccpath
 
@@ -56,11 +56,11 @@ let TestHHToFFU (source: Source) =
 
 [<TestCaseSource(nameof (sources))>]
 let TestHHToFF (source: Source) =
-    TestPath source [| "DE000HH"; "DE000FF" |] [| ("DE000HH", "DE00FFU", 1733); ("DE00FFU", "DE000FF", 3600) |] 15245
+    TestPath source [| "DE000HH"; "DE000FF" |] [| "DE000HH", "DE00FFU", 1733; "DE00FFU", "DE000FF", 3600 |] 15245
 
 [<TestCaseSource(nameof (sources))>]
 let TestRKToRF (source: Source) =
-    TestPath source [| "DE000RK"; "DE000RF" |] [| ("DE000RK", "DE00RRA", 4020); ("DE00RRA", "DE000RF", 4000) |] 15245
+    TestPath source [| "DE000RK"; "DE000RF" |] [| "DE000RK", "DE00RRA", 4020; "DE00RRA", "DE000RF", 4000 |] 15245
 
 [<TestCaseSource(nameof (sources))>]
 let TestFFUToFF (source: Source) =
@@ -86,9 +86,10 @@ let TestHHToAH (source: Source) =
     TestPath
         source
         [| "DE000HH"; "DE000AH" |]
-        [| ("DE000HH", "DE95366", 1710)
-           ("DE95366", "DE0AHAR", 1720)
-           ("DE0AHAR", "DE000AH", 2200) |]
+        [| "DE000HH", "DE95366", 1710
+           "DE95366", "DE95173", 1720
+           "DE95173", "DE95174", 1259
+           "DE95174", "DE000AH", 2200 |]
         9172
 
 [<TestCaseSource(nameof (sources))>]
@@ -96,7 +97,8 @@ let TestAHToHH (source: Source) =
     TestPath
         source
         [| "DE000AH"; "DE000HH" |]
-        [| ("DE000AH", "DE0AHAR", 2200)
-           ("DE0AHAR", "DE95366", 1720)
-           ("DE95366", "DE000HH", 1710) |]
+        [| "DE000AH", "DE95174", 2200
+           "DE95174", "DE95173", 1259
+           "DE95173", "DE95366", 1720
+           "DE95366", "DE000HH", 1710 |]
         9172

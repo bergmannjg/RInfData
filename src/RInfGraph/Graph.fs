@@ -55,7 +55,8 @@ type TunnelInfo =
       EndKm: float option
       EndOP: string
       SingelTrack: bool
-      Line: string }
+      Line: string
+      Country: string }
 
 type GraphEdge =
     { Node: string
@@ -275,9 +276,9 @@ module Graph =
                   Country = edge1.Country
                   MaxSpeed =
                     if edge1.MaxSpeed < edge2.MaxSpeed then
-                        edge1.MaxSpeed
-                    else
                         edge2.MaxSpeed
+                    else
+                        edge1.MaxSpeed
                   Electrified = edge1.Electrified && edge2.Electrified
                   StartKm = edge1.StartKm
                   EndKm = edge2.EndKm

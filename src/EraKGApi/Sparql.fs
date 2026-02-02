@@ -1,4 +1,3 @@
-// see SPARQL Query Results JSON Format https://www.w3.org/TR/sparql11-results-json/
 namespace Sparql
 
 open System.Text.Json.Serialization
@@ -15,6 +14,7 @@ type Rdf =
 
 type Results = { bindings: Map<string, Rdf>[] }
 
+/// see <a href="https://www.w3.org/TR/sparql11-results-json/">SPARQL Query Results JSON Format</a>
 type QueryResults = { head: Head; results: Results }
 
 module QueryResults =
@@ -31,20 +31,3 @@ module QueryResults =
 
     let fold (data: QueryResults[]) : QueryResults =
         Array.fold (fun acc (r: QueryResults) -> concat acc r) empty data
-
-type Item =
-    { id: string
-      properties: Map<string, obj[]> }
-
-type Microdata = { items: Item[] }
-
-module Microdata =
-    let concat (q1: Microdata) (q2: Microdata) (chooser: (Item -> option<Item>)) : Microdata =
-        { items = Array.concat [ q1.items; q2.items |> Array.choose chooser ] }
-
-    let empty: Microdata = { items = Array.empty }
-
-    let length (data: Microdata) : int = data.items.Length
-
-    let fold (chooser: (Item -> option<Item>)) (data: Microdata[]) : Microdata =
-        Array.fold (fun acc (r: Microdata) -> concat acc r chooser) empty data

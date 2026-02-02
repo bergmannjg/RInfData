@@ -57,6 +57,7 @@ export interface TunnelInfo {
     EndOP: string;
     SingelTrack: boolean;
     Line: string;
+    Country: string;
 }
 
 export interface GraphEdge {
@@ -106,4 +107,5 @@ export interface RInfGraph {
     Graph_getFilteredLocationsOfPath: (g: Array<GraphNode>, opInfos: Map<string, OpInfo>, path: Array<GraphNode>, excludedRinfTypes: Array<number>) => Array<Array<Location>>
     Graph_toPathElement: (opInfos: Map<string, OpInfo>, lineInfos: Map<string, LineInfo>, node: GraphNode) => PathElement
     Graph_isWalkingPath: (node: GraphNode) => boolean
+    Graph_getBRouterUrl: (locations: Location[]) => string
 }

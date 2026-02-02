@@ -31,7 +31,7 @@ module Request =
             return
                 match response.IsSuccessStatusCode with
                 | true -> body
-                | false -> 
+                | false ->
                     fprintfn stderr $"query {query}"
                     raise (System.InvalidOperationException(body))
         }

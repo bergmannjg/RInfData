@@ -13,10 +13,10 @@ if [ ! -d ${RINF_DATA_DIR} ]; then
     exit 1
 fi
 
-if [ $# -ne 1 ]
+if [ $# -eq 0 ]
   then
-    echo "countriy arg expected"
+    echo "country arg expected"
     exit 1
 fi
 
-dotnet run --project src/EraKGLoader/EraKGLoader.fsproj --Build ${RINF_DATA_DIR}/ $1
+dotnet run --project src/EraKGLoader/EraKGLoader.fsproj --Build ${RINF_DATA_DIR}/ $1 $2

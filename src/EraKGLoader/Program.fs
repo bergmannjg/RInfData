@@ -7,6 +7,13 @@ open RInfGraph
 open Sparql
 open EraKG
 
+type Metadata =
+    { Endpoint: string
+      Ontology: string
+      Revision: string
+      Program: string
+      Countries: string[]
+      Date: DateTime }
 
 let printHelp () =
     let dataDirectory = AppDomain.CurrentDomain.BaseDirectory + "../data/"
@@ -40,6 +47,8 @@ let loadDataCached<'a> path name (loader: unit -> Async<'a>) =
     async {
         let file = path + name
 
+        fprintfn stderr $"loading {name}"
+
         if not cacheEnabled || not (File.Exists file) then
             let! result = loader ()
             File.WriteAllText(file, JsonSerializer.Serialize(result))
@@ -49,8 +58,14 @@ let loadDataCached<'a> path name (loader: unit -> Async<'a>) =
             return readFile<'a> path name
     }
 
-let loadPaged<'T> (limit: int) (loader: int -> int -> Async<'T>) (concat: 'T[] -> 'T) (length: 'T -> int) : Async<'T> =
+let private loadPaged<'T>
+    (limit: int)
+    (loader: int -> int -> Async<'T>)
+    (fold: 'T[] -> 'T)
+    (length: 'T -> int)
+    : Async<'T> =
     async {
+        let maxLoop = 20
         let mutable offset = 0
         let mutable arr = Array.empty
 
@@ -60,12 +75,12 @@ let loadPaged<'T> (limit: int) (loader: int -> int -> Async<'T>) (concat: 'T[] -
             arr <- Array.concat [ arr; [| data |] ]
 
             offset <-
-                if offset < 20 * limit && 0 < length data then
+                if offset < maxLoop * limit && limit = length data then
                     limit + offset
                 else
                     -1
 
-        return concat arr
+        return fold arr
     }
 
 let loadQueryResultsPaged (loader: (int -> int -> Async<QueryResults>)) : Async<QueryResults> =
@@ -80,8 +95,10 @@ let kilometerOfLine (op: OperationalPoint) (line: string) =
 let findOp ops opId =
     ops |> Array.find (fun op -> op.UOPID = opId)
 
-let findOpByOPID (ops: OperationalPoint[]) opId =
-    ops |> Array.tryFind (fun (op: OperationalPoint) -> op.UOPID = opId)
+let findOpByOPID (ops: Collections.Generic.Dictionary<string, OperationalPoint>) opId =
+    match ops.TryGetValue opId with
+    | true, op -> Some op
+    | _ -> None
 
 let getLineInfo
     (name: string)
@@ -92,9 +109,7 @@ let getLineInfo
     line
     (nodesOfLine: GraphNode list)
     =
-
     let firstOp = findOpByOPID ops (nodesOfLine |> List.head).Node
-
     let lastOp = findOpByOPID ops (nodesOfLine |> List.last).Edges.[0].Node
 
     match firstOp, lastOp with
@@ -112,7 +127,7 @@ let getLineInfo
 
         let tunnelsOfLine =
             tunnels
-            |> Array.filter (fun t -> t.Line = line)
+            |> Array.filter (fun t -> t.Line = line && t.Country = country)
             |> Array.sortBy (fun t -> t.StartKm)
             |> Array.map (fun t -> t.Tunnel)
             |> Array.distinct
@@ -142,8 +157,7 @@ let getLineInfo
               Length =
                 nodesOfLine
                 |> List.sumBy (fun sol -> if sol.Edges.Length > 0 then sol.Edges.[0].Length else 0.0)
-                |> sprintf "%.1f"
-                |> Double.Parse
+                |> fun d -> Math.Truncate(d * 10.0) / 10.0
               StartKm = kilometerOfLine firstOp line
               EndKm = kilometerOfLine lastOp line
               UOPIDs = uOPIDs
@@ -158,6 +172,14 @@ let buildLineInfo
     (osmRoutes: OSM.Sparql.Entry[])
     (country: string, line: string)
     : LineInfo[] =
+    let dictOps: Collections.Generic.Dictionary<string, OperationalPoint> =
+        ops
+        |> Array.fold
+            (fun acc op ->
+                acc.Add(op.UOPID, op)
+                acc)
+            (Collections.Generic.Dictionary ops.Length)
+
     let solsOfLine =
         nodes
         |> Array.filter (fun sol ->
@@ -189,16 +211,16 @@ let buildLineInfo
         |> Array.map (fun firstNode -> getNextNodes solsOfLine firstNode [ firstNode ])
 
     if nextNodesLists.Length > 0 then
-        let firstOp = findOpByOPID ops nextNodesLists.[0].Head.Node
+        let firstOp = findOpByOPID dictOps nextNodesLists.[0].Head.Node
 
         let lastElem = nextNodesLists.[nextNodesLists.Length - 1] |> List.toArray
 
-        let lastOp = findOpByOPID ops lastElem.[lastElem.Length - 1].Edges.[0].Node
+        let lastOp = findOpByOPID dictOps lastElem.[lastElem.Length - 1].Edges.[0].Node
 
         match firstOp, lastOp with
         | Some firstOp, Some lastOp ->
             nextNodesLists
-            |> Array.map (getLineInfo (firstOp.Name + " - " + lastOp.Name) ops tunnels osmRoutes country line)
+            |> Array.map (getLineInfo (firstOp.Name + " - " + lastOp.Name) dictOps tunnels osmRoutes country line)
             |> Array.choose id
         | _ -> [||]
     else
@@ -294,14 +316,16 @@ let buildTunnelInfos
         match
             sols
             |> Array.tryFind (fun sol ->
-                sol.Tracks
-                |> Array.exists (fun track ->
-                    t.ContainingTracks
-                    |> Array.exists (fun t ->
-                        track.id = t
-                        || match splitTunnelContainingTrack t with
-                           | Some(n, op1, op2) -> n = sol.LineIdentification && op1 = sol.StartOP && op2 = sol.EndOP
-                           | None -> false)))
+                t.LineIdentification = sol.LineIdentification
+                && sol.Tracks
+                   |> Array.exists (fun track ->
+                       t.ContainingTracks
+                       |> Array.exists (fun t ->
+                           track.id = t
+                           || match splitTunnelContainingTrack t with
+                              | Some(n, op1, op2) ->
+                                  n = sol.LineIdentification && op1 = sol.StartOP && op2 = sol.EndOP
+                              | None -> false)))
         with
         | Some sol ->
             let startKm, endKm = estimateKilometres sol.StartOP sol.EndOP ops nodes t
@@ -318,7 +342,8 @@ let buildTunnelInfos
                   EndKm = endKm
                   EndOP = sol.EndOP
                   SingelTrack = t.ContainingTracks.Length = 1
-                  Line = sol.LineIdentification }
+                  Line = sol.LineIdentification
+                  Country = sol.Country }
         | None ->
             fprintfn stderr "sol not found for trackid: %s" t.Name
             None)
@@ -334,7 +359,7 @@ let getMaxSpeed (sol: SectionOfLine) (defaultValue: int) =
 let isElectrified (sol: SectionOfLine) =
     sol.Tracks
     |> Array.choose (fun t -> t.contactLineSystem)
-    |> Array.forall (fun s -> not (s.Contains "not electrified"))
+    |> Array.forall (fun s -> not (s = "Not electrified"))
 
 let nullDefaultValue<'a when 'a: null> (defaultValue: 'a) (value: 'a) =
     if isNull value then defaultValue else value
@@ -342,12 +367,13 @@ let nullDefaultValue<'a when 'a: null> (defaultValue: 'a) (value: 'a) =
 let scale (maxSpeed: int) = 1.0
 
 let travelTime (length: float) (maxSpeed: int) =
-    length / (float (maxSpeed) * (scale maxSpeed))
+    let maxSpeed = if maxSpeed = 0 then 80 else maxSpeed
+    length / (float maxSpeed * scale maxSpeed)
 
 let getCost (length: float) (maxSpeed: int) =
-    let cost = int (10000.0 * (travelTime length maxSpeed))
+    let cost = int (10000.0 * travelTime length maxSpeed)
 
-    if (cost <= 0) then 1 else cost
+    if cost <= 0 then 1 else cost
 
 let buildGraph (ops: OperationalPoint[]) (sols: SectionOfLine[]) =
 
@@ -357,57 +383,17 @@ let buildGraph (ops: OperationalPoint[]) (sols: SectionOfLine[]) =
         if not (graph.ContainsKey op.UOPID) then
             graph <- graph.Add(op.UOPID, List.empty)
 
-    // opId in SectionOfLine sometime contains validity dates
-    // ex: "DE/EU00059/2024-01-01_2024-12-31" or "DEASBRS/2024-01-01_2024-12-31"
-    // normalize to opId
-    let normalizeOpId (opId: string) =
-        let splits = opId.Split "/"
-
-        if splits.Length > 1 then
-            if splits.[1].StartsWith "18" || splits.[1].StartsWith "20" then // century
-                splits.[0]
-            else
-                splits.[1]
-        else
-            opId
-
     let findOp (opId: string) =
-        let opIdNormalized = normalizeOpId opId
-        ops |> Array.tryFind (fun op -> op.UOPID = opIdNormalized)
+        ops |> Array.tryFind (fun op -> op.UOPID = opId)
 
-    // the field sol.Length is for some lines not correct
-    // use the length data of OperationalPoints
-    let length (sol: SectionOfLine) =
-        if true then // sol.Length = 0
-            let findRailwayLocation =
-                fun op ->
-                    op.RailwayLocations
-                    |> Array.tryFind (fun rl -> rl.NationalIdentNum = sol.LineIdentification)
-
-            let startLoc =
-                ops
-                |> Array.find (fun op -> op.UOPID = normalizeOpId sol.StartOP)
-                |> findRailwayLocation
-
-            let endLoc =
-                ops
-                |> Array.find (fun op -> op.UOPID = normalizeOpId sol.EndOP)
-                |> findRailwayLocation
-
-            match startLoc, endLoc with
-            | Some startLoc, Some endLoc -> Math.Abs(startLoc.Kilometer - endLoc.Kilometer)
-            | _, _ ->
-                fprintfn stderr $"sol startop endop not found, {sol.Name}"
-                0.0
-
-        else
-            sol.Length / 1000.0
+    let getLength (sol: SectionOfLine) = sol.Length / 1000.0
 
     let addSol (sol: SectionOfLine) =
         match findOp sol.StartOP, findOp sol.EndOP with
         | Some(opStart), Some(opEnd) ->
             let maxSpeed = getMaxSpeed sol 100
-            let cost = getCost (length sol) maxSpeed
+            let currLength = Math.Round(getLength sol, 2)
+            let cost = getCost currLength maxSpeed
 
             graph <-
                 graph.Add(
@@ -420,7 +406,7 @@ let buildGraph (ops: OperationalPoint[]) (sols: SectionOfLine[]) =
                       Electrified = isElectrified sol
                       StartKm = kilometerOfLine opStart sol.LineIdentification
                       EndKm = kilometerOfLine opEnd sol.LineIdentification
-                      Length = length sol }
+                      Length = currLength }
                     :: graph.[opStart.UOPID]
                 )
 
@@ -435,7 +421,7 @@ let buildGraph (ops: OperationalPoint[]) (sols: SectionOfLine[]) =
                       Electrified = isElectrified sol
                       StartKm = kilometerOfLine opEnd sol.LineIdentification
                       EndKm = kilometerOfLine opStart sol.LineIdentification
-                      Length = length sol }
+                      Length = currLength }
                     :: graph.[opEnd.UOPID]
                 )
         | _ -> fprintfn stderr "addSol, not found %A or %A" sol.StartOP sol.EndOP
@@ -452,27 +438,6 @@ let buildGraph (ops: OperationalPoint[]) (sols: SectionOfLine[]) =
           Edges = graph.[kv.Key] |> List.toArray })
     |> Seq.toArray
 
-let chooseItem (item: Item) =
-    if item.id.StartsWith EraKG.Api.prefixTrack then
-        [ EraKG.Api.propLabel
-          EraKG.Api.propMaximumPermittedSpeed
-          EraKG.Api.propContactLineSystem
-          EraKG.Api.propLoadCapability
-          EraKG.Api.propTenClassification ]
-        |> List.map (fun prop ->
-            item.properties
-            |> Map.tryPick (fun k v -> if k = prop then Some(k, v) else None))
-        |> List.choose id
-        |> fun properties ->
-            if properties.IsEmpty then
-                None
-            else
-                Some
-                    { id = item.id
-                      properties = Map<string, obj[]>(properties) }
-    else
-        None
-
 let checkIsDir (path: string) = Directory.Exists path
 
 let optCreateIsDir (path: string) =
@@ -482,27 +447,27 @@ let optCreateIsDir (path: string) =
 let allowedCountries =
     "EST;GRC;DEU;NLD;BEL;LUX;FRA;POL;LVA;HRV;HUN;FIN;SVN;ESP;BGR;AUT;ITA;NOR;SWE;DNK;ROU;SVK;CZE;CHE;GBR;PRT"
 
-let testIsCountry (countryArg: string) : bool =
-    let allCountries = allowedCountries.Split Api.countrySplitChars
+let countrySplitChars = [| ';' |]
 
-    countryArg.Split Api.countrySplitChars
+let testIsCountry (countries: string) : bool =
+    let allCountries = allowedCountries.Split countrySplitChars
+
+    countries.Split countrySplitChars
     |> Array.forall (fun country -> allCountries |> Array.contains country)
 
-let checkIsCountry (path: string) (countryArg: string) : Async<string[]> =
+let checkIsCountry (path: string) (countries: string[]) : Async<string[]> =
     async {
 
-        let! result = loadDataCached path "sparql-countries.json" (fun () -> Api.loadCountriesData ())
+        let! result = loadDataCached path "sparql-countries.json" (fun () -> Api.Country.loadData ())
 
-        let allCountries = Api.toCountries result
-
-        let countries = countryArg.Split Api.countrySplitChars
+        let allCountries = Api.Country.fromQueryResults result
 
         let isCountry =
             countries
             |> Array.forall (fun country -> allCountries |> Array.contains country)
 
         if not isCountry then
-            raise (System.ArgumentException($"unkown country {countryArg}, should be one of '{allowedCountries}'"))
+            raise (System.ArgumentException($"unkown country {countries}, should be one of '{allowedCountries}'"))
 
         return countries
     }
@@ -510,9 +475,9 @@ let checkIsCountry (path: string) (countryArg: string) : Async<string[]> =
 let getCountries () : Async<string> =
     async {
 
-        let! result = Api.loadCountriesData ()
+        let! result = Api.Country.loadData ()
 
-        let allCountries = Api.toCountries result
+        let allCountries = Api.Country.fromQueryResults result
 
         return String.concat ";" allCountries
     }
@@ -593,45 +558,30 @@ let execTunnelInfoBuild (path: string) : Async<string> =
         return JsonSerializer.Serialize tunnelInfos
     }
 
-let execOperationalPointsBuild (path: string) (countriesArg: string) : Async<string> =
+let execOperationalPointsBuild (path: string) (countries: string[]) : Async<string> =
     async {
-        let! countries = checkIsCountry path countriesArg
+        let! countries = checkIsCountry path countries
 
         let filename = "sparql-operationalPoints.json"
 
         let! result =
-            loadDataCached path filename (fun () -> loadQueryResultsPaged (Api.loadOperationalPointData countriesArg))
+            loadDataCached path filename (fun () -> loadQueryResultsPaged (Api.OperationalPoint.loadData countries))
 
-        let kgOps = Api.toOperationalPoints result countries
-
-        fprintfn stderr $"kg ops: {kgOps.Length}"
+        let kgOps = Api.OperationalPoint.fromQueryResults result
 
         return JsonSerializer.Serialize kgOps
     }
 
-let execRailwayLineBuild (path: string) (countriesArg: string) : Async<string> =
+let execTunnelBuild (path: string) (countries: string[]) : Async<string> =
     async {
-        let! _ = checkIsCountry path countriesArg
+        let! _ = checkIsCountry path countries
 
-        let! result =
-            loadDataCached path "sparql-railwayline.json" (fun () -> Api.loadNationalRailwayLineData countriesArg)
-
-        let railwaylines = EraKG.Api.toRailwayLines result
-        fprintfn stderr $"kg railwaylines: {railwaylines.Length}"
-
-        return JsonSerializer.Serialize railwaylines
-    }
-
-let execTunnelBuild (path: string) (countriesArg: string) : Async<string> =
-    async {
-        let! _ = checkIsCountry path countriesArg
-
-        let! result = loadDataCached path "sparql-tunnel.json" (fun () -> Api.loadTunnelData countriesArg)
+        let! result = loadDataCached path "sparql-tunnel.json" (fun () -> Api.Tunnel.loadData countries)
 
         let sols = readFile<SectionOfLine[]> path "SectionsOfLines.json"
 
         let tunnels =
-            EraKG.Api.toTunnels result sols
+            EraKG.Api.Tunnel.fromQueryResults result sols
             |> fun tunnels -> // filter double entries
                 tunnels
                 |> Array.filter (fun tunnel ->
@@ -644,143 +594,87 @@ let execTunnelBuild (path: string) (countriesArg: string) : Async<string> =
                     |> Array.sortBy (fun t -> t.Name.Length)
                     |> fun filtered -> tunnel.Name = filtered.[0].Name)
 
-        fprintfn stderr $"kg tunnels: {tunnels.Length}"
-
         return JsonSerializer.Serialize tunnels
     }
 
-// adhoc, add missing sols
-let missingSols: SectionOfLine[] =
-    [| { Name = "3600_DE0FSUE_DE00FFD"
-         Country = "DEU"
-         Length = 11.0
-         LineIdentification = "3600"
-         IMCode = "0080"
-         StartOP = "DE0FSUE"
-         EndOP = "DE00FFD"
-         Tracks = [||] } |]
-
-let execSectionsOfLineBuild (path: string) (countriesArg: string) : Async<string> =
+let execSectionsOfLineBuild (path: string) (countries: string[]) : Async<string> =
     async {
-        let! _ = checkIsCountry path countriesArg
+        let! _ = checkIsCountry path countries
 
         let filename = "sparql-sectionsOfLine.json"
 
         let! result =
-            loadDataCached path filename (fun () -> loadQueryResultsPaged (Api.loadSectionOfLineData countriesArg))
+            loadDataCached path filename (fun () -> loadQueryResultsPaged (Api.SectionOfLine.loadData countries))
 
         let tracks = readFile<QueryResults> path "sparql-tracks.json"
-        fprintfn stderr $"kg tracks: {tracks.results.bindings.Length}"
 
-        let railwaylines = readFile<RailwayLine[]> path "Railwaylines.json"
-        fprintfn stderr $"kg railwaylines: {railwaylines.Length}"
-
-        let sols = EraKG.Api.toSectionsOfLine result railwaylines tracks
-
-        let missingSols =
-            missingSols
-            |> Array.filter (fun msol ->
-                sols
-                |> Array.exists (fun sol -> sol.StartOP = msol.StartOP && sol.EndOP = msol.EndOP)
-                |> not)
-
-        let missingSols =
-            missingSols |> Array.filter (fun sol -> countriesArg.Contains sol.Country)
-
-        if missingSols.Length > 0 then
-            missingSols
-            |> Array.iter (fun sol ->
-                fprintfn stderr $"add missing sol: {sol.LineIdentification} {sol.StartOP} {sol.EndOP}")
-
-        let sols = Array.concat [ sols; missingSols ]
-
-        let! sols = EraKG.Api.remapTracksOfLines sols
-
-        fprintfn stderr $"kg sols: {sols.Length}"
+        let sols = EraKG.Api.SectionOfLine.fromQueryResults result tracks
 
         return JsonSerializer.Serialize sols
     }
 
-let execTracksOfLinesLoad (path: string) (linePrefix: string) (country: string) : Async<string> =
+let execTracksBuild (path: string) (countries: string[]) : Async<string> =
     async {
-        let lineInfos =
-            readFile<LineInfo[]> path "LineInfos.json"
-            |> Array.filter (fun line -> line.Line.StartsWith(linePrefix) && line.Country = country)
-            |> Array.map (fun line -> line.Line)
-
-        fprintfn stderr $"lineInfos {lineInfos.Length}"
-
-        let! data = EraKG.Api.loadTracksOfLines lineInfos country
-
-        return JsonSerializer.Serialize data
-    }
-
-let execTrackLoad (path: string) (trackId: string) : Async<string> =
-    async {
-        let tracks =
-            readFile<QueryResults> path "sparql-tracks.json"
-            |> EraKG.Api.toTracks
-            |> Array.filter (fun track -> track.id.EndsWith(trackId))
-
-        fprintfn stderr $"tracks {tracks.Length}"
-
-        let! data =
-            if tracks.Length > 0 then
-                async {
-                    let! track = EraKG.Api.reloadTrack tracks[0]
-                    return Some track
-                }
-            else
-                async { return None }
-
-        return JsonSerializer.Serialize data
-    }
-
-let loadMicrodataPaged (loader: (int -> int -> Async<Microdata>)) : Async<Microdata> =
-    loadPaged 5000 loader (Microdata.fold chooseItem) Microdata.length
-
-let execTracksBuild (path: string) (countriesArg: string) : Async<string> =
-    async {
-        let! _ = checkIsCountry path countriesArg
+        let! _ = checkIsCountry path countries
 
         let! _ =
             loadDataCached<QueryResults> path $"sparql-tracks.json" (fun () ->
-                loadQueryResultsPaged (Api.loadTrackData countriesArg))
+                loadQueryResultsPaged (Api.Track.loadData countries))
 
         return ""
     }
 
-let execBuild (path: string) (countriesArg: string) (useCache: bool) : Async<string> =
+let execBuild (path: string) (countries: string[]) (useCache: bool) : Async<string> =
     async {
         cacheEnabled <- useCache
-        let! _ = execTracksBuild path countriesArg
+        let now = fun () -> DateTime.Now.ToLongTimeString()
 
-        let! result = execRailwayLineBuild path countriesArg
-        File.WriteAllText(path + "Railwaylines.json", result)
+        fprintfn stderr $"execTracksBuild {now ()}"
+        let! _ = execTracksBuild path countries
 
-        let! result = execSectionsOfLineBuild path countriesArg
+        fprintfn stderr $"execSectionsOfLineBuild {now ()}"
+        let! result = execSectionsOfLineBuild path countries
         File.WriteAllText(path + "SectionsOfLines.json", result)
 
-        let! result = execOperationalPointsBuild path countriesArg
+        fprintfn stderr $"execOperationalPointsBuild {now ()}"
+        let! result = execOperationalPointsBuild path countries
         File.WriteAllText(path + "OperationalPoints.json", result)
 
-        let! result = execTunnelBuild path countriesArg
+        fprintfn stderr $"execTunnelBuild {now ()}"
+        let! result = execTunnelBuild path countries
         File.WriteAllText(path + "Tunnels.json", result)
 
+        fprintfn stderr $"execOpInfohBuild {now ()}"
         let! result = execOpInfohBuild path
         File.WriteAllText(path + "OpInfos.json", result)
 
+        fprintfn stderr $"execGraphBuild {now ()}"
         let! result = execGraphBuild path
         File.WriteAllText(path + "Graph.json", result)
 
+        fprintfn stderr $"execTunnelInfoBuild {now ()}"
         let! result = execTunnelInfoBuild path
         File.WriteAllText(path + "TunnelInfos.json", result)
 
+        fprintfn stderr $"getOsmRoutes"
         let! result = getOsmRoutes ()
         File.WriteAllText(path + "OsmRoutes.json", result)
 
+        fprintfn stderr $"execLineInfoBuild {now ()}"
         let! result = execLineInfoBuild path
         File.WriteAllText(path + "LineInfos.json", result)
+
+        fprintfn stderr $"buildMetadata  {now ()}"
+
+        let metadata: Metadata =
+            { Endpoint = "https://data-interop.era.europa.eu/endpoint"
+              Ontology = "https://data-interop.era.europa.eu/era-vocabulary"
+              Revision = "v3.1.5"
+              Program = "https://github.com/bergmannjg/RInfData/tree/main/src/EraKGLoader"
+              Countries = countries
+              Date = DateTime.Now }
+
+        File.WriteAllText(path + "Metadata.json", JsonSerializer.Serialize metadata)
 
         return ""
     }
@@ -795,13 +689,18 @@ let main argv =
         if argv.Length = 0 then
             async { return printHelp () }
         else if checkIsDir dataDirectory && testIsCountry argv.[0] then
-            async { return! execBuild dataDirectory argv.[0] useCache }
+            async { return! execBuild dataDirectory (argv.[0].Split countrySplitChars) useCache }
         else if argv.[0] = "--Countries" then
             async { return! getCountries () }
         else if argv.[0] = "--OsmRoutes" then
             async { return! getOsmRoutes () }
-        else if argv.[0] = "--Build" && checkIsDir argv.[1] && argv.Length >= 3 then
-            async { return! execBuild argv.[1] argv.[2] useCache }
+        else if
+            argv.[0] = "--Build"
+            && checkIsDir argv.[1]
+            && argv.Length >= 3
+            && testIsCountry argv.[2]
+        then
+            async { return! execBuild argv.[1] (argv.[2].Split countrySplitChars) useCache }
         else if argv.[0] = "--Graph.Build" && argv.Length > 1 && checkIsDir argv.[1] then
             async { return! execGraphBuild argv.[1] }
         else if argv.[0] = "--OpInfo.Build" && argv.Length > 1 && checkIsDir argv.[1] then
@@ -811,21 +710,15 @@ let main argv =
         else if argv.[0] = "--TunnelInfo.Build" && argv.Length > 1 && checkIsDir argv.[1] then
             async { return! execTunnelInfoBuild argv.[1] }
         else if argv.[0] = "--OperationalPoints" && argv.Length > 2 && checkIsDir argv.[1] then
-            async { return! execOperationalPointsBuild argv.[1] argv.[2] }
+            async { return! execOperationalPointsBuild argv.[1] (argv.[2].Split countrySplitChars) }
         else if argv.[0] = "--OperationalPoints" && argv.Length > 2 && checkIsDir argv.[1] then
-            async { return! execOperationalPointsBuild argv.[1] argv.[2] }
-        else if argv.[0] = "--RailwayLine" && argv.Length > 2 && checkIsDir argv.[1] then
-            async { return! execRailwayLineBuild argv.[1] argv.[2] }
+            async { return! execOperationalPointsBuild argv.[1] (argv.[2].Split countrySplitChars) }
         else if argv.[0] = "--Tunnel" && argv.Length > 2 && checkIsDir argv.[1] then
-            async { return! execTunnelBuild argv.[1] argv.[2] }
+            async { return! execTunnelBuild argv.[1] (argv.[2].Split countrySplitChars) }
         else if argv.[0] = "--SectionsOfLine" && argv.Length > 2 && checkIsDir argv.[1] then
-            async { return! execSectionsOfLineBuild argv.[1] argv.[2] }
-        else if argv.[0] = "--TracksOfLinesLoad" && argv.Length > 3 && checkIsDir argv.[1] then
-            async { return! execTracksOfLinesLoad argv.[1] argv.[2] argv.[3] }
-        else if argv.[0] = "--TrackLoad" && argv.Length > 2 && checkIsDir argv.[1] then
-            async { return! execTrackLoad argv.[1] argv.[2] }
+            async { return! execSectionsOfLineBuild argv.[1] (argv.[2].Split countrySplitChars) }
         else if argv.[0] = "--Tracks" && argv.Length > 2 && checkIsDir argv.[1] then
-            async { return! execTracksBuild argv.[1] argv.[2] }
+            async { return! execTracksBuild argv.[1] (argv.[2].Split countrySplitChars) }
         else
             async {
                 fprintfn stderr $"{argv.[0]} unexpected"

@@ -4,6 +4,7 @@ namespace EraKG
 
 open FSharp.Collections
 open System.Text.Json
+open System.Collections.Generic
 
 type RailwayLocation =
     { NationalIdentNum: string
@@ -22,12 +23,8 @@ type Track =
     { id: string
       label: string
       maximumPermittedSpeed: int option
-      contactLineSystem: string option }
-
-type RailwayLine =
-    { LineIdentification: string
-      Country: string
-      LineCategories: string[] }
+      contactLineSystem: string option
+      lineCategories: int[] }
 
 type SectionOfLine =
     { Name: string
@@ -54,600 +51,422 @@ module Api =
 
     open Sparql
 
-    // got Virtuoso 22023 Error SR580 for these lines in trackOfLineQuery
-    let linesWithError: (string * string)[] = [| "014000-1", "FRA"; "850000-1", "FRA" |]
-
-    let prefixTrack = "http://data.europa.eu/949/functionalInfrastructure/tracks/"
-
-    let prefixContactLineSystem =
-        "http://data.europa.eu/949/functionalInfrastructure/contactLineSystems/"
-
-    let propLabel = "http://www.w3.org/2000/01/rdf-schema#label"
-    let propMaximumPermittedSpeed = "http://data.europa.eu/949/maximumPermittedSpeed"
-    let propContactLineSystem = "http://data.europa.eu/949/contactLineSystem"
-    let propLoadCapability = "http://data.europa.eu/949/loadCapability"
-    let propTenClassification = "http://data.europa.eu/949/tenClassification"
-    let propNetElements = "http://data.europa.eu/949/topology/netElements/"
-
     let private endpoint = "https://data-interop.era.europa.eu/api/sparql"
 
-    let countrySplitChars = [| ';' |]
+    module private Utils =
+        let appendElem<'T when 'T: equality> (elem: 'T) (arr: 'T array) =
+            if Array.contains elem arr then
+                arr
+            else
+                Array.append [| elem |] arr
 
-    /// see https://op.europa.eu/en/web/eu-vocabularies/dataset/-/resource?uri=http://publications.europa.eu/resource/dataset/country
-    let private countriesQuery () =
-        $"""
-PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-PREFIX era: <http://data.europa.eu/949/>
-PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
-
-SELECT distinct ?country
-WHERE {{
-  ?operationalPoint a era:OperationalPoint .
-  ?operationalPoint era:inCountry ?country .
-}}
-"""
-
-    let loadCountriesData () : Async<QueryResults> =
-        async {
-            let! data = Request.GetAsync endpoint (countriesQuery ()) Request.applicationSparqlResults
-            return JsonSerializer.Deserialize(data)
-        }
-
-    let private toCountryQuery (item: string) (countryArg: string) : string =
-        countryArg.Split countrySplitChars
-        |> Array.map (fun country ->
-            $"{{ {item} era:inCountry <http://publications.europa.eu/resource/authority/country/{country}> . }}")
-        |> String.concat " UNION "
-
-    let private operationalPointQuery (country: string) (limit: int) (offset: int) =
-        $"""
-PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-PREFIX era: <http://data.europa.eu/949/>
-PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
-
-SELECT distinct ?opName ?uopid ?opType ?location ?lineReference ?country
-WHERE {{
-  ?operationalPoint a era:OperationalPoint .
-  ?operationalPoint rdfs:label ?opName .
-
-  ?operationalPoint era:uopid ?uopid .
-  ?operationalPoint era:lineReference ?lineReference .
-  ?operationalPoint <http://www.w3.org/2003/01/geo/wgs84_pos#location> ?location .
-  ?operationalPoint era:opType ?opType .
-  ?operationalPoint era:inCountry ?country .
-  {toCountryQuery "?operationalPoint" country}
-}} LIMIT {limit} OFFSET {offset}
-"""
-
-    let loadOperationalPointData (country: string) (limit: int) (offset: int) : Async<QueryResults> =
-        async {
-            let! data =
-                Request.GetAsync endpoint (operationalPointQuery country limit offset) Request.applicationSparqlResults
-
-            return JsonSerializer.Deserialize(data)
-        }
-
-    let private sectionOfLineQuery (country: string) (limit: int) (offset: int) =
-        $"""
-PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-PREFIX era: <http://data.europa.eu/949/>
-PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
-
-SELECT distinct ?sectionOfLine ?length ?solNature ?lineNationalId ?imCode ?startOp ?endOp ?track ?country
-WHERE {{
-  ?sectionOfLine a era:SectionOfLine .
-  ?sectionOfLine era:lineNationalId ?lineNationalId .
-  ?sectionOfLine era:length ?length .
-  ?sectionOfLine era:solNature ?solNature .
-  ?sectionOfLine era:imCode ?imCode .
-  ?sectionOfLine era:opStart ?startOp .
-  ?sectionOfLine era:opEnd ?endOp .
-  ?sectionOfLine era:track ?track .
-  ?sectionOfLine era:inCountry ?country .
-  {toCountryQuery "?sectionOfLine" country}
-}} LIMIT {limit} OFFSET {offset}
-"""
-
-    let loadSectionOfLineData (country: string) (limit: int) (offset: int) : Async<QueryResults> =
-        async {
-            let! data =
-                Request.GetAsync endpoint (sectionOfLineQuery country limit offset) Request.applicationSparqlResults
-
-            return JsonSerializer.Deserialize(data)
-        }
-
-    let private trackOfLineQuery (lineName: string) (country: string) =
-        $"""
-PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-PREFIX era: <http://data.europa.eu/949/>
-
-DESCRIBE ?track
-WHERE {{
-  ?sectionOfLine a era:SectionOfLine .
-  ?sectionOfLine era:track ?track .
-
-  ?sectionOfLine era:lineNationalId ?lineNationalId .
-  ?lineNationalId rdfs:label "{lineName}" .
-  ?sectionOfLine era:inCountry <http://publications.europa.eu/resource/authority/country/{country}> . 
-}}
-"""
-
-    let loadTracksOfLine (lineName: string) (country: string) : Async<string> =
-        async {
-            try
-                let! data = Request.GetAsync endpoint (trackOfLineQuery lineName country) Request.applicationMicrodata
-                return data
-            with e ->
-                fprintfn stderr "error: loadTrackData %s" e.Message
-                return "{\"items\":[]}"
-        }
-
-    let private trackIdQuery (trackId: string) =
-        let id = trackId.Replace(" ", "%20")
-        let s = $"<http://data.europa.eu/949/functionalInfrastructure/tracks/{id}>"
-
-        $"""
-PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-PREFIX era: <http://data.europa.eu/949/>
-
-SELECT ?p ?o WHERE {{
-    VALUES ?p {{
-        era:maximumPermittedSpeed
-        era:contactLineSystem
-    }}
-
-    {s} ?p ?o
-}}
-"""
-
-    let loadTrackIdData (trackId: string) : Async<string> =
-        async {
-            try
-                let! data = Request.GetAsync endpoint (trackIdQuery trackId) Request.applicationSparqlResults
-                return data
-            with e ->
-                fprintfn stderr "error: loadTrackData %s" e.Message
-                return "{\"items\":[]}"
-        }
-
-    let private trackQuery (country: string) (limit: int) (offset: int) =
-        $"""
-
-PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-PREFIX era: <http://data.europa.eu/949/>
-
-SELECT ?track ?label ?contactLineSystem ?maximumPermittedSpeed
-WHERE {{
-  ?sectionOfLine a era:SectionOfLine .
-  ?sectionOfLine era:track ?track .
-  
-  OPTIONAL {{ ?track rdfs:label ?label . }}
-  OPTIONAL {{ ?track era:contactLineSystem ?contactLineSystem . }}
-  OPTIONAL {{ ?track era:maximumPermittedSpeed ?maximumPermittedSpeed . }}
-
-  {toCountryQuery "?sectionOfLine" country}
-}} LIMIT {limit} OFFSET {offset}
-"""
-
-    let loadTrackData (country: string) (limit: int) (offset: int) : Async<QueryResults> =
-        async {
-            let! data = Request.GetAsync endpoint (trackQuery country limit offset) Request.applicationSparqlResults
-            return JsonSerializer.Deserialize(data)
-        }
-
-    let private nationalRailwayLineQuery (country: string) =
-        $"""
-PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-PREFIX era: <http://data.europa.eu/949/>
-
-SELECT distinct ?label ?lineCategory ?country
-WHERE {{
-  ?nationalRailwayLine a era:NationalRailwayLine.
-  ?nationalRailwayLine rdfs:label ?label .
-  OPTIONAL {{
-     ?nationalRailwayLine era:lineCategory ?lineCategory .
-     FILTER(!STRSTARTS(STR(?lineCategory), 'http://data.europa.eu/949/concepts/line-category/rinf/')).
-  }} .
-  ?nationalRailwayLine era:inCountry ?country .
-  {toCountryQuery "?nationalRailwayLine" country}
-}}
-"""
-
-    let loadNationalRailwayLineData (country: string) : Async<QueryResults> =
-        async {
-            let! data = Request.GetAsync endpoint (nationalRailwayLineQuery country) Request.applicationSparqlResults
-            return JsonSerializer.Deserialize(data)
-        }
-
-    let private tunnelQuery (country: string) =
-        $"""
-PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-PREFIX era: <http://data.europa.eu/949/>
-
-SELECT distinct ?tunnel ?tunnelIdentification ?length ?startlocation ?endlocation ?track ?country
-WHERE {{
-  ?tunnel a era:Tunnel.
-
-  ?tunnel era:tunnelIdentification ?tunnelIdentification .
-  ?tunnel era:length ?length .
-  ?tunnel era:startLocation ?startlocation .
-  ?tunnel era:endLocation ?endlocation .
-  ?track era:passesThroughTunnel ?tunnel.
-  ?tunnel era:inCountry ?country .
-  {toCountryQuery "?tunnel" country}
-}}
-"""
-
-    let loadTunnelData (country: string) : Async<QueryResults> =
-        async {
-            let! data = Request.GetAsync endpoint (tunnelQuery country) Request.applicationSparqlResults
-            return JsonSerializer.Deserialize(data)
-        }
-
-    let private uriTypeToString (r: Rdf) (prefix: string) : string =
-        if r.``type`` = "uri" then
-            System.Web.HttpUtility.UrlDecode(r.value.Substring(prefix.Length))
-        else
-            raise (System.Exception($"uriTypeToString: type {r.``type``} unexpected"))
-
-    let private toOpType (r: Rdf) : string =
-        uriTypeToString r "http://data.europa.eu/949/concepts/op-types/"
-
-    let private toCountryType (r: Rdf) : string =
-        uriTypeToString r "http://publications.europa.eu/resource/authority/country/"
-
-    let private toSectionsOfLineId (r: Rdf) : string =
-        uriTypeToString r "http://data.europa.eu/949/functionalInfrastructure/sectionsOfLine/"
-
-    let private toNationalLines (r: Rdf) : string =
-        let splits =
-            (uriTypeToString r "http://data.europa.eu/949/functionalInfrastructure/nationalLines/").Split [| '/' |]
-
-        Array.last splits // ignore country
-
-    let private toUOPID (r: Rdf) : string =
-        uriTypeToString r "http://data.europa.eu/949/functionalInfrastructure/operationalPoints/"
-
-    let private toLocation (r: Rdf) : (float * float) =
-        let splits =
-            (uriTypeToString r "http://data.europa.eu/949/locations/").Split [| '/' |]
-
-        (float splits.[0], float splits.[1])
-
-    let private toRailwayLocation (r: Rdf) : RailwayLocation =
-        let line =
-            uriTypeToString r "http://data.europa.eu/949/functionalInfrastructure/lineReferences/"
-
-        let index = line.LastIndexOf '_'
-
-        if index > 0 then
-            let km = line.Substring(index + 1)
-
-            { NationalIdentNum = line.Substring(0, index)
-              Kilometer =
-                try
-                    float km
-                with e ->
-                    fprintfn stderr "error: '%s' %s" km e.Message
-                    0.0 }
-        else
-            { NationalIdentNum = line
-              Kilometer = 0.0 }
-
-    let private toFloat (r: Rdf) : float =
-        try
-            float r.value
-        with error ->
-            fprintfn stderr "%s" error.Message
-            0.0
-
-    let toOperationalPoints (sparql: QueryResults) (countries: string[]) : OperationalPoint[] =
-        sparql.results.bindings
-        |> Array.fold
-            (fun (ops: Map<string, OperationalPoint>) b ->
-                let country = toCountryType b.["country"]
-
-                if countries |> Array.contains country then
-                    ops.Change(
-                        b.["uopid"].value,
-                        fun op ->
-                            match op with
-                            | Some op ->
-                                let candidate = toRailwayLocation b.["lineReference"]
-
-                                if op.RailwayLocations |> Array.contains candidate then
-                                    Some op
-                                else
-                                    Some
-                                        { op with
-                                            RailwayLocations = op.RailwayLocations |> Array.append [| candidate |] }
-                            | None ->
-                                let lon, lat = toLocation b.["location"]
-
-                                Some
-                                    { Name = b.["opName"].value
-                                      Type = toOpType b.["opType"]
-                                      Country = country
-                                      UOPID = b.["uopid"].value
-                                      Latitude = lat
-                                      Longitude = lon
-                                      RailwayLocations = [| toRailwayLocation b.["lineReference"] |] }
-                    )
+        let optAppendElem<'T when 'T: equality> (elem: 'T option) (arr: 'T array) =
+            match elem with
+            | Some elem ->
+                if Array.contains elem arr then
+                    arr
                 else
-                    ops)
-            Map.empty
-        |> Map.values
-        |> Seq.toArray
+                    Array.append [| elem |] arr
+            | None -> arr
 
-    let toCountries (sparql: QueryResults) : string[] =
-        sparql.results.bindings |> Array.map (fun b -> toCountryType b.["country"])
+        /// <summary> like
+        ///  <see href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-collections-mapmodule.html#change">Map.change</see>
+        /// </summary>
+        let change<'TKey, 'TValue>
+            (dict: Dictionary<'TKey, 'TValue>, key: 'TKey, f: (option<'TValue> -> option<'TValue>))
+            =
+            match dict.TryGetValue key with
+            | true, v ->
+                match f (Some v) with
+                | Some v ->
+                    dict[key] <- v
+                    dict
+                | None -> dict
+            | _ ->
+                match f None with
+                | Some v ->
+                    dict.Add(key, v)
+                    dict
+                | None -> dict
 
-    let toRailwayLines (sparql: QueryResults) : RailwayLine[] =
-        sparql.results.bindings
-        |> Array.fold
-            (fun (lines: Map<string, RailwayLine>) b ->
-                let addLineCategory (b: Map<string, Rdf>) (lineCategories: string[]) : string[] =
-                    if b |> Map.containsKey "lineCategory" then
-                        lineCategories
-                        |> Array.append
-                            [| (uriTypeToString b.["lineCategory"] "http://data.europa.eu/949/concepts/line-category/") |]
-                    else
-                        lineCategories
+    /// see <a href="https://data-interop.era.europa.eu/era-vocabulary/#overv">Object Properties</a>
+    module private Properties =
+        let private uriTypeToString (r: Rdf) (prefix: string) : string =
+            if r.``type`` = "uri" then
+                System.Web.HttpUtility.UrlDecode(r.value.Substring prefix.Length)
+            else
+                raise (System.Exception $"uriTypeToString: type {r.``type``} unexpected")
 
-                lines.Change(
-                    b.["label"].value,
-                    fun line ->
-                        match line with
-                        | Some line ->
-                            Some
-                                { line with
-                                    LineCategories = addLineCategory b line.LineCategories }
-                        | None ->
-                            Some
-                                { LineIdentification = b.["label"].value
-                                  Country = toCountryType b.["country"]
-                                  LineCategories = addLineCategory b [||] }
-                ))
-            Map.empty
-        |> Map.values
-        |> Seq.toArray
+        let toOpType (r: Rdf) : string =
+            uriTypeToString r "http://data.europa.eu/949/concepts/op-types/"
 
-    // may conatin extra data until '_'
-    let stripContactLineSystem (s: string) : string =
-        let index = s.LastIndexOf '_'
-        if (index <> -1) then s.Substring(index + 1) else s
+        let toCountryType (r: Rdf) : string =
+            uriTypeToString r "http://publications.europa.eu/resource/authority/country/"
 
-    let toTrack (id: string) (tracks: QueryResults) : Track =
-        match tracks.results.bindings |> Array.tryFind (fun b -> b["track"].value = id) with
-        | Some b ->
-            { id = System.Web.HttpUtility.UrlDecode(b["track"].value.Substring(prefixTrack.Length))
-              label = b["label"].value
+        let toSectionsOfLineId (r: Rdf) : string =
+            uriTypeToString r "http://data.europa.eu/949/functionalInfrastructure/sectionsOfLine/"
+
+        let toLineCategory (r: Rdf) : int =
+            let s = uriTypeToString r "http://data.europa.eu/949/concepts/line-category/rinf/"
+
+            match System.Int32.TryParse s with
+            | true, value -> value
+            | _ -> raise (System.Exception $"toLineCategory int expected {r}")
+
+        let toTrackLabel (r: Rdf) =
+            uriTypeToString r "http://data.europa.eu/949/functionalInfrastructure/tracks/"
+
+        let toUOPID (r: Rdf) : string =
+            uriTypeToString r "http://data.europa.eu/949/functionalInfrastructure/operationalPoints/"
+
+        let toLiteral (r: Rdf) : string =
+            if r.``type`` = "literal" then
+                r.value
+            else
+                raise (System.Exception $"toLiteral unexpected datatype {r}")
+
+        let toInt (r: Rdf) : int =
+            if r.datatype = Some "http://www.w3.org/2001/XMLSchema#integer" then
+                try
+                    int r.value
+                with error ->
+                    raise (System.Exception $"toInt {error.Message} {r}")
+            else
+                raise (System.Exception $"toInt unexpected datatype {r}")
+
+        let toFloat (r: Rdf) : float =
+            if r.datatype = Some "http://www.w3.org/2001/XMLSchema#double" then
+                try
+                    float r.value
+                with error ->
+                    raise (System.Exception $"toFloat {error.Message} {r}")
+            else
+                raise (System.Exception $"toFloat unexpected datatype {r}")
+
+    /// see <a href="https://op.europa.eu/en/web/eu-vocabularies/dataset/-/resource?uri=http://publications.europa.eu/resource/dataset/country">Countries and territories</a>
+    module Country =
+        let private countriesQuery () =
+            $"""
+                PREFIX era: <http://data.europa.eu/949/>
+
+                SELECT distinct ?country
+                WHERE {{
+                  ?operationalPoint a era:OperationalPoint .
+                  ?operationalPoint era:inCountry ?country .
+                }}
+            """
+
+        let loadData () : Async<QueryResults> =
+            async {
+                let! data = Request.GetAsync endpoint (countriesQuery ()) Request.applicationSparqlResults
+                return JsonSerializer.Deserialize data
+            }
+
+        let fromQueryResults (sparql: QueryResults) : string[] =
+            sparql.results.bindings
+            |> Array.map (fun b -> Properties.toCountryType b.["country"])
+
+        let toCountryCondition (item: string) (countries: string[]) : string =
+            countries
+            |> Array.map (fun country ->
+                $"{{ {item} era:inCountry <http://publications.europa.eu/resource/authority/country/{country}> . }}")
+            |> String.concat " UNION "
+
+    /// see <a href="https://data-interop.era.europa.eu/era-vocabulary/#http://data.europa.eu/949/OperationalPoint">Operational Point</a>
+    module OperationalPoint =
+        let private operationalPointQuery (countries: string[]) (limit: int) (offset: int) =
+            $"""
+                PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+                PREFIX era: <http://data.europa.eu/949/>
+                PREFIX wgs: <http://www.w3.org/2003/01/geo/wgs84_pos#> 
+
+                SELECT distinct ?opName ?uopid ?opType ?lat ?lon ?lineNationalLabel ?kilometer ?country
+                WHERE {{
+                  ?operationalPoint a era:OperationalPoint .
+                  ?operationalPoint rdfs:label ?opName .
+
+                  ?operationalPoint era:uopid ?uopid .
+                  ?operationalPoint era:lineReference ?lineReference .
+                  ?lineReference era:lineNationalId ?lineNationalId.
+                  ?lineNationalId  rdfs:label ?lineNationalLabel.
+                  ?lineReference era:kilometer ?kilometer .
+                  ?operationalPoint wgs:location ?location .
+                  ?location wgs:lat ?lat .
+                  ?location wgs:long ?lon .
+                  ?operationalPoint era:opType ?opType .
+                  ?operationalPoint era:inCountry ?country .
+                  {Country.toCountryCondition "?operationalPoint" countries}
+                }} LIMIT {limit} OFFSET {offset}
+            """
+
+        let loadData (countries: string[]) (limit: int) (offset: int) : Async<QueryResults> =
+            async {
+                let! data =
+                    Request.GetAsync
+                        endpoint
+                        (operationalPointQuery countries limit offset)
+                        Request.applicationSparqlResults
+
+                return JsonSerializer.Deserialize data
+            }
+
+        let private toRailwayLocation (line: Rdf) (km: Rdf) : RailwayLocation =
+            { NationalIdentNum = Properties.toLiteral line
+              Kilometer = Properties.toFloat km }
+
+        let private concatName (op: OperationalPoint) (s: string) =
+            if op.Type = "rinf/90" && not (op.Name.Contains s) then
+                op.Name + " - " + s
+            else
+                op.Name
+
+        let private folder (ops: Dictionary<string, OperationalPoint>) (b: Map<string, Rdf>) =
+            let uopid = Properties.toLiteral b.["uopid"]
+            let railwayLocation = toRailwayLocation b.["lineNationalLabel"] b.["kilometer"]
+
+            Utils.change (
+                ops,
+                uopid,
+                fun op ->
+                    match op with
+                    | Some op ->
+                        Some
+                            { op with
+                                Name = concatName op (Properties.toLiteral b.["opName"])
+                                RailwayLocations = Utils.appendElem railwayLocation op.RailwayLocations }
+                    | None ->
+                        Some
+                            { Name = Properties.toLiteral b.["opName"]
+                              Type = Properties.toOpType b.["opType"]
+                              Country = Properties.toCountryType b.["country"]
+                              UOPID = uopid
+                              Latitude = Properties.toFloat b.["lat"]
+                              Longitude = Properties.toFloat b.["lon"]
+                              RailwayLocations = [| railwayLocation |] }
+            )
+
+        let fromQueryResults (sparql: QueryResults) : OperationalPoint[] =
+            sparql.results.bindings
+            |> Array.fold folder (Dictionary sparql.results.bindings.Length)
+            |> _.Values
+            |> Seq.toArray
+
+    /// see <a href="https://data-interop.era.europa.eu/era-vocabulary/#http://data.europa.eu/949/Track">Track</a>
+    module Track =
+        let private trackQuery (countries: string[]) (limit: int) (offset: int) =
+            $"""
+                PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+                PREFIX era: <http://data.europa.eu/949/>
+                PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
+
+                SELECT distinct ?track ?label ?lineCategory ?contactLineSystemTypeLabel ?maximumPermittedSpeed
+                WHERE {{
+                  ?sectionOfLine a era:SectionOfLine .
+                  ?sectionOfLine era:track ?track .
+                  
+                  OPTIONAL {{ ?track rdfs:label ?label . }}
+                  OPTIONAL {{ ?track era:lineCategory ?lineCategory . }}
+                  OPTIONAL {{ ?track era:contactLineSystem ?contactLineSystem . 
+                              ?contactLineSystem era:contactLineSystemType ?contactLineSystemType .
+    						  ?contactLineSystemType skos:prefLabel ?contactLineSystemTypeLabel . }}
+                  OPTIONAL {{ ?track era:maximumPermittedSpeed ?maximumPermittedSpeed . }}
+
+                  {Country.toCountryCondition "?sectionOfLine" countries}
+                }} LIMIT {limit} OFFSET {offset}
+            """
+
+        let loadData (countries: string[]) (limit: int) (offset: int) : Async<QueryResults> =
+            async {
+                let! data =
+                    Request.GetAsync endpoint (trackQuery countries limit offset) Request.applicationSparqlResults
+
+                return JsonSerializer.Deserialize data
+            }
+
+        let private tryGetLineCategory (r: Map<string, Rdf>) : int option =
+            match r.TryGetValue "lineCategory" with
+            | true, b -> Some(Properties.toLineCategory b)
+            | _ -> None
+
+        let private toTrackEntry (b: Map<string, Rdf>) : Track =
+            { id = Properties.toTrackLabel b["track"]
+              label = Properties.toLiteral b["label"]
               maximumPermittedSpeed =
                 match b.TryGetValue "maximumPermittedSpeed" with
-                | true, rdf ->
-                    match System.Int32.TryParse rdf.value with
-                    | true, value -> Some value
-                    | _ -> Some 100
+                | true, rdf -> Some(Properties.toInt rdf)
                 | false, _ -> Some 100
               contactLineSystem =
-                match b.TryGetValue "contactLineSystem" with
-                | true, rdf -> Some(stripContactLineSystem rdf.value)
-                | false, _ -> None }
-        | None ->
-            fprintfn stderr "track not found %s" id
+                match b.TryGetValue "contactLineSystemTypeLabel" with
+                | true, rdf -> Some(Properties.toLiteral rdf)
+                | false, _ -> None
+              lineCategories =
+                match tryGetLineCategory b with
+                | Some lineCategory -> [| lineCategory |]
+                | None -> [||] }
 
-            { id = System.Web.HttpUtility.UrlDecode(id.Substring(prefixTrack.Length))
-              label = "directional track"
-              maximumPermittedSpeed = Some 100
-              contactLineSystem = None }
+        let private folder (acc: Dictionary<string, Track>) (b: Map<string, Rdf>) =
+            Utils.change (
+                acc,
+                Properties.toTrackLabel b.["track"],
+                fun track ->
+                    match track with
+                    | Some track ->
+                        { track with
+                            lineCategories = Utils.optAppendElem (tryGetLineCategory b) track.lineCategories }
+                    | None -> toTrackEntry b
+                    |> Some
+            )
 
-    let toTracks (tracks: QueryResults) : Track[] =
-        tracks.results.bindings |> Array.map (fun b -> toTrack b["track"].value tracks)
+        let fromQueryResults (tracks: QueryResults) : Dictionary<string, Track> =
+            tracks.results.bindings
+            |> Array.fold folder (Dictionary tracks.results.bindings.Length)
 
-    let toTunnels (sparql: QueryResults) (sols: SectionOfLine array) : Tunnel[] =
-        sparql.results.bindings
-        |> Array.fold
-            (fun (ops: Map<string, Tunnel>) b ->
-                let toTrackLabel (netElement: string) =
-                    System.Web.HttpUtility.UrlDecode(netElement.Substring(prefixTrack.Length))
+    /// see <a href="https://data-interop.era.europa.eu/era-vocabulary/#http://data.europa.eu/949/SectionOfLine">SectionOfLine</a>
+    module SectionOfLine =
+        let private sectionOfLineQuery (countries: string[]) (limit: int) (offset: int) =
+            $"""
+                PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+                PREFIX era: <http://data.europa.eu/949/>
 
-                let findLine (track: string) =
-                    match
-                        sols
-                        |> Array.tryFind (fun sol ->
-                            match sol.Tracks |> Array.tryFind (fun t -> t.id = track) with
-                            | Some track -> true
-                            | None -> false)
-                    with
-                    | Some sol -> sol.LineIdentification
-                    | None -> ""
+                SELECT distinct ?sectionOfLine ?length ?solNature ?lineNationalLabel ?imCode ?startOp ?endOp ?track ?country
+                WHERE {{
+                  ?sectionOfLine a era:SectionOfLine .
+                  ?sectionOfLine era:lineNationalId ?lineNationalId .
+                  ?lineNationalId rdfs:label ?lineNationalLabel .
+                  ?sectionOfLine era:length ?length .
+                  ?sectionOfLine era:solNature ?solNature .
+                  ?sectionOfLine era:imCode ?imCode .
+                  ?sectionOfLine era:opStart ?startOp .
+                  ?sectionOfLine era:opEnd ?endOp .
+                  ?sectionOfLine era:track ?track .
+                  ?sectionOfLine era:inCountry ?country .
+                  {Country.toCountryCondition "?sectionOfLine" countries}
+                }} LIMIT {limit} OFFSET {offset}
+            """
 
-                ops.Change(
-                    b.["tunnelIdentification"].value,
-                    fun op ->
-                        match op with
-                        | Some op ->
-                            let candidate = toTrackLabel b.["track"].value
+        let loadData (countries: string[]) (limit: int) (offset: int) : Async<QueryResults> =
+            async {
+                let! data =
+                    Request.GetAsync
+                        endpoint
+                        (sectionOfLineQuery countries limit offset)
+                        Request.applicationSparqlResults
 
-                            if op.ContainingTracks |> Array.contains candidate then
-                                Some op
-                            else
-                                Some
-                                    { op with
-                                        ContainingTracks = op.ContainingTracks |> Array.append [| candidate |] }
-                        | None ->
-                            let startlon, startlat = toLocation b.["startlocation"]
-                            let endlon, endlat = toLocation b.["endlocation"]
-                            let trackLabel = toTrackLabel b.["track"].value
+                return JsonSerializer.Deserialize data
+            }
 
-                            Some
-                                { Name = b.["tunnelIdentification"].value
-                                  Country = toCountryType b.["country"]
-                                  LineIdentification = findLine trackLabel
-                                  Length = float b.["length"].value
-                                  StartLatitude = startlat
-                                  StartLongitude = startlon
-                                  EndLatitude = endlat
-                                  EndLongitude = endlon
-                                  ContainingTracks = [| trackLabel |] }
-                ))
-            Map.empty
-        |> Map.values
-        |> Seq.toArray
+        /// see <a href="https://data-interop.era.europa.eu/era-vocabulary/rinf-appGuide/#lineCategory">Category of line</>
+        let private isPassengerLine (lineCategories: int array) =
+            lineCategories.Length = 0 || lineCategories |> Array.exists (fun c -> c <= 60)
 
-    let private hasPassendgerLineCategory (lineIdentification: string) (lines: RailwayLine[]) =
-        match lines |> Array.tryFind (fun l -> l.LineIdentification = lineIdentification) with
-        | Some line ->
-            line.LineCategories.Length = 0
-            || line.LineCategories |> Array.exists (fun cat -> cat.StartsWith "P")
-        | None ->
-            fprintfn stderr $"line {lineIdentification} not found"
-            false
+        let private folder (getTrack: Rdf -> Track) (sols: Dictionary<string, SectionOfLine>) (b: Map<string, Rdf>) =
+            let id = Properties.toSectionsOfLineId b.["sectionOfLine"]
+            let track = getTrack b.["track"]
 
-    let private getValue (sparql: QueryResults) (prop: string) =
-        sparql.results.bindings
-        |> Array.map (fun b ->
-            match b.TryGetValue "p", b.TryGetValue "o" with
-            | (true, p), (true, o) when p.value = prop -> Some o.value
-            | _ -> None)
-        |> Array.choose id
-        |> Array.tryHead
+            Utils.change (
+                sols,
+                id,
+                fun sol ->
+                    match sol with
+                    | Some sol ->
+                        { sol with
+                            Tracks = Utils.appendElem track sol.Tracks }
+                        |> Some
+                    | None ->
+                        if isPassengerLine track.lineCategories then
+                            { Name = id
+                              Country = Properties.toCountryType b.["country"]
+                              Length = Properties.toFloat b.["length"]
+                              LineIdentification = Properties.toLiteral b.["lineNationalLabel"]
+                              IMCode = Properties.toLiteral b.["imCode"]
+                              StartOP = Properties.toUOPID b.["startOp"]
+                              EndOP = Properties.toUOPID b.["endOp"]
+                              Tracks = [| track |] }
+                            |> Some
+                        else
+                            None
+            )
 
-    let private toIntValue (v: string option) =
-        match v with
-        | Some v ->
-            match System.Int32.TryParse v with
-            | true, value -> Some value
-            | _ -> None
-        | None -> None
+        let fromQueryResults (sparql: QueryResults) (tracks: QueryResults) : SectionOfLine[] =
+            let dictTracks = Track.fromQueryResults tracks
 
-    let reloadTrack (track: Track) : Async<Track> =
-        async {
-            let! res = loadTrackIdData track.id
+            let getTrack (r: Rdf) =
+                match dictTracks.TryGetValue(Properties.toTrackLabel r) with
+                | true, track -> track
+                | _ -> raise (System.Exception $"getTrack track not found {r}")
 
-            let queryResults: QueryResults = JsonSerializer.Deserialize res
+            sparql.results.bindings
+            |> Array.fold (folder getTrack) (Dictionary sparql.results.bindings.Length)
+            |> _.Values
+            |> Seq.toArray
 
-            let maximumPermittedSpeed =
-                getValue queryResults propMaximumPermittedSpeed |> toIntValue
+    /// see <a href="https://data-interop.era.europa.eu/era-vocabulary/#http://data.europa.eu/949/Tunnel">Tunnel</a>
+    module Tunnel =
+        let private tunnelQuery (countries: string[]) =
+            $"""
+                PREFIX era: <http://data.europa.eu/949/>
+                PREFIX wgs: <http://www.w3.org/2003/01/geo/wgs84_pos#> 
 
-            let contactLineSystem =
-                getValue queryResults propContactLineSystem
-                |> Option.map (fun s -> (System.Web.HttpUtility.UrlDecode(s)).Substring(prefixContactLineSystem.Length))
+                SELECT distinct ?tunnel ?tunnelIdentification ?length ?startLat ?startLon ?endLat ?endLon ?track ?country
+                WHERE {{
+                  ?tunnel a era:Tunnel.
 
-            let newTrack =
-                { track with
-                    maximumPermittedSpeed =
-                        match maximumPermittedSpeed with
-                        | Some _ -> maximumPermittedSpeed
-                        | None -> track.maximumPermittedSpeed
-                    contactLineSystem =
-                        match maximumPermittedSpeed with
-                        | Some _ -> contactLineSystem
-                        | None -> track.contactLineSystem }
+                  ?tunnel era:tunnelIdentification ?tunnelIdentification .
+                  ?tunnel era:length ?length .
+                  ?tunnel era:startLocation ?startlocation .
+  				  ?startlocation wgs:lat ?startLat .
+  				  ?startlocation wgs:long ?startLon .
+                  ?tunnel era:endLocation ?endlocation .
+  				  ?endlocation wgs:lat ?endLat .
+  				  ?endlocation wgs:long ?endLon .
+                  ?track era:passesThroughTunnel ?tunnel.
+                  ?tunnel era:inCountry ?country .
+                  {Country.toCountryCondition "?tunnel" countries}
+                }}
+            """
 
-            return newTrack
-        }
+        let loadData (countries: string[]) : Async<QueryResults> =
+            async {
+                let! data = Request.GetAsync endpoint (tunnelQuery countries) Request.applicationSparqlResults
+                return JsonSerializer.Deserialize data
+            }
 
-    let private reloadTracksOfSectionOfLine (sol: SectionOfLine) : Async<Track[]> =
-        let operations = sol.Tracks |> Array.map (fun track -> reloadTrack track)
-
-        async {
-            let tracks = operations |> Async.Sequential |> Async.RunSynchronously
-
-            return tracks
-        }
-
-    let private reloadTracksOfSectionOfLines (sols: SectionOfLine[]) : Async<Map<string, Track>> =
-        let operations = sols |> Array.map (fun sol -> reloadTracksOfSectionOfLine sol)
-
-        async {
-            let sols =
-                operations
-                |> Async.Sequential
-                |> Async.RunSynchronously
-                |> Array.concat
-                |> Array.fold (fun (map: Map<string, Track>) track -> map.Add(track.id, track)) Map.empty
-
-            return sols
-        }
-
-    let remapTracksOfLines (sols: SectionOfLine[]) : Async<SectionOfLine[]> =
-        let solsOfLine2Load =
+        let private findLine (track: string) (sols: SectionOfLine array) : string option =
             sols
-            |> Array.filter (fun sol ->
-                linesWithError
-                |> Array.exists (fun (line, country) -> sol.LineIdentification = line && sol.Country = country))
+            |> Array.tryFind (fun sol -> sol.Tracks |> Array.exists (fun t -> t.id = track))
+            |> Option.map _.LineIdentification
 
-        solsOfLine2Load
-        |> Array.groupBy (fun sol -> sol.LineIdentification)
-        |> Array.iter (fun (k, _) -> fprintfn stderr $"remapTracksOfLine {k}")
+        let private folder (sols: SectionOfLine array) (tunnels: Dictionary<string, Tunnel>) (b: Map<string, Rdf>) =
+            let id = Properties.toLiteral b.["tunnelIdentification"]
+            let trackLabel = Properties.toTrackLabel b.["track"]
 
-        async {
-            let! tracks = reloadTracksOfSectionOfLines solsOfLine2Load
+            Utils.change (
+                tunnels,
+                id,
+                fun op ->
+                    match op with
+                    | Some op ->
+                        Some
+                            { op with
+                                ContainingTracks = Utils.appendElem trackLabel op.ContainingTracks }
+                    | None ->
+                        match findLine trackLabel sols with
+                        | Some lineIdentification ->
+                            Some
+                                { Name = id
+                                  Country = Properties.toCountryType b.["country"]
+                                  LineIdentification = lineIdentification
+                                  Length = Properties.toFloat b.["length"]
+                                  StartLatitude = Properties.toFloat b.["startLat"]
+                                  StartLongitude = Properties.toFloat b.["startLon"]
+                                  EndLatitude = Properties.toFloat b.["endLat"]
+                                  EndLongitude = Properties.toFloat b.["endLon"]
+                                  ContainingTracks = [| trackLabel |] }
+                        | None -> None // line is no passengerLine
+            )
 
-            let changeTrack (track: Track) : Track =
-                if tracks.ContainsKey track.id then
-                    tracks[track.id]
-                else
-                    track
-
-            return
-                sols
-                |> Array.map (fun sol ->
-                    { sol with
-                        Tracks = sol.Tracks |> Array.map changeTrack })
-        }
-
-    let loadTracksOfLines (lineNames: string[]) (country: string) : Async<Microdata[]> =
-        let operations =
-            lineNames |> Array.map (fun lineName -> loadTracksOfLine lineName country)
-
-        async {
-            let data =
-                operations
-                |> Async.Sequential
-                |> Async.RunSynchronously
-                |> Array.map (fun res ->
-                    let data: Microdata = JsonSerializer.Deserialize res
-                    data)
-
-            return data
-        }
-
-    let toSectionsOfLine (sparql: QueryResults) (lines: RailwayLine[]) (tracks: QueryResults) : SectionOfLine[] =
-        sparql.results.bindings
-        |> Array.fold
-            (fun (sols: Map<string, SectionOfLine>) b ->
-                let lineNationalId = toNationalLines b.["lineNationalId"]
-                let sectionsOfLineId = toSectionsOfLineId b.["sectionOfLine"]
-
-                if hasPassendgerLineCategory lineNationalId lines then
-                    sols.Change(
-                        sectionsOfLineId,
-                        fun sol ->
-                            match sol with
-                            | Some op ->
-                                let candidate = toTrack b.["track"].value tracks
-
-                                if op.Tracks |> Array.contains candidate then
-                                    Some op
-                                else
-                                    Some
-                                        { op with
-                                            Tracks = op.Tracks |> Array.append [| candidate |] }
-                            | None ->
-                                Some
-                                    { Name = sectionsOfLineId
-                                      Country = toCountryType b.["country"]
-                                      Length = toFloat b.["length"]
-                                      LineIdentification = toNationalLines b.["lineNationalId"]
-                                      IMCode = b.["imCode"].value
-                                      StartOP = toUOPID b.["startOp"]
-                                      EndOP = toUOPID b.["endOp"]
-                                      Tracks = [| toTrack b.["track"].value tracks |] }
-                    )
-                else
-                    sols)
-            Map.empty
-        |> Map.values
-        |> Seq.toArray
+        let fromQueryResults (sparql: QueryResults) (sols: SectionOfLine array) : Tunnel[] =
+            sparql.results.bindings
+            |> Array.fold (folder sols) (Dictionary sparql.results.bindings.Length)
+            |> _.Values
+            |> Seq.toArray
