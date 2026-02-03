@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet"
+        integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
+</head>
+<title>RInfGraph</title>
+</head>
+
+<body>
+    <footer class="footer">
+        <div class="container" style="width:80%;">
+            <h1>RInfGraph</h1>
+            <div class="row">&nbsp;</div>
+            <div class="row">
+                <div class="col col-sm-1 me-1">Commands:</div>
+                <div class="col">
+                    <div class="form-check form-check-inline">
+                        <input type="radio" class="form-check-input" name="btnradioCommands" id="idLocations"
+                            autocomplete="off" checked>
+                        <label class="form-check-label" for="idLocations">Locations</label>
+                    </div>
+                    <div class="form-check form-check-inline">
+                        <input type="radio" class="form-check-input" name="btnradioCommands" id="idPaths"
+                            autocomplete="off">
+                        <label class="form-check-label mx-2" for="idPaths">Paths</label>
+                    </div>
+                    <div class="form-check form-check-inline">
+                        <input type="radio" class="form-check-input" name="btnradioCommands" id="idLine"
+                            autocomplete="off">
+                        <label class="form-check-label mx-2" for="idLine">Line</label>
+                    </div>
+                </div>
+            </div>
+            <div class="row">&nbsp;</div>
+            <div class="row">
+                <div id='locations-box'>
+                    <div class=" row mb-3">
+                        <label for="inputLocation" class="col-sm-1 col-form-label text-end">Name</label>
+                        <div class="col-sm-3">
+                            <input type="text" class="form-control" id="inputLocation">
+                        </div>
+                        <label for="inputUPID" class="col-sm-1 col-form-label text-end">UPID</label>
+                        <div class="col-sm-2">
+                            <input type="text" class="form-control" id="inputUPID">
+                        </div>
+                        <button type="submit" class="btn btn-primary col-sm-2" id="btnLookupLocation">lookup
+                            location</button>
+                    </div>
+
+                    <br />
+
+                    <table class="table caption-top">
+                        <caption>
+                            <p class="fw-bold">Operational Points</p>
+                        </caption>
+                        <thead>
+                            <tr>
+                                <th scope="col">Name</th>
+                                <th scope="col">UOPID</th>
+                                <th scope="col">Location</th>
+                            </tr>
+                        </thead>
+                        <tbody id="result-locations" />
+
+                    </table>
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            Url <span id="result-url-of-locations"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <div id='path-box' style="display:none">
+                    <div class="row mb-4">
+                        <label for="inputFrom" class="col-sm-1 col-form-label text-end">From</label>
+                        <div class="col-md-2">
+                            <input type="text" class="form-control" id="inputFrom" value="DE000HH">
+                        </div>
+                        <label for="inputOver" class="col-sm-1 col-form-label text-end">Over</label>
+                        <div class="col-sm-2">
+                            <input type="text" class="form-control" id="inputOver" value="">
+                        </div>
+                        <label for="inputTo" class="col-sm-1 col-form-label text-end">To</label>
+                        <div class="col-sm-2">
+                            <input type="text" class="form-control" id="inputTo" value="DE0BSPD">
+                        </div>
+                        <div class="col-sm-1" style="margin-top: 6px;">
+                            <input class="form-check-input" type="checkbox" value="" id="flexCheckExact">
+                            <label class="form-check-label" for="flexCheckDefault">
+                                exact
+                            </label>
+                        </div>
+                        <button type="submit" class="btn btn-primary col-sm-2" id="btnLookupPaths">lookup
+                            path</button>
+                    </div>
+
+                    <br />
+
+                    <table class="table caption-top">
+                        <caption>
+                            <p class="fw-bold">Sections of Line</p>
+                        </caption>
+
+                        <thead>
+                            <tr>
+                                <th scope="col">Start</th>
+                                <th scope="col">End</th>
+                                <th scope="col">Line</th>
+                                <th scope="col" class="text-end">MaxSpeed</th>
+                                <th scope="col" class="text-end">StartKm</th>
+                                <th scope="col" class="text-end">EndKm</th>
+                                <th scope="col" class="text-end">Length</th>
+                                <th scope="col" class="text-end">Cost</th>
+                            </tr>
+                        </thead>
+                        <tbody id="result-path" />
+
+                    </table>
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            Url <span id="result-url-of-path"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <div id='line-box' style="display:none">
+                    <div class="row mb-4">
+                        <label for="inputFrom" class="col-sm-1 col-form-label text-end">Line</label>
+                        <div class="col-sm-2">
+                            <input type="text" class="form-control" id="inputLine" value="1733">
+                        </div>
+                        <label for="inputCountry" class="col-sm-1 col-form-label text-end">Country</label>
+                        <div class="col-sm-2" id="idCountryOptions">
+                        </div>
+                        <button type="submit" class="btn btn-primary col-sm-2" id="btnLookupLine">lookup line</button>
+                    </div>
+                    <br />
+
+                    <table class="table caption-top">
+                        <caption>
+                            <p class="fw-bold">Sections of Line</p>
+                        </caption>
+                        <thead>
+                            <tr>
+                                <th scope="col">Start Op</th>
+                                <th scope="col">End Op</th>
+                                <th scope="col" class="text-end">MaxSpeed</th>
+                                <th scope="col" class="text-end">StartKm</th>
+                                <th scope="col" class="text-end">EndKm</th>
+                                <th scope="col" class="text-end">Length</th>
+                                <th scope="col" class="text-end">Cost</th>
+                            </tr>
+                        </thead>
+                        <tbody id="result-line" />
+                    </table>
+
+                    <table class="table caption-top">
+                        <caption>
+                            <p class="fw-bold">Tunnels of Line</p>
+                        </caption>
+
+                        <thead>
+                            <tr>
+                                <th scope="col">Name</th>
+                                <th scope="col">OP/Start</th>
+                                <th scope="col">OP/End</th>
+                                <th scope="col">Position</th>
+                                <th scope="col" class="text-end">Length</th>
+                            </tr>
+                        </thead>
+                        <tbody id="result-tunnels" />
+                    </table>
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            Url <span id="result-url-of-line"></span>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+            <hr>
+            <div class="row">
+                <div class="col-md-12">
+                    Data loaded from the SPARQL <span id="idMetadata.Endpoint"></span> of the European Union Agency for
+                    Railways at <span id="idMetadata.Date"></span> for countries <span
+                        id="idMetadata.Countries"></span>.
+                </div>
+            </div>
+        </div>
+    </footer>
+    <script type="module">
+        import { lookupLocations, lookupPath, lookupLine, displayElement, displayMetadata, displayCountryOptions } from './js/site.js';
+
+        window.addEventListener('load', function () {
+            displayMetadata('idMetadata.Endpoint', 'idMetadata.Date', 'idMetadata.Countries');
+            displayCountryOptions('idCountryOptions', 'inputCountry');
+        });
+
+        document.getElementById('idLocations').onclick = function () {
+            displayElement('locations-box');
+        }
+        document.getElementById('idPaths').onclick = function () {
+            displayElement('path-box');
+        }
+        document.getElementById('idLine').onclick = function () {
+            displayElement('line-box');
+        }
+        document.getElementById('btnLookupLocation').onclick = function () {
+            lookupLocations('inputLocation', 'inputUPID');
+        }
+        document.getElementById('btnLookupPaths').onclick = function () {
+            lookupPath('inputFrom', 'inputOver', 'inputTo', 'flexCheckExact');
+        }
+        document.getElementById('btnLookupLine').onclick = function () {
+            lookupLine('inputLine', 'inputCountry');
+        }
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"
+        integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI"
+        crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/popper.js@1.12.9/dist/umd/popper.min.js" />
+</body>
+
+</html>

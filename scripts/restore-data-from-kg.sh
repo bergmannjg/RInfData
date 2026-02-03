@@ -9,8 +9,7 @@ fi
 RINF_DATA_DIR="./erakg-data"
 
 if [ ! -d ${RINF_DATA_DIR} ]; then
-    echo "directory ${RINF_DATA_DIR} not found"
-    exit 1
+    mkdir erakg-data
 fi
 
 if [ $# -eq 0 ]

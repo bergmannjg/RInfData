@@ -18,8 +18,7 @@ if [ ! -d "./rinf-graph" ]; then
 fi
 
 if [ ! -d "./rinf-graph/data" ]; then
-    echo "rinf-graph/data not found"
-    exit 1
+    mkdir rinf-graph/data
 fi
 
 if [ ! -f "./rinf-graph/rinfgraph.bundle.d.ts" ]; then
