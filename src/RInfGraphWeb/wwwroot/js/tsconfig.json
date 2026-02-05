@@ -1,0 +1,17 @@
+{
+    "compilerOptions": {
+        "skipLibCheck": true,
+        "allowSyntheticDefaultImports": true,
+        "isolatedModules": false,
+        "lib": [
+            "ES2020",
+            "dom"
+        ],
+        "moduleResolution": "node",
+        "strict": true,
+        "target": "ES2020",
+        "module": "esnext",
+        "resolveJsonModule": true,
+        "noImplicitAny": true
+    }
+}

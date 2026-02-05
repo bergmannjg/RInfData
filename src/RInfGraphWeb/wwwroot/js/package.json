@@ -1,0 +1,12 @@
+{
+    "name": "rinfgraph.web",
+    "version": "1.0.0",
+    "description": "",
+    "type": "module",
+    "main": "site.js",
+    "devDependencies": {
+        "typescript": "^5.9.3"
+    },
+    "author": "",
+    "license": "ISC"
+}

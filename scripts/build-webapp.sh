@@ -8,33 +8,48 @@ if [ ! -d "./scripts" ]; then
     exit 1
 fi
 
-RINF_DATA_DIR="./erakg-data"
+if [[ $1 != "--countries" ]] && [[ $1 != "--cache" ]]
+  then
+    echo "usage $0 [--countries <countries>] [--cache <cachedir>] "
+    exit 1
+fi
 
-if [ ! -d ${RINF_DATA_DIR} ]; then
-    echo "directory ${RINF_DATA_DIR} not found, please restore data with './scripts/restore-data-from-kg.sh'"
+if [[ $1 = "--countries" ]] && [[ $# -ne 2 ]]; then
+    echo "country arg expected"
+    exit 1
+fi
+
+if [[ $1 = "--cache" ]] && [[ ! -d $2 ]]; then
+    echo "directory '$2' not found"
     exit 1
 fi
 
 cd ./src/RInfGraphWeb
 
 pushd ./lib
-rm -rf node_modules/rinf-graph/ package-lock.json
+rm -rf node_modules/rinf-graph/ package-lock.json dist
 npm install
-echo "copy files from ${RINF_DATA_DIR}"
-DATA_DIR=../../../${RINF_DATA_DIR}
-cp ${DATA_DIR}/Graph.json node_modules/rinf-graph/data/ 
-cp ${DATA_DIR}/LineInfos.json node_modules/rinf-graph/data/ 
-cp ${DATA_DIR}/OpInfos.json node_modules/rinf-graph/data/
-cp ${DATA_DIR}/TunnelInfos.json node_modules/rinf-graph/data/ 
-cp ${DATA_DIR}/Metadata.json node_modules/rinf-graph/data/ 
-tsc
+
+if [ $1 = "--countries" ] 
+  then
+    ./node_modules/rinf-graph/bin/EraKGLoader $2
+fi
+
+if [ $1 = "--cache" ] 
+  then
+    echo "copy files from $2"
+    DATA_DIR=../../../$2
+    cp ${DATA_DIR}/Graph.json node_modules/rinf-graph/data/ 
+    cp ${DATA_DIR}/LineInfos.json node_modules/rinf-graph/data/ 
+    cp ${DATA_DIR}/OpInfos.json node_modules/rinf-graph/data/
+    cp ${DATA_DIR}/TunnelInfos.json node_modules/rinf-graph/data/ 
+    cp ${DATA_DIR}/Metadata.json node_modules/rinf-graph/data/ 
+fi
+
+npx tsc
 npx webpack --config webpack.config.cjs
 cp index.d.ts dist/bundle.d.ts
 popd
-
-if [ ! -d "./wwwroot/js" ]; then
-    mkdir ./wwwroot/js
-fi
 
 if [ ! -d "./wwwroot/js/lib" ]; then
     mkdir ./wwwroot/js/lib
@@ -43,5 +58,6 @@ fi
 cp lib/dist/bundle.* wwwroot/js/lib/
 
 pushd ./wwwroot/js
-tsc --target ES2015 site.ts
+npm install
+npx tsc
 popd

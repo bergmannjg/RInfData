@@ -1,10 +1,9 @@
-# PWA Example
+# RInfGraph web app
 
 * a progressive web app using the RInfGraph package
 
 ## Build and run
 
-* *scripts/restore-data-from-kg.sh &lt;countries&gt;*
-* *scripts/build-package.sh*
-* *scripts/build-webapp.sh*
-* *python3.10 -m http.server* in directrory ./wwwroot
+* install Node.js, .NET
+* *scripts/build-webapp.sh --countries &lt;countries&gt;*
+* *npx http-server src/RInfGraphWeb/wwwroot/*
