@@ -6,197 +6,243 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet"
         integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
-</head>
-<title>RInfGraph</title>
+    <title>RInfGraph</title>
 </head>
 
 <body>
-    <footer class="footer">
-        <div class="container" style="width:80%;">
-            <h1>RInfGraph</h1>
-            <div class="row">&nbsp;</div>
-            <div class="row">
-                <div class="col col-sm-1 me-1">Commands:</div>
-                <div class="col">
-                    <div class="form-check form-check-inline">
-                        <input type="radio" class="form-check-input" name="btnradioCommands" id="idLocations"
-                            autocomplete="off" checked>
-                        <label class="form-check-label" for="idLocations">Locations</label>
-                    </div>
-                    <div class="form-check form-check-inline">
-                        <input type="radio" class="form-check-input" name="btnradioCommands" id="idPaths"
-                            autocomplete="off">
-                        <label class="form-check-label mx-2" for="idPaths">Paths</label>
-                    </div>
-                    <div class="form-check form-check-inline">
-                        <input type="radio" class="form-check-input" name="btnradioCommands" id="idLine"
-                            autocomplete="off">
-                        <label class="form-check-label mx-2" for="idLine">Line</label>
-                    </div>
+    <div class="container" style="width:80%;">
+        <h1>RInfGraph</h1>
+        <div class="row">&nbsp;</div>
+        <div class="row">
+            <div class="col col-sm-1 me-1">Command:</div>
+            <div class="col">
+                <div class="form-check form-check-inline">
+                    <input type="radio" class="form-check-input" name="btnradioCommands" id="idLocations"
+                        autocomplete="off" checked>
+                    <label class="form-check-label" for="idLocations">Location</label>
                 </div>
-            </div>
-            <div class="row">&nbsp;</div>
-            <div class="row">
-                <div id='locations-box'>
-                    <div class=" row mb-3">
-                        <label for="inputLocation" class="col-sm-1 col-form-label text-end">Name</label>
-                        <div class="col-sm-3">
-                            <input type="text" class="form-control" id="inputLocation">
-                        </div>
-                        <label for="inputUPID" class="col-sm-1 col-form-label text-end">UPID</label>
-                        <div class="col-sm-2">
-                            <input type="text" class="form-control" id="inputUPID">
-                        </div>
-                        <button type="submit" class="btn btn-primary col-sm-2" id="btnLookupLocation">lookup
-                            location</button>
-                    </div>
-
-                    <br />
-
-                    <table class="table caption-top">
-                        <caption>
-                            <p class="fw-bold">Operational Points</p>
-                        </caption>
-                        <thead>
-                            <tr>
-                                <th scope="col">Name</th>
-                                <th scope="col">UOPID</th>
-                                <th scope="col">Location</th>
-                            </tr>
-                        </thead>
-                        <tbody id="result-locations" />
-
-                    </table>
-
-                    <div class="row">
-                        <div class="col-md-6">
-                            Url <span id="result-url-of-locations"></span>
-                        </div>
-                    </div>
+                <div class="form-check form-check-inline">
+                    <input type="radio" class="form-check-input" name="btnradioCommands" id="idPaths"
+                        autocomplete="off">
+                    <label class="form-check-label mx-2" for="idPaths">Path</label>
                 </div>
-
-                <div id='path-box' style="display:none">
-                    <div class="row mb-4">
-                        <label for="inputFrom" class="col-sm-1 col-form-label text-end">From</label>
-                        <div class="col-md-2">
-                            <input type="text" class="form-control" id="inputFrom" value="DE000HH">
-                        </div>
-                        <label for="inputOver" class="col-sm-1 col-form-label text-end">Over</label>
-                        <div class="col-sm-2">
-                            <input type="text" class="form-control" id="inputOver" value="">
-                        </div>
-                        <label for="inputTo" class="col-sm-1 col-form-label text-end">To</label>
-                        <div class="col-sm-2">
-                            <input type="text" class="form-control" id="inputTo" value="DE0BSPD">
-                        </div>
-                        <div class="col-sm-1" style="margin-top: 6px;">
-                            <input class="form-check-input" type="checkbox" value="" id="flexCheckExact">
-                            <label class="form-check-label" for="flexCheckDefault">
-                                exact
-                            </label>
-                        </div>
-                        <button type="submit" class="btn btn-primary col-sm-2" id="btnLookupPaths">lookup
-                            path</button>
-                    </div>
-
-                    <br />
-
-                    <table class="table caption-top">
-                        <caption>
-                            <p class="fw-bold">Sections of Line</p>
-                        </caption>
-
-                        <thead>
-                            <tr>
-                                <th scope="col">Start</th>
-                                <th scope="col">End</th>
-                                <th scope="col">Line</th>
-                                <th scope="col" class="text-end">MaxSpeed</th>
-                                <th scope="col" class="text-end">StartKm</th>
-                                <th scope="col" class="text-end">EndKm</th>
-                                <th scope="col" class="text-end">Length</th>
-                                <th scope="col" class="text-end">Cost</th>
-                            </tr>
-                        </thead>
-                        <tbody id="result-path" />
-
-                    </table>
-
-                    <div class="row">
-                        <div class="col-md-6">
-                            Url <span id="result-url-of-path"></span>
-                        </div>
-                    </div>
+                <div class="form-check form-check-inline">
+                    <input type="radio" class="form-check-input" name="btnradioCommands" id="idLine" autocomplete="off">
+                    <label class="form-check-label mx-2" for="idLine">Line</label>
                 </div>
-
-                <div id='line-box' style="display:none">
-                    <div class="row mb-4">
-                        <label for="inputFrom" class="col-sm-1 col-form-label text-end">Line</label>
-                        <div class="col-sm-2">
-                            <input type="text" class="form-control" id="inputLine" value="1733">
-                        </div>
-                        <label for="inputCountry" class="col-sm-1 col-form-label text-end">Country</label>
-                        <div class="col-sm-2" id="idCountryOptions">
-                        </div>
-                        <button type="submit" class="btn btn-primary col-sm-2" id="btnLookupLine">lookup line</button>
-                    </div>
-                    <br />
-
-                    <table class="table caption-top">
-                        <caption>
-                            <p class="fw-bold">Sections of Line</p>
-                        </caption>
-                        <thead>
-                            <tr>
-                                <th scope="col">Start Op</th>
-                                <th scope="col">End Op</th>
-                                <th scope="col" class="text-end">MaxSpeed</th>
-                                <th scope="col" class="text-end">StartKm</th>
-                                <th scope="col" class="text-end">EndKm</th>
-                                <th scope="col" class="text-end">Length</th>
-                                <th scope="col" class="text-end">Cost</th>
-                            </tr>
-                        </thead>
-                        <tbody id="result-line" />
-                    </table>
-
-                    <table class="table caption-top">
-                        <caption>
-                            <p class="fw-bold">Tunnels of Line</p>
-                        </caption>
-
-                        <thead>
-                            <tr>
-                                <th scope="col">Name</th>
-                                <th scope="col">OP/Start</th>
-                                <th scope="col">OP/End</th>
-                                <th scope="col">Position</th>
-                                <th scope="col" class="text-end">Length</th>
-                            </tr>
-                        </thead>
-                        <tbody id="result-tunnels" />
-                    </table>
-
-                    <div class="row">
-                        <div class="col-md-6">
-                            Url <span id="result-url-of-line"></span>
-                        </div>
-                    </div>
-                </div>
-
-            </div>
-            <hr>
-            <div class="row">
-                <div class="col-md-12">
-                    Data loaded from the SPARQL <span id="idMetadata.Endpoint"></span> of the European Union Agency for
-                    Railways at <span id="idMetadata.Date"></span> for countries <span
-                        id="idMetadata.Countries"></span>.
+                <div class="form-check form-check-inline">
+                    <input type="radio" class="form-check-input" name="btnradioCommands" id="idOsmComparison"
+                        autocomplete="off">
+                    <label class="form-check-label mx-2" for="idLine">Osm Comparison</label>
                 </div>
             </div>
         </div>
-    </footer>
+        <div class="row">&nbsp;</div>
+        <div class="row">
+            <div id='locations-box'>
+                <div class=" row mb-3">
+                    <label for="inputLocation" class="col-sm-1 col-form-label text-end">Name</label>
+                    <div class="col-sm-3">
+                        <input type="text" class="form-control" id="inputLocation">
+                    </div>
+                    <label for="inputUPID" class="col-sm-1 col-form-label text-end">UPID</label>
+                    <div class="col-sm-2">
+                        <input type="text" class="form-control" id="inputUPID">
+                    </div>
+                    <button type="submit" class="btn btn-primary col-sm-2" id="btnLookupLocation">lookup
+                        location</button>
+                </div>
+
+                <br />
+
+                <table class="table caption-top">
+                    <caption>
+                        <p class="fw-bold">Operational Points</p>
+                    </caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">Name</th>
+                            <th scope="col">Type</th>
+                            <th scope="col">UOPID</th>
+                            <th scope="col">OSM</th>
+                            <th scope="col">Location</th>
+                        </tr>
+                    </thead>
+                    <tbody id="result-locations"></tbody>
+
+                </table>
+
+                <div class="row">
+                    <div class="col-md-6">
+                        Url <span id="result-url-of-locations"></span>
+                    </div>
+                </div>
+            </div>
+
+            <div id='path-box' style="display:none">
+                <div class="row mb-4">
+                    <label for="inputFrom" class="col-sm-1 col-form-label text-end">From</label>
+                    <div class="col-md-2">
+                        <input type="text" class="form-control" id="inputFrom" value="DE000HH">
+                    </div>
+                    <label for="inputOver" class="col-sm-1 col-form-label text-end">Over</label>
+                    <div class="col-sm-2">
+                        <input type="text" class="form-control" id="inputOver" value="">
+                    </div>
+                    <label for="inputTo" class="col-sm-1 col-form-label text-end">To</label>
+                    <div class="col-sm-2">
+                        <input type="text" class="form-control" id="inputTo" value="DE0BSPD">
+                    </div>
+                    <div class="col-sm-1" style="margin-top: 6px;">
+                        <input class="form-check-input" type="checkbox" value="" id="flexCheckExact">
+                        <label class="form-check-label" for="flexCheckDefault">
+                            exact
+                        </label>
+                    </div>
+                    <button type="submit" class="btn btn-primary col-sm-2" id="btnLookupPaths">lookup
+                        path</button>
+                </div>
+
+                <br />
+
+                <table class="table caption-top">
+                    <caption>
+                        <p class="fw-bold">Sections of Line</p>
+                    </caption>
+
+                    <thead>
+                        <tr>
+                            <th scope="col">Start</th>
+                            <th scope="col">End</th>
+                            <th scope="col">Line</th>
+                            <th scope="col" class="text-end">MaxSpeed</th>
+                            <th scope="col" class="text-end">StartKm</th>
+                            <th scope="col" class="text-end">EndKm</th>
+                            <th scope="col" class="text-end">Length</th>
+                            <th scope="col" class="text-end">Cost</th>
+                        </tr>
+                    </thead>
+                    <tbody id="result-path"></tbody>
+
+                </table>
+
+                <div class="row">
+                    <div class="col-md-6">
+                        Url <span id="result-url-of-path"></span>
+                    </div>
+                </div>
+            </div>
+
+            <div id='line-box' style="display:none">
+                <div class="row mb-4">
+                    <label for="inputFrom" class="col-sm-1 col-form-label text-end">Line</label>
+                    <div class="col-sm-2">
+                        <input type="text" class="form-control" id="inputLine" value="1733">
+                    </div>
+                    <label for="inputCountry" class="col-sm-1 col-form-label text-end">Country</label>
+                    <div class="col-sm-2" id="idCountryOptions">
+                    </div>
+                    <button type="submit" class="btn btn-primary col-sm-2" id="btnLookupLine">lookup line</button>
+                </div>
+                <br />
+
+                <table class="table caption-top">
+                    <caption>
+                        <p class="fw-bold">Sections of Line</p>
+                    </caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">Start Op</th>
+                            <th scope="col">End Op</th>
+                            <th scope="col" class="text-end">MaxSpeed</th>
+                            <th scope="col" class="text-end">StartKm</th>
+                            <th scope="col" class="text-end">EndKm</th>
+                            <th scope="col" class="text-end">Length</th>
+                            <th scope="col" class="text-end">Cost</th>
+                        </tr>
+                    </thead>
+                    <tbody id="result-line"></tbody>
+                </table>
+
+                <table class="table caption-top">
+                    <caption>
+                        <p class="fw-bold">Tunnels of Line</p>
+                    </caption>
+
+                    <thead>
+                        <tr>
+                            <th scope="col">Name</th>
+                            <th scope="col">OP/Start</th>
+                            <th scope="col">OP/End</th>
+                            <th scope="col">Position</th>
+                            <th scope="col" class="text-end">Length</th>
+                        </tr>
+                    </thead>
+                    <tbody id="result-tunnels"></tbody>
+                </table>
+
+                <div class="row">
+                    <div class="col-md-6">
+                        Url <span id="result-url-of-line"></span>
+                    </div>
+                </div>
+            </div>
+
+            <div id='osm-comparison-box' style="display:none">
+                <div>OpenStreetMap elements which have a tag 'railway:ref' correspondsing to the point UOPID
+                    were searched for all operational points with type station or passenger stop.
+                </div>
+                <br />
+                <div class="col-md-4">
+                    <table class="table caption-top">
+                        <caption>
+                            <p class="fw-bold">Summary</p>
+                        </caption>
+                        <thead>
+                            <tr>
+                                <th scope="col">Operational Points</th>
+                                <th scope="col" class="text-end">Count</th>
+                            </tr>
+                        </thead>
+                        <tbody id="result-summary-osm-comparison"></tbody>
+                    </table>
+                </div>
+                <br />
+                <table class="table caption-top">
+                    <caption>
+                        <p class="fw-bold">Operational Points without matching OpenStreetMap element</p>
+                    </caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">Name</th>
+                            <th scope="col">Type</th>
+                            <th scope="col">UOPID</th>
+                            <th scope="col">Location</th>
+                        </tr>
+                    </thead>
+                    <tbody id="result-locations-osm-comparison"></tbody>
+
+                </table>
+
+            </div>
+
+        </div>
+        <hr>
+        <br />
+        <div class="row">
+            <div class="col-md-12">
+                ERA data loaded from the SPARQL <span id="idMetadata.Endpoint"></span> of the European Union Agency
+                for
+                Railways at <span id="idMetadata.Date"></span> for countries <span id="idMetadata.Countries"></span>.
+            </div>
+            <div class="col-md-12">
+                OSM data loaded from the SPARQL <a href="https://qlever.dev/osm-planet">Endpoint</a>
+                of <a href="https://ad-publications.informatik.uni-freiburg.de/CIKM_qlever_BB_2017.pdf">QLever</a>.
+            </div>
+        </div>
+    </div>
     <script type="module">
-        import { lookupLocations, lookupPath, lookupLine, displayElement, displayMetadata, displayCountryOptions } from './js/site.js';
+        import { lookupLocations, lookupPath, lookupLine, lookupOsmComparison, displayElement, displayMetadata, displayCountryOptions } from './js/site.js';
 
         window.addEventListener('load', function () {
             displayMetadata('idMetadata.Endpoint', 'idMetadata.Date', 'idMetadata.Countries');
@@ -211,6 +257,10 @@
         }
         document.getElementById('idLine').onclick = function () {
             displayElement('line-box');
+        }
+        document.getElementById('idOsmComparison').onclick = function () {
+            displayElement('osm-comparison-box');
+            lookupOsmComparison();
         }
         document.getElementById('btnLookupLocation').onclick = function () {
             lookupLocations('inputLocation', 'inputUPID');

@@ -46,6 +46,10 @@ if [ $1 = "--cache" ]
     cp ${DATA_DIR}/Metadata.json node_modules/rinf-graph/data/ 
 fi
 
+dotnet run --project ../../OSMComparison/OsmComparison.fsproj --Osm node_modules/rinf-graph/data/
+dotnet run --project ../../OSMComparison/OsmComparison.fsproj --Osm.Compare node_modules/rinf-graph/data/ ./
+dotnet run --project ../../EraKGLoader/EraKGLoader.fsproj --OpTypes > OpTypes.json
+
 npx tsc
 npx webpack --config webpack.config.cjs
 cp index.d.ts dist/bundle.d.ts

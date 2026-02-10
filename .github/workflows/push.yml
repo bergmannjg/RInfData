@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: install node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+      - name: restore data
+        run: ./scripts/restore-data-from-kg.sh DEU
+      - name: test
+        run: dotnet test src/RInfGraph.Tests/RInfGraph.Tests.fsproj
+      - name: build package
+        run: |
+          dotnet tool restore
+          ./scripts/build-package.sh
+
+

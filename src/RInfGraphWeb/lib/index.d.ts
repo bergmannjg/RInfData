@@ -48,6 +48,17 @@ export interface Metadata {
     Date: string
 }
 
+export interface Matching {
+    UOPID: string;
+    OsmUrl?: string;
+}
+
+export interface OpType {
+    Label: string;
+    Definition: string;
+    Value: number;
+}
+
 export function rinfFindPath(ids: string[], isCompactifyPath: boolean): GraphNode[];
 export function rinfFindPathOfLine(ine: string, country: string): GraphNode[];
 export function rinfFindTunnelsOfLine(line: string, country: string): TunnelInfo[];
@@ -55,3 +66,7 @@ export function rinfToCompactPath(path: GraphNode[]): GraphNode[];
 export function rinfGetOpInfos(name: string, uopid: string): OpInfo[];
 export function rinfGetBRouterUrls(arr: GraphNode[], compactifyPath: boolean): string[];
 export function rinfMetadata() : Metadata;
+export function rinfOsmMatchings(): Matching[];
+export function rinfOpTypes(): OpType[];
+
+

@@ -1,4 +1,4 @@
-﻿import { rinfFindPath, rinfFindPathOfLine, rinfFindTunnelsOfLine, rinfGetBRouterUrls, rinfToCompactPath, rinfGetOpInfos, rinfMetadata, Metadata, OpInfo, TunnelInfo } from "./lib/bundle.js";
+﻿import { rinfOsmMatchings, rinfOpTypes, rinfFindPath, rinfFindPathOfLine, rinfFindTunnelsOfLine, rinfGetBRouterUrls, rinfToCompactPath, rinfGetOpInfos, rinfMetadata, Metadata, OpInfo, TunnelInfo, OpType } from "./lib/bundle.js";
 
 interface PathItem {
     fromId: string;
@@ -15,6 +15,14 @@ interface PathResult {
     path: PathItem[];
     tunnels: TunnelInfo[];
     urls: string[];
+}
+
+const findOsmUrl = (op: OpInfo): string | undefined => {
+    return rinfOsmMatchings().find(m => m.UOPID == op.UOPID)?.OsmUrl;
+}
+
+const findOpType = (op: OpInfo): OpType | undefined => {
+    return rinfOpTypes().find(m => m.Value == op.RinfType);
 }
 
 const findPath = (ids: string[], isCompactifyPath: boolean): PathResult => {
@@ -115,6 +123,29 @@ function createOptions(options: string[], id: string): HTMLElement {
     return select;
 }
 
+function addToolTip(elem: HTMLElement, tooltip: string) {
+    var datatoggle = document.createAttribute("data-toggle");
+    datatoggle.value = "tooltip";
+    elem.setAttributeNode(datatoggle);
+    var dataplacement = document.createAttribute("data-placement");
+    dataplacement.value = "top";
+    elem.setAttributeNode(dataplacement);
+    var title = document.createAttribute("title");
+    title.value = tooltip;
+    elem.setAttributeNode(title);
+}
+
+function createSpan(text: string, tooltip?: string): HTMLElement {
+    var span = document.createElement("span");
+    span.textContent = text;
+
+    if (tooltip) {
+        addToolTip(span, tooltip);
+    }
+
+    return span;
+}
+
 function createUrl(url: string, text?: string, tooltip?: string): HTMLElement {
     var a = document.createElement("a");
     var href = document.createAttribute("href");
@@ -125,19 +156,22 @@ function createUrl(url: string, text?: string, tooltip?: string): HTMLElement {
     a.setAttributeNode(target);
 
     if (tooltip) {
-        var datatoggle = document.createAttribute("data-toggle");
-        datatoggle.value = "tooltip";
-        a.setAttributeNode(datatoggle);
-        var dataplacement = document.createAttribute("data-placement");
-        dataplacement.value = "top";
-        a.setAttributeNode(dataplacement);
-        var title = document.createAttribute("title");
-        title.value = tooltip;
-        a.setAttributeNode(title);
+        addToolTip(a, tooltip);
     }
 
     a.textContent = text ? text : "link";
     return a;
+}
+
+const createElemsInSpan = (items: HTMLElement[]) => {
+    var span = document.createElement("span");
+    items.forEach(item => {
+        const itemAttr = document.createAttribute("style");
+        itemAttr.value = "padding-right: 10px;";
+        item.setAttributeNode(itemAttr);
+        span.appendChild(item);
+    });
+    return span
 }
 
 function stringCompare(a: string, b: string) {
@@ -168,7 +202,7 @@ export function displayMetadata(idEndpoint: string, idDate: string, idCountries:
     }
 }
 
-function rinfGetBRouterUrlOfLocation(latitude: number, longitude: number, info: string) {
+function getBRouterUrlOfLocation(latitude: number, longitude: number, info: string) {
     return 'https://brouter.de/brouter-web/#map=13/' + latitude + '/' + longitude
         + '/osm-mapnik-german_style&pois=' + longitude + ',' + latitude + ',' + info;
 }
@@ -183,17 +217,29 @@ function getCenter(latitudes: number[], longitudes: number[]): number[] {
     return [latitude, longitude];
 }
 
-function rinfGetBRouterUrlOfLocations(latitude1: number, longitude1: number, latitude2: number, longitude2: number, info: string) {
+function getBRouterUrlOfLocations(latitude1: number, longitude1: number, latitude2: number, longitude2: number, info: string) {
     const latlon = getCenter([latitude1, latitude2], [longitude1, longitude2])
     const pois = longitude1 + ',' + latitude1 + ',' + info + ';' + longitude2 + ',' + latitude2 + ',' + info;
     return 'https://brouter.de/brouter-web/#map=13/' + latlon[0] + '/' + latlon[1]
         + '/osm-mapnik-german_style&pois=' + pois;
 }
 
-function rinfGetBRouterUrlOfOpInfos(arr: OpInfo[]) {
+function getOrmUrlOfLocation(latitude: number, longitude: number) {
+    return 'https://www.openrailwaymap.org/?lang=en&lat=' + latitude + '&lon=' + longitude + '&zoom=14&style=standard';
+}
+
+function getOverpassUrlOfLocation(op: OpInfo) {
+    return 'https://overpass-turbo.eu/?Q=node[railway~"stop|halt|station"](around:1000,' + op.Latitude + ',' + op.Longitude + ');out;';
+}
+
+function getOsmUrlOfLocation(op: OpInfo) {
+    return 'https://www.openstreetmap.org/#map=17/' + op.Latitude + '/' + op.Longitude;
+}
+
+function getBRouterUrlOfOpInfos(arr: OpInfo[]) {
     if (arr.length == 1) {
         let x = arr[0];
-        return rinfGetBRouterUrlOfLocation(x.Latitude, x.Longitude, x.UOPID);
+        return getBRouterUrlOfLocation(x.Latitude, x.Longitude, x.UOPID);
     } else {
         const latlon = getCenter(arr.map(op => op.Latitude), arr.map(op => op.Longitude))
         const pois = arr.reduce((acc, x) => acc + x.Longitude + ',' + x.Latitude + ',' + x.UOPID + ';', '');
@@ -204,12 +250,12 @@ function rinfGetBRouterUrlOfOpInfos(arr: OpInfo[]) {
 }
 
 function rinfGetKgUrlOfUOPID(uopid: string) {
-    return 'http://data.europa.eu/949/functionalInfrastructure/operationalPoints/' + uopid;
+    return 'http://data.europa.eu/949/functionalInfrastructure/operationalPoints/' + (uopid.replace(' ', '%2520'));
 }
 
 function rinfGetLocationUrlOfUOPID(uopid: string) {
     const results = rinfGetOpInfos('', uopid);
-    return rinfGetBRouterUrlOfOpInfos(results);
+    return getBRouterUrlOfOpInfos(results);
 }
 
 function getTooltipOfId(uopid: string): string | undefined {
@@ -236,17 +282,71 @@ export function lookupLocations(inputLocation: string, inputUPID: string) {
                 else return 0;
             });
             results.forEach(x => {
-                const url = rinfGetBRouterUrlOfOpInfos([x]);
-                if (tableLocations && url) addRow(tableLocations, [x.Name, createUrl(rinfGetKgUrlOfUOPID(x.UOPID), x.UOPID), createUrl(url)])
+                const url1 = createUrl(getBRouterUrlOfOpInfos([x]), 'BRouter');
+                const url2 = createUrl(getOrmUrlOfLocation(x.Latitude, x.Longitude), 'ORM');
+                const osmUrl = findOsmUrl(x);
+                const url3 = osmUrl ? createUrl(osmUrl, osmUrl.replace('https://www.openstreetmap.org/', '')) : undefined;
+                const opType = findOpType(x);
+                if (tableLocations) {
+                    addRow(tableLocations, [
+                        x.Name,
+                        opType ? createSpan(opType.Label, opType.Definition) : createSpan(''),
+                        createUrl(rinfGetKgUrlOfUOPID(x.UOPID), x.UOPID),
+                        url3 ? url3 : '',
+                        createElemsInSpan([url1, url2])]);
+                }
             });
 
             if (results.length < 1000) {
-                const url = rinfGetBRouterUrlOfOpInfos(results);
+                const url = getBRouterUrlOfOpInfos(results);
                 if (spanUrls && url) spanUrls.appendChild(createUrl(url, results.length.toFixed()))
             } else {
                 if (spanUrls) spanUrls.textContent = results.length.toFixed();
             }
         }
+    }
+}
+
+export function lookupOsmComparison() {
+    var tableSummary = document.getElementById("result-summary-osm-comparison");
+    var tableLocations = document.getElementById("result-locations-osm-comparison");
+    if (tableSummary && tableLocations) {
+        removeChilds(tableSummary);
+        removeChilds(tableLocations);
+        const total = rinfOsmMatchings().length;
+        const found = rinfOsmMatchings().filter(m => m.OsmUrl).length;
+        addRow(tableSummary, ["Total (DE)", createTextEnd(total.toFixed(0))]);
+        addRow(tableSummary, ["OSM data found", createTextEnd(found.toFixed(0))]);
+        addRow(tableSummary, ["OSM data not found", createTextEnd((total - found).toFixed(0))]);
+        const results = rinfOsmMatchings()
+            .filter(m => !m.OsmUrl)
+            .map(m => {
+                const opInfos = rinfGetOpInfos('', m.UOPID);
+                if (opInfos.length == 1) return opInfos[0]; else return undefined;
+            })
+            .filter(op => op) as OpInfo[];
+        console.log('results', results.length);
+        results.sort((a, b) => {
+            const nameA = a.Name;
+            const nameB = b.Name;
+            if (nameA < nameB) return -1;
+            else if (nameA > nameB) return 1;
+            else return 0;
+        });
+        results.forEach(x => {
+            const url1 = createUrl(getBRouterUrlOfOpInfos([x]), 'BRouter');
+            const url2 = createUrl(getOrmUrlOfLocation(x.Latitude, x.Longitude), 'ORM');
+            const url3 = createUrl(getOsmUrlOfLocation(x), 'OSM');
+            const url4 = createUrl(getOverpassUrlOfLocation(x), 'Overpass');
+            const opType = findOpType(x);
+            if (tableLocations) {
+                addRow(tableLocations, [
+                    x.Name,
+                    opType ? createSpan(opType.Label, opType.Definition) : createSpan(''),
+                    createUrl(rinfGetKgUrlOfUOPID(x.UOPID), x.UOPID),
+                    createElemsInSpan([url1, url2, url3, url4])]);
+            }
+        });
     }
 }
 
@@ -306,7 +406,7 @@ export function lookupLine(inputLine: string, inputCountry: string) {
                 if (tableTunnels) {
                     addRow(tableTunnels, [x.Tunnel, createUrl(rinfGetLocationUrlOfUOPID(x.StartOP), x.StartOP),
                     createUrl(rinfGetLocationUrlOfUOPID(x.EndOP), x.EndOP),
-                    createUrl(rinfGetBRouterUrlOfLocations(x.StartLat, x.StartLong, x.EndLat, x.EndLong, x.Tunnel), x.StartKm?.toFixed(3) + ' bis ' + x.EndKm?.toFixed(3)),
+                    createUrl(getBRouterUrlOfLocations(x.StartLat, x.StartLong, x.EndLat, x.EndLong, x.Tunnel), x.StartKm?.toFixed(3) + ' bis ' + x.EndKm?.toFixed(3)),
                     createTextEnd(x.Length.toFixed(3))])
                 }
             });

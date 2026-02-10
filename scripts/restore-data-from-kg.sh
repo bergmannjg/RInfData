@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# restore data from knowledge graph
+# restore data from knowledge graph to directory './erakg-data'
  
 if [ ! -d "./scripts" ]; then
     echo "please run from project directory"

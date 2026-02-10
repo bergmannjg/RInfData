@@ -4,7 +4,7 @@ Comparison of [ERA](https://www.era.europa.eu/) knowledge graph data and [OSM Ra
 
 * ERA [vocabulary](https://data-interop.era.europa.eu/era-vocabulary/)
 * [SPARQL Endpoint](https://era-web.linkeddata.es/sparql.html) for ERA data,
-* [SPARQL Endpoint](https://qlever.cs.uni-freiburg.de/osm-germany) for OSM data.
+* [SPARQL Endpoint](https://qlever.cs.uni-freiburg.de/osm-planet) for OSM data.
 
 ## Data models
 
@@ -21,7 +21,7 @@ See also [specifications of the register of Infrastructure](https://www.era.euro
 
 ### OSM Railway concepts
 
-The basic [elemets](https://wiki.openstreetmap.org/wiki/Elements) of OSM are [nodes](https://wiki.openstreetmap.org/wiki/Node), [ways](https://wiki.openstreetmap.org/wiki/Way) and [relations](https://wiki.openstreetmap.org/wiki/Relation). Elements can have [tags](https://wiki.openstreetmap.org/wiki/Tags). See also [OpenRailwayMap Tagging Schema](https://wiki.openstreetmap.org/wiki/OpenRailwayMap/Tagging) and [tagging of a train station](https://wiki.openstreetmap.org/wiki/File:A-simple-station.svg).
+The basic [elements](https://wiki.openstreetmap.org/wiki/Elements) of OSM are [nodes](https://wiki.openstreetmap.org/wiki/Node), [ways](https://wiki.openstreetmap.org/wiki/Way) and [relations](https://wiki.openstreetmap.org/wiki/Relation). Elements can have [tags](https://wiki.openstreetmap.org/wiki/Tags). See also [OpenRailwayMap Tagging Schema](https://wiki.openstreetmap.org/wiki/OpenRailwayMap/Tagging) and [tagging of a train station](https://wiki.openstreetmap.org/wiki/File:A-simple-station.svg).
 
 * **stations** and **halts** as places with railway services are mapped as
   * nodes and ways with tag railway=station|halt and key railway:ref as Station Code
@@ -36,32 +36,17 @@ The basic [elemets](https://wiki.openstreetmap.org/wiki/Elements) of OSM are [no
 
 The [OSM to RDF converter](https://ad-publications.cs.uni-freiburg.de/SIGSPATIAL_osm2rdf_BBKL_2021.pdf) make OSM data acceesible via SPARQL queries.
 
-The OSM railway data is loaded with the following SPARQL query:
+The OSM railway data is loaded with the [this SPARQL query](https://github.com/bergmannjg/RInfData/blob/main/src/OSMComparison/OsmSparqlApi.fs#L20).
 
-```SparQl
-PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-PREFIX osmkey: <https://www.openstreetmap.org/wiki/Key:>
-SELECT distinct ?stop ?public_transport ?railway ?name ?type ?railway_ref ?uic_ref ?railway_ref_DBAG WHERE {
-  ?stop osmkey:name ?name .
-  ?stop rdf:type ?type .
-  { ?stop osmkey:railway ?railway . }
-  UNION
-  { ?stop osmkey:public_transport ?public_transport . }
-  OPTIONAL {
-      {?stop osmkey:railway:ref ?railway_ref . }
-      UNION
-      {?stop osmkey:uic_ref ?uic_ref . }
-  }
-   OPTIONAL { ?stop osmkey:railway:ref:DBAG ?railway_ref_DBAG . }
-}
-```
+### Comparison of operational points with OSM elements
 
-### Comparison of operational points
+ERA KG operational points with type station or passenger stop in germany are compared with the above OSM railway data regarding OPID and railway:ref.
 
-ERA KG operational points with type station or passenger stop are compared with the above OSM railway data regarding OPID and railway:ref.
+Example for **Berlin Hauptbahnhof - Lehrter Bahnhof**: 
+* the OPID is [DE000BL](http://data.europa.eu/949/functionalInfrastructure/operationalPoints/DE000BL)
+* the railway:ref is [BL](https://www.openstreetmap.org/node/2459919675)
 
-|RInf ops|Count|
-|---|---:|
-|total|6542|
-|OSM data found|6195|
-|OSM data not found|347|
+To obtain the data, run the following scripts:
+
+* `restore-data-from-kg.sh`
+* `compare-with-osm.sh`

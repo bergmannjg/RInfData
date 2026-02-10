@@ -482,6 +482,15 @@ let getCountries () : Async<string> =
         return String.concat ";" allCountries
     }
 
+let getOpTypes () : Async<string> =
+    async {
+
+        let! result = Api.OpTypes.loadData ()
+        let opTypes = Api.OpTypes.fromQueryResults result
+
+        return JsonSerializer.Serialize opTypes
+    }
+
 let getOsmRoutesFrom (loader: string -> Async<string>) : Async<OSM.Sparql.Entry[]> =
     async {
 
@@ -669,7 +678,7 @@ let execBuild (path: string) (countries: string[]) (useCache: bool) : Async<stri
         let metadata: Metadata =
             { Endpoint = "https://data-interop.era.europa.eu/endpoint"
               Ontology = "https://data-interop.era.europa.eu/era-vocabulary"
-              Revision = "v3.1.5"
+              Revision = "v3.1.6"
               Program = "https://github.com/bergmannjg/RInfData/tree/main/src/EraKGLoader"
               Countries = countries
               Date = DateTime.Now }
@@ -692,6 +701,8 @@ let main argv =
             async { return! execBuild dataDirectory (argv.[0].Split countrySplitChars) useCache }
         else if argv.[0] = "--Countries" then
             async { return! getCountries () }
+        else if argv.[0] = "--OpTypes" then
+            async { return! getOpTypes () }
         else if argv.[0] = "--OsmRoutes" then
             async { return! getOsmRoutes () }
         else if

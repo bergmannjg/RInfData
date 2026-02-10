@@ -8,15 +8,12 @@
 
   <ItemGroup>
     <ProjectReference Include="../EraKGApi/EraKGApi.fsproj"/>
-    <ProjectReference Include="../RInfApi/RInfApi.fsproj"/>
+    <ProjectReference Include="../RInfGraph/target.dotnet/RInfGraph.fsproj"/>
   </ItemGroup>
 
   <ItemGroup>
     <Compile Include="OsmSparqlApi.fs" />
-    <Compile Include="OsmApi.fs" />
     <Compile Include="OsmComparison.fs" />
-    <Compile Include="WikidataSparqlApi.fs" />
-    <Compile Include="WikidataComparison.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 

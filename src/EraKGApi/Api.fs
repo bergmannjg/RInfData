@@ -19,6 +19,11 @@ type OperationalPoint =
       Longitude: float
       RailwayLocations: RailwayLocation[] }
 
+type OpType =
+    { Label: string
+      Definition: string
+      Value: int }
+
 type Track =
     { id: string
       label: string
@@ -90,8 +95,8 @@ module Api =
                 | None -> dict
 
     /// see <a href="https://data-interop.era.europa.eu/era-vocabulary/#overv">Object Properties</a>
-    module private Properties =
-        let private uriTypeToString (r: Rdf) (prefix: string) : string =
+    module Properties =
+        let uriTypeToString (r: Rdf) (prefix: string) : string =
             if r.``type`` = "uri" then
                 System.Web.HttpUtility.UrlDecode(r.value.Substring prefix.Length)
             else
@@ -135,7 +140,10 @@ module Api =
                 raise (System.Exception $"toInt unexpected datatype {r}")
 
         let toFloat (r: Rdf) : float =
-            if r.datatype = Some "http://www.w3.org/2001/XMLSchema#double" then
+            if
+                r.datatype = Some "http://www.w3.org/2001/XMLSchema#double"
+                || r.datatype = Some "http://www.w3.org/2001/XMLSchema#decimal"
+            then
                 try
                     float r.value
                 with error ->
@@ -250,6 +258,37 @@ module Api =
             |> Array.fold folder (Dictionary sparql.results.bindings.Length)
             |> _.Values
             |> Seq.toArray
+
+    module OpTypes =
+        let private opTypesQuery =
+            $"""
+                PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
+                PREFIX era: <http://data.europa.eu/949/>
+                SELECT distinct ?n ?l ?d WHERE {{
+                  ?c a skos:Concept .
+                  ?c skos:inScheme ?s .
+                  ?s era:rinfIndex "1.2.0.0.0.4" .
+                  ?c skos:notation ?n .
+                  ?c skos:definition ?d .
+                  ?c skos:prefLabel ?l .
+                  FILTER (LANG(?l) = 'en')
+                }}
+                ORDER BY ?n
+            """
+
+        let loadData () : Async<QueryResults> =
+            async {
+                let! data = Request.GetAsync endpoint opTypesQuery Request.applicationSparqlResults
+
+                return JsonSerializer.Deserialize data
+            }
+
+        let fromQueryResults (sparql: QueryResults) : OpType[] =
+            sparql.results.bindings
+            |> Array.map (fun rdf ->
+                { Definition = Properties.toLiteral rdf["d"]
+                  Label = Properties.toLiteral rdf["l"]
+                  Value = int (Properties.toLiteral rdf["n"]) })
 
     /// see <a href="https://data-interop.era.europa.eu/era-vocabulary/#http://data.europa.eu/949/Track">Track</a>
     module Track =

@@ -1,11 +1,10 @@
 namespace OSM.Sparql
 
 type Entry =
-    { Stop: string
+    { Url: string
       Name: string
-      PublicTransport: string option
-      Railway: string option
-      RailwayRef: string option
+      Railway: string
+      RailwayRef: string
       UicRef: string option
       Operator: string option
       Latitude: float
@@ -16,90 +15,44 @@ module Api =
 
     open Sparql
 
+    // search in germany and switzerland
     let private osmQuery () =
         """
 PREFIX geo: <http://www.opengis.net/ont/geosparql#>
+PREFIX geof: <http://www.opengis.net/def/function/geosparql/>
+PREFIX osmrel: <https://www.openstreetmap.org/relation/>
+PREFIX ogc: <http://www.opengis.net/rdf#>
 PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
 PREFIX osmkey: <https://www.openstreetmap.org/wiki/Key:>
-SELECT distinct ?stop ?location ?public_transport ?railway ?name ?type ?railway_ref ?uic_ref ?railway_ref_DBAG ?operator WHERE {
-  ?stop osmkey:name ?name .
-  ?stop rdf:type ?type .
-  ?stop geo:hasGeometry ?location .
-  { ?stop osmkey:railway ?railway . }
-  UNION
-  { ?stop osmkey:public_transport ?public_transport . }
-  OPTIONAL { 
-      {?stop osmkey:railway:ref ?railway_ref . }
-      UNION
-      {?stop osmkey:uic_ref ?uic_ref . }
-  }
-  OPTIONAL { ?stop osmkey:railway:ref:DBAG ?railway_ref_DBAG . }
-  OPTIONAL { ?stop osmkey:operator ?operator . }
-}
+SELECT distinct ?id (geof:latitude(?centroid) AS ?lat) (geof:longitude(?centroid) AS ?lng) ?railway ?name ?type ?railway_ref ?uic_ref ?operator WHERE {
+  { osmrel:51477 ogc:sfContains ?id . } UNION { osmrel:51701 ogc:sfContains ?id . }
+  { ?id osmkey:name ?name . } UNION { ?id osmkey:disused:name ?name . }
+  ?id rdf:type ?type .
+  { ?id osmkey:railway ?railway . } UNION { ?id osmkey:disused:railway ?railway . }
+  { ?id osmkey:railway:ref ?railway_ref . } UNION { ?id osmkey:railway:ref:DBAG ?railway_ref . } UNION { ?id osmkey:disused:railway:ref ?railway_ref . }
+  OPTIONAL { ?id osmkey:uic_ref ?uic_ref . }
+  OPTIONAL { ?id osmkey:operator ?operator . }
+  ?id geo:hasGeometry/geo:asWKT ?location .
+  BIND(geof:centroid(?location) AS ?centroid)}
 """
 
-    type Point = { Latitude: float; Longitude: float }
-
-    // point in WKT format
-    let toFirstPoint (s: string) : Point =
-        try
-            let split =
-                if s.StartsWith "LINESTRING(" then
-                    s.Replace("LINESTRING(", "").Replace(",", " ").Split [| ' ' |]
-                else if s.StartsWith "MULTIPOLYGON(((" then
-                    s.Replace("MULTIPOLYGON(((", "").Replace(",", " ").Split [| ' ' |]
-                else
-                    s.Replace("POINT(", "").Replace(")", "").Split [| ' ' |]
-
-            { Latitude = float split.[1]
-              Longitude = float split.[0] }
-        with _ ->
-            fprintfn stderr $"error parse point '{s}'"
-            { Latitude = 0.0; Longitude = 0.0 }
-
-    let loadOsmData (endpoint: string) : Async<string> =
+    let loadData (endpoint: string) : Async<string> =
         EraKG.Request.PostAsync endpoint (osmQuery ()) EraKG.Request.applicationSparqlResults
 
-    let ToEntries (sparql: QueryResults) : Entry[] =
+    let private toOptLiteral (b: Map<string, Rdf>) (key: string) =
+        match b.TryGetValue key with
+        | true, v -> Some(EraKG.Api.Properties.toLiteral v)
+        | _ -> None
+
+    let fromQueryResults (sparql: QueryResults) : Entry[] =
         sparql.results.bindings
         |> Array.map (fun b ->
-            { Stop = b.["stop"].value
-              Name = b.["name"].value
-              PublicTransport =
-                if b.ContainsKey "public_transport" then
-                    Some b.["public_transport"].value
-                else
-                    None
-              Railway =
-                if b.ContainsKey "railway" then
-                    Some b.["railway"].value
-                else
-                    None
-              RailwayRef =
-                if b.ContainsKey "railway_ref" then
-                    Some b.["railway_ref"].value
-                else if b.ContainsKey "railway_ref_DBAG" then
-                    Some b.["railway_ref_DBAG"].value
-                else
-                    None
-              UicRef =
-                if b.ContainsKey "uic_ref" then
-                    Some b.["uic_ref"].value
-                else
-                    None
-              Operator =
-                if b.ContainsKey "operator" then
-                    Some b.["operator"].value
-                else
-                    None
-              Latitude =
-                if b.ContainsKey "location" then
-                    (toFirstPoint b.["location"].value).Latitude
-                else
-                    0.0
-              Longitude =
-                if b.ContainsKey "location" then
-                    (toFirstPoint b.["location"].value).Longitude
-                else
-                    0.0
-              OsmType = b.["type"].value })
+            { Url = EraKG.Api.Properties.uriTypeToString b.["id"] ""
+              Name = EraKG.Api.Properties.toLiteral b.["name"]
+              Railway = EraKG.Api.Properties.toLiteral b.["railway"]
+              RailwayRef = EraKG.Api.Properties.toLiteral b.["railway_ref"]
+              UicRef = toOptLiteral b "uic_ref"
+              Operator = toOptLiteral b "operator"
+              Latitude = EraKG.Api.Properties.toFloat b.["lat"]
+              Longitude = EraKG.Api.Properties.toFloat b.["lng"]
+              OsmType = EraKG.Api.Properties.uriTypeToString b.["type"] "https://www.openstreetmap.org/" })

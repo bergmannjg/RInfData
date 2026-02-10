@@ -4,6 +4,8 @@ import _g from 'rinf-graph/data/Graph.json' with { type: 'json' };
 import opInfos from 'rinf-graph/data/OpInfos.json' with { type: 'json' };
 import lineInfos from 'rinf-graph/data/LineInfos.json' with { type: 'json' };
 import tunnelInfos from 'rinf-graph/data/TunnelInfos.json' with { type: 'json' };
+import matchings from './RInfOsmMatchings.json' with { type: 'json' };
+import opTypes from './OpTypes.json' with { type: 'json' };
 import metadata from 'rinf-graph/data/Metadata.json' with { type: 'json' };
 
 export interface Metadata {
@@ -30,6 +32,25 @@ export function rinfFindPath(ids: string[], isCompactifyPath: boolean) {
     } else {
         return spath;
     }
+}
+
+export interface Matching {
+    UOPID: string;
+    OsmUrl?: string;
+}
+
+export function rinfOsmMatchings(): Matching[] {
+    return matchings as Matching[];
+}
+
+export interface OpType {
+    Label: string;
+    Definition: string;
+    Value: number;
+}
+
+export function rinfOpTypes(): OpType[] {
+    return opTypes as OpType[];
 }
 
 export function rinfFindPathOfLine(line: string, country: string) {
@@ -66,8 +87,8 @@ function findText(s: string, searchString: string): Boolean {
         const regex = new RegExp(pattern, 'i');
         return regex.test(s);
     } catch (_) {
-        return s.indexOf(searchString) != -1 
-     }
+        return s.indexOf(searchString) != -1
+    }
 }
 
 export function rinfGetOpInfos(name: string, uopid: string) {
