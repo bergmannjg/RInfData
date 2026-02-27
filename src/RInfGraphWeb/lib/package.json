@@ -10,7 +10,7 @@
         "isomorphic-fetch": "^3.0.0",
         "luxon": "^2.3.0",
         "md5": "^2.3.0",
-        "rinf-graph": "https://github.com/bergmannjg/RInfData/releases/download/1.17.0/rinf-graph-1.17.0.tgz",
+        "rinf-graph": "https://github.com/bergmannjg/RInfData/releases/download/1.18.0/rinf-graph-1.18.0.tgz",
         "slugg": "^1.2.1"
     },
     "devDependencies": {

@@ -151,6 +151,14 @@ module Api =
             else
                 raise (System.Exception $"toFloat unexpected datatype {r}")
 
+        let currentlyValid (item: string) : string =
+            $"""
+              {item} era:validityStartDate ?startDate .
+              {item} era:validityEndDate ?endDate .
+              BIND(xsd:dateTime(NOW()) AS ?now) .
+              Filter(?startDate <= ?now && ?now <= ?endDate) .
+            """
+
     /// see <a href="https://op.europa.eu/en/web/eu-vocabularies/dataset/-/resource?uri=http://publications.europa.eu/resource/dataset/country">Countries and territories</a>
     module Country =
         let private countriesQuery () =
@@ -187,6 +195,7 @@ module Api =
                 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
                 PREFIX era: <http://data.europa.eu/949/>
                 PREFIX wgs: <http://www.w3.org/2003/01/geo/wgs84_pos#> 
+                PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
 
                 SELECT distinct ?opName ?uopid ?opType ?lat ?lon ?lineNationalLabel ?kilometer ?country
                 WHERE {{
@@ -204,6 +213,7 @@ module Api =
                   ?operationalPoint era:opType ?opType .
                   ?operationalPoint era:inCountry ?country .
                   {Country.toCountryCondition "?operationalPoint" countries}
+                  {Properties.currentlyValid "?operationalPoint"}
                 }} LIMIT {limit} OFFSET {offset}
             """
 
@@ -297,6 +307,7 @@ module Api =
                 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
                 PREFIX era: <http://data.europa.eu/949/>
                 PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
+                PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
 
                 SELECT distinct ?track ?label ?lineCategory ?contactLineSystemTypeLabel ?maximumPermittedSpeed
                 WHERE {{
@@ -311,6 +322,7 @@ module Api =
                   OPTIONAL {{ ?track era:maximumPermittedSpeed ?maximumPermittedSpeed . }}
 
                   {Country.toCountryCondition "?sectionOfLine" countries}
+                  {Properties.currentlyValid "?track"}
                 }} LIMIT {limit} OFFSET {offset}
             """
 
@@ -366,6 +378,7 @@ module Api =
             $"""
                 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
                 PREFIX era: <http://data.europa.eu/949/>
+                PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
 
                 SELECT distinct ?sectionOfLine ?length ?solNature ?lineNationalLabel ?imCode ?startOp ?endOp ?track ?country
                 WHERE {{
@@ -380,6 +393,7 @@ module Api =
                   ?sectionOfLine era:track ?track .
                   ?sectionOfLine era:inCountry ?country .
                   {Country.toCountryCondition "?sectionOfLine" countries}
+                  {Properties.currentlyValid "?sectionOfLine"}
                 }} LIMIT {limit} OFFSET {offset}
             """
 
