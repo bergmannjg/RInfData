@@ -33,7 +33,7 @@ jobs:
       - name: restore data
         run: ./scripts/restore-data-from-kg.sh DEU
       - name: test
-        run: dotnet test src/RInfGraph.Tests/RInfGraph.Tests.fsproj
+        run: dotnet test --project src/RInfGraph.Tests/RInfGraph.Tests.fsproj
       - name: build package
         run: |
           dotnet tool restore

@@ -1,4 +1,4 @@
-module RInfGraph.Tests
+module Test
 
 open System.IO
 open System.Text.Json
