@@ -1,0 +1,24 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <DefineConstants>DIM3</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="../TypeDefs.fs" />
+    <Compile Include="../TruncatedFront.fs" />
+    <Compile Include="../Graph.fs" />
+    <Compile Include="../NodeInfo.fs" />
+    <Compile Include="../NodeInfoContainer.fs" />
+    <Compile Include="../LexDijkstra.fs" />
+    <Compile Include="../Preprocessor.fs" />
+    <Compile Include="../Label.fs" />
+    <Compile Include="../BinaryHeapMosp.fs" />
+    <Compile Include="../Permanents.fs" />
+    <Compile Include="../SolutionsList.fs" />
+    <Compile Include="../MDA-Star.fs" />
+    <Compile Include="../TargetedMosp.fs" />
+  </ItemGroup>
+
+</Project>

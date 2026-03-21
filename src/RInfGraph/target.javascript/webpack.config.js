@@ -12,8 +12,10 @@ var babelOptions = {
 };
 
 console.log("Bundling function...");
+// webpack.development.config.js
 
 module.exports = {
+  mode: "development",
   target: "node",
   externals: [nodeExternals()],
   node: {

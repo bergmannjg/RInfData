@@ -1,0 +1,33 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Fable.Core" Version="3.3.0" />
+    <PackageReference Include="Fable.Promise" Version="2.0.0" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <DefineConstants>FABLE_COMPILER</DefineConstants>
+    <DefineConstants>DIM2</DefineConstants>
+  </PropertyGroup>
+  
+  <ItemGroup>
+    <Compile Include="TypeDefs.fs" />  
+    <Compile Include="TruncatedFront.fs" />
+    <Compile Include="Graph.fs" />
+    <Compile Include="NodeInfo.fs" />
+    <Compile Include="NodeInfoContainer.fs" />
+    <Compile Include="LexDijkstra.fs" />
+    <Compile Include="Preprocessor.fs" />
+    <Compile Include="Label.fs" />
+    <Compile Include="BinaryHeapMosp.fs" />
+    <Compile Include="Permanents.fs" />
+    <Compile Include="SolutionsList.fs" />
+    <Compile Include="MDA-Star.fs" />
+    <Compile Include="TargetedMosp.fs" />
+  </ItemGroup>
+
+</Project>

@@ -5,7 +5,7 @@ Query cached [RINF API](https://rinf.era.europa.eu/API/Help) data.
 ## Build
 
 * run: `restore-data-from-kg.sh`
-* run: `dotnet build RInfQuery.fsproj`
+* run: `dotnet run RInfQuery.fsproj`
 
 ## Usage
 
@@ -35,7 +35,7 @@ Compute the route from Hannover to Berlin:
 RInfQuery --Graph.Route ../../erakg-data/ "DE000HH;DE000BL"
 ```
 
-Output as table (with links to the [ERA Knowledge Graph](https://linked.ec-dataplatform.eu/sparql?default-graph-uri=https%3A%2F%2Flinked.ec-dataplatform.eu\%2Fera)):
+Output as table (with links to the [ERA Knowledge Graph](https://data-interop.era.europa.eu/)):
 
 |From|To|Line|Distance|
 | --- | --- | ---| ---: |

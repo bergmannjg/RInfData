@@ -12,6 +12,7 @@
 <body>
     <div class="container" style="width:80%;">
         <h1>RInfGraph</h1>
+        <div>Searching for data about the european static rail network.</div>
         <div class="row">&nbsp;</div>
         <div class="row">
             <div class="col col-sm-1 me-1">Command:</div>
@@ -80,24 +81,22 @@
             </div>
 
             <div id='path-box' style="display:none">
-                <div class="row mb-4">
+                <div class="row mb-3">
                     <label for="inputFrom" class="col-sm-1 col-form-label text-end">From</label>
-                    <div class="col-md-2">
-                        <input type="text" class="form-control" id="inputFrom" value="DE000HH">
-                    </div>
-                    <label for="inputOver" class="col-sm-1 col-form-label text-end">Over</label>
                     <div class="col-sm-2">
-                        <input type="text" class="form-control" id="inputOver" value="">
+                        <input type="text" class="form-control" id="inputFrom" value="DE000HH">
                     </div>
                     <label for="inputTo" class="col-sm-1 col-form-label text-end">To</label>
                     <div class="col-sm-2">
-                        <input type="text" class="form-control" id="inputTo" value="DE0BSPD">
+                        <input type="text" class="form-control" id="inputTo" value="DE000AH">
                     </div>
-                    <div class="col-sm-1" style="margin-top: 6px;">
-                        <input class="form-check-input" type="checkbox" value="" id="flexCheckExact">
-                        <label class="form-check-label" for="flexCheckDefault">
-                            exact
-                        </label>
+                    <div class="col-sm-2">
+                        <select class="form-select" aria-label="Default select example" id="selectOption">
+                            <option>Search type</option>
+                            <option value="0">Shortest path</option>
+                            <option value="20">Fewer lines</option>
+                            <option selected value="100">Fewest lines</option>
+                        </select>
                     </div>
                     <button type="submit" class="btn btn-primary col-sm-2" id="btnLookupPaths">lookup
                         path</button>
@@ -266,7 +265,7 @@
             lookupLocations('inputLocation', 'inputUPID');
         }
         document.getElementById('btnLookupPaths').onclick = function () {
-            lookupPath('inputFrom', 'inputOver', 'inputTo', 'flexCheckExact');
+            lookupPath('inputFrom', 'inputTo', 'selectOption');
         }
         document.getElementById('btnLookupLine').onclick = function () {
             lookupLine('inputLine', 'inputCountry');

@@ -10,95 +10,80 @@ open RInfGraph
 let readFile<'a> path name =
     JsonSerializer.Deserialize<'a>(File.ReadAllText(path + name))
 
-type Source =
-    | Rinfdata
-    | EraKGdata
-
-let TestPath (source: Source) (ids: string[]) (expectedPath: (string * string * int)[]) (expectedCost: int) =
-    let dir =
-        if source = Source.Rinfdata then
-            "../../../../../rinf-data/"
-        else
-            "../../../../../erakg-data/"
+let TestPath (ids: string[]) (expectedPath: (string * string * int)[]) (_: int) =
+    Assert.That(ids.Length = 2)
+    let dir = "../../../../../erakg-data/"
 
     let g = readFile<GraphNode[]> dir "Graph.json"
-    let path = Graph.getShortestPath g ids
-    let cpath = Graph.compactifyPath path g
-    let ccpath = Graph.getCompactPath cpath
+    let moPaths = MoGraph.getShortestPath g ids[0] ids[1] 5
+    Assert.That(0 < moPaths.Length)
+    let moFewestLinesPath = Graph.getCompactPath moPaths[0].Path
 
-    printfn "Path:"
-    Graph.printPath ccpath
+    printfn $"Path: length {moFewestLinesPath.Length}"
+    Graph.printPath moFewestLinesPath
 
-    let cost = Graph.costOfPath ccpath
-    printfn "Cost: %d" cost
+    printfn $"Expected Path: length {expectedPath.Length}"
+    expectedPath |> Array.iter (fun (f, t, _) -> printfn $"{f}, {t}")
 
-    if source = Source.Rinfdata then
-        Assert.That((expectedCost = cost))
-
-    Assert.That((expectedPath.Length = ccpath.Length))
+    Assert.That((expectedPath.Length = moFewestLinesPath.Length))
 
     Array.iter2
-        (fun (fromNode, toNode, line) graphNode ->
+        (fun (fromNode, toNode, line) (graphNode: GraphNode) ->
             Assert.That((fromNode = graphNode.Node))
             Assert.That((toNode = graphNode.Edges.[0].Node))
             Assert.That((line.ToString() = graphNode.Edges.[0].Line)))
         expectedPath
-        ccpath
+        moFewestLinesPath
 
-let sources = [ Source.EraKGdata ]
+    let path = Graph.getShortestPath g ids |> Graph.getCompactPath
+    let moShortestPath = Graph.getCompactPath moPaths[moPaths.Length - 1].Path
+    printfn $"shortestPath length {path.Length}, moShortestPath length {moShortestPath.Length}"   
+    Assert.That(path.Length >= moShortestPath.Length)
 
-let switch (source: Source) =
-    if source = Source.Rinfdata then "DE00FFU" else "DE95441" // op new in era kg
+[<Test>]
+let TestHHToFFU () =
+    TestPath [| "DE000HH"; "DE00FFU" |] [| ("DE000HH", "DE00FFU", 1733) |] 15245
 
-[<TestCaseSource(nameof (sources))>]
-let TestHHToFFU (source: Source) =
-    TestPath source [| "DE000HH"; "DE00FFU" |] [| ("DE000HH", "DE00FFU", 1733) |] 15245
+[<Test>]
+let TestHHToFF () =
+    TestPath [| "DE000HH"; "DE000FF" |] [| "DE000HH", "DE00FFU", 1733; "DE00FFU", "DE000FF", 3600 |] 15245
 
-[<TestCaseSource(nameof (sources))>]
-let TestHHToFF (source: Source) =
-    TestPath source [| "DE000HH"; "DE000FF" |] [| "DE000HH", "DE00FFU", 1733; "DE00FFU", "DE000FF", 3600 |] 15245
+[<Test>]
+let TestRKToRF () =
+    TestPath [| "DE000RK"; "DE000RF" |] [| "DE000RK", "DE000RF", 4000 |] 15245
 
-[<TestCaseSource(nameof (sources))>]
-let TestRKToRF (source: Source) =
-    TestPath source [| "DE000RK"; "DE000RF" |] [| "DE000RK", "DE00RRA", 4020; "DE00RRA", "DE000RF", 4000 |] 15245
+[<Test>]
+let TestFFUToFF () =
+    TestPath [| "DE00FFU"; "DE000FF" |] [| ("DE00FFU", "DE000FF", 3600) |] 15245
 
-[<TestCaseSource(nameof (sources))>]
-let TestFFUToFF (source: Source) =
-    TestPath source [| "DE00FFU"; "DE000FF" |] [| ("DE00FFU", "DE000FF", 3600) |] 15245
-
-[<TestCaseSource(nameof (sources))>]
-let TestRMToRK (source: Source) =
-    TestPath source [| "DE000RM"; "DE000RK" |] [| ("DE000RM", "DE000RK", 4020) |] 15245
+[<Test>]
+let TestRMToRK () =
+    TestPath [| "DE000RM"; "DE000RK" |] [| ("DE000RM", "DE000RK", 4020) |] 15245
 
 
-[<TestCaseSource(nameof (sources))>]
-let TestHHToNN (source: Source) =
+[<Test>]
+let TestHHToNN () =
     TestPath
-        source
         [| "DE000HH"; "DE000NN" |]
-        [| ("DE000HH", "DE00NWH", 1733)
-           ("DE00NWH", "DE000NF", 5910)
-           ("DE000NF", "DE000NN", 5900) |]
+        [| "DE000HH", "DE00NWH", 1733
+           "DE00NWH", "DE000NF", 5910
+           "DE000NF", "DE000NN", 5900 |]
         18167
 
-[<TestCaseSource(nameof (sources))>]
-let TestHHToAH (source: Source) =
+[<Test>]
+let TestHHToAH () =
     TestPath
-        source
         [| "DE000HH"; "DE000AH" |]
         [| "DE000HH", "DE95366", 1710
-           "DE95366", "DE95173", 1720
-           "DE95173", "DE95174", 1259
-           "DE95174", "DE000AH", 2200 |]
+           "DE95366", "DE0AHAR", 1720
+           "DE0AHAR", "DE000AH", 2200 |]
         9172
 
-[<TestCaseSource(nameof (sources))>]
-let TestAHToHH (source: Source) =
+[<Test>]
+let TestAHToHH () =
     TestPath
-        source
         [| "DE000AH"; "DE000HH" |]
-        [| "DE000AH", "DE95174", 2200
-           "DE95174", "DE95173", 1259
-           "DE95173", "DE95366", 1720
+        [| "DE000AH", "DE0AHAR", 2200
+           "DE0AHAR", "DE95366", 1720
            "DE95366", "DE000HH", 1710 |]
         9172

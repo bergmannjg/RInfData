@@ -90,6 +90,11 @@ export interface GraphNode {
     Edges: Array<GraphEdge>;
 }
 
+export interface Solution {
+    Cost: number;
+    Path: Array<GraphNode>;
+}
+
 export interface RInfGraph {
     Graph_operationalPointType: OperationalPointType;
     Graph_toGraph: (g: Array<GraphNode>) => Map<string, any>;
@@ -98,7 +103,6 @@ export interface RInfGraph {
     Graph_getPathOfLineFromGraph: (g: Array<GraphNode>, graph: Map<string, any>, line: LineInfo) => Array<GraphNode>
     Graph_getCompactPath: (path: Array<GraphNode>) => Array<GraphNode>
     Graph_getCompactPathWithMaxSpeed: (path: Array<GraphNode>, g: Array<GraphNode>) => Array<GraphNode>
-    Graph_compactifyPath: (path: Array<GraphNode>, g: Array<GraphNode>) => Array<GraphNode>
     Graph_getPathOfLine: (g: Array<GraphNode>, line: LineInfo) => Array<GraphNode>
     Graph_printPath: (path: Array<GraphNode>) => void
     Graph_lengthOfPath: (path: Array<GraphNode>) => number
@@ -108,4 +112,5 @@ export interface RInfGraph {
     Graph_toPathElement: (opInfos: Map<string, OpInfo>, lineInfos: Map<string, LineInfo>, node: GraphNode) => PathElement
     Graph_isWalkingPath: (node: GraphNode) => boolean
     Graph_getBRouterUrl: (locations: Location[]) => string
+    MoGraph_getShortestPath: (g: Array<GraphNode>, source: string, target: string, maxSolutions: number) => Array<Solution>
 }

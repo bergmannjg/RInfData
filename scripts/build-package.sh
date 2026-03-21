@@ -33,7 +33,7 @@ fi
 
 npm install
 
-dotnet fable RInfGraph.fable.fsproj -o build --noCache --run webpack --mode production --no-devtool --config ./webpack.config.js
+dotnet fable RInfGraph.fable.fsproj -o build --noCache --run webpack --no-devtool --config ./webpack.config.js
 
 rm rinf-graph/data/*
 echo '[]' >  rinf-graph/data/Graph.json

@@ -305,20 +305,26 @@ let main argv =
 
                 Graph.printPath (getCompactPath path)
 
-                let cpath = Graph.compactifyPath path g
-
-                printfn "compactified Path:"
-                Graph.printPath cpath
-
-                printfn "compactified compact Path%s:" (if useMaxSpeed then " with maxSpeed" else "")
-
-                Graph.printPath (getCompactPath cpath)
-
                 printfn "brouter url of compactified path "
 
-                Graph.getLocationsOfPath g map cpath
+                Graph.getLocationsOfPath g map path
                 |> Array.iter (Graph.getBRouterUrl >> printfn "%s")
 
+                return ""
+            }
+        else if argv.[0] = "--MoGraph.Route" && argv.Length > 3 then
+            async {
+                let eraDir = argv.[1]
+                let g = readFile<GraphNode[]> eraDir "Graph.json"
+                let compactify = true
+
+                MoGraph.getShortestPath g argv.[2] argv.[3] 5
+                |> Array.iteri (fun i sol ->
+                    printfn $"solution {i}, cost {sol.Cost}"
+
+                    sol.Path
+                    |> fun arr -> if compactify then Graph.getCompactPath arr else arr
+                    |> Array.iter (fun n -> printfn $"{n.Node} {n.Edges[0].Node} Line={n.Edges[0].Line} StartKm=%.1f{n.Edges[0].StartKm} EndKm=%.1f{n.Edges[0].EndKm} Length=%.1f{n.Edges[0].Length} Cost={n.Edges[0].Cost}"))
                 return ""
             }
         else

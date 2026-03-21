@@ -5,6 +5,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="../../TargetedMosp/target.dotnet.dim.2/TargetedMosp.fsproj"/>
+  </ItemGroup>
+
+  <ItemGroup>
     <Compile Include="../Dijkstra.fs" />
     <Compile Include="../Graph.fs" />
   </ItemGroup>

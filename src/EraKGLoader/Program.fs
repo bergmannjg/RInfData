@@ -13,6 +13,7 @@ type Metadata =
       Revision: string
       Program: string
       Countries: string[]
+      CountriesPrefLabel: string[]
       Date: DateTime }
 
 let printHelp () =
@@ -375,7 +376,7 @@ let getCost (length: float) (maxSpeed: int) =
 
     if cost <= 0 then 1 else cost
 
-let buildGraph (ops: OperationalPoint[]) (sols: SectionOfLine[]) =
+let buildGraph (ops: OperationalPoint[]) (sols: SectionOfLine[]) : GraphNode array =
 
     let mutable graph = Map.empty
 
@@ -433,7 +434,7 @@ let buildGraph (ops: OperationalPoint[]) (sols: SectionOfLine[]) =
     fprintfn stderr "Nodes: %i, Edges: %i" graph.Count (graph |> Seq.sumBy (fun item -> item.Value.Length))
 
     graph
-    |> Seq.map (fun kv ->
+    |> Seq.map<_, GraphNode> (fun kv ->
         { Node = kv.Key
           Edges = graph.[kv.Key] |> List.toArray })
     |> Seq.toArray
@@ -460,7 +461,7 @@ let checkIsCountry (path: string) (countries: string[]) : Async<string[]> =
 
         let! result = loadDataCached path "sparql-countries.json" (fun () -> Api.Country.loadData ())
 
-        let allCountries = Api.Country.fromQueryResults result
+        let allCountries = Api.Country.fromQueryResults result |> Array.map fst
 
         let isCountry =
             countries
@@ -479,7 +480,7 @@ let getCountries () : Async<string> =
 
         let allCountries = Api.Country.fromQueryResults result
 
-        return String.concat ";" allCountries
+        return String.concat ";" (allCountries |> Array.map (fun c -> $"({fst c},{snd c})"))
     }
 
 let getOpTypes () : Async<string> =
@@ -633,6 +634,30 @@ let execTracksBuild (path: string) (countries: string[]) : Async<string> =
         return ""
     }
 
+let execMetadataBuild (path: string) (countries: string[])  : Async<string> =
+    async {
+        let! result = loadDataCached path "sparql-countries.json" (fun () -> Api.Country.loadData ())
+
+        let countriesPrefLabel =
+            Api.Country.fromQueryResults result
+            |> Array.filter (fun c -> countries |> Array.contains (fst c))
+            |> Array.map snd
+
+        fprintfn stderr $"buildMetadata  {DateTime.Now}"
+
+        let metadata: Metadata =
+            { Endpoint = "https://data-interop.era.europa.eu/endpoint"
+              Ontology = "https://data-interop.era.europa.eu/era-vocabulary"
+              Revision = "v3.1.6"
+              Program = "https://github.com/bergmannjg/RInfData/tree/main/src/EraKGLoader"
+              Countries = countries
+              CountriesPrefLabel = countriesPrefLabel
+              Date = DateTime.Now }
+
+        return JsonSerializer.Serialize metadata
+    }
+
+
 let execBuild (path: string) (countries: string[]) (useCache: bool) : Async<string> =
     async {
         cacheEnabled <- useCache
@@ -673,17 +698,28 @@ let execBuild (path: string) (countries: string[]) (useCache: bool) : Async<stri
         let! result = execLineInfoBuild path
         File.WriteAllText(path + "LineInfos.json", result)
 
-        fprintfn stderr $"buildMetadata  {now ()}"
+        let! result = execMetadataBuild path countries
+        File.WriteAllText(path + "Metadata.json", result)
 
-        let metadata: Metadata =
-            { Endpoint = "https://data-interop.era.europa.eu/endpoint"
-              Ontology = "https://data-interop.era.europa.eu/era-vocabulary"
-              Revision = "v3.1.6"
-              Program = "https://github.com/bergmannjg/RInfData/tree/main/src/EraKGLoader"
-              Countries = countries
-              Date = DateTime.Now }
+        return ""
+    }
 
-        File.WriteAllText(path + "Metadata.json", JsonSerializer.Serialize metadata)
+let execMoGraphBuild (path: string) : Async<string> =
+    async {
+        let eraDir = path
+        let toDir = path
+        let g = readFile<GraphNode[]> eraDir "Graph.json"
+        let g' = MoGraph.toMoGraph g
+        File.WriteAllText(eraDir + "MoGraph.json", JsonSerializer.Serialize g')
+        fprintfn stderr $"graph nodes {g.Length}, mograph nodes {g'.Length}"
+        let arcs = MoGraph.toArcs g'
+        fprintfn stderr $"arcs {arcs.Length}"
+
+        let lines: string array =
+            arcs |> Array.map (fun (s, t, c1, c2) -> $"a {s} {t} {c1} {c2}")
+
+        let lines = Array.append [| $"p sp {g'.Length} {lines.Length}" |] lines
+        File.WriteAllLines(toDir + "MoGraph.gr", lines)
 
         return ""
     }
@@ -728,6 +764,8 @@ let main argv =
             async { return! execTunnelBuild argv.[1] (argv.[2].Split countrySplitChars) }
         else if argv.[0] = "--SectionsOfLine" && argv.Length > 2 && checkIsDir argv.[1] then
             async { return! execSectionsOfLineBuild argv.[1] (argv.[2].Split countrySplitChars) }
+        else if argv.[0] = "--MoGraph.Build" && argv.Length > 1 && checkIsDir argv.[1] then
+            async { return! execMoGraphBuild argv.[1] }
         else if argv.[0] = "--Tracks" && argv.Length > 2 && checkIsDir argv.[1] then
             async { return! execTracksBuild argv.[1] (argv.[2].Split countrySplitChars) }
         else

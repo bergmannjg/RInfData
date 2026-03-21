@@ -1,4 +1,4 @@
-﻿import { rinfOsmMatchings, rinfOpTypes, rinfFindPath, rinfFindPathOfLine, rinfFindTunnelsOfLine, rinfGetBRouterUrls, rinfToCompactPath, rinfGetOpInfos, rinfMetadata, Metadata, OpInfo, TunnelInfo, OpType } from "./lib/bundle.js";
+﻿import { GraphNode, rinfOsmMatchings, rinfOpTypes, rinfFindMoPath, rinfFindPathOfLine, rinfFindTunnelsOfLine, rinfGetBRouterUrls, rinfToCompactPath, rinfGetOpInfos, rinfMetadata, Metadata, OpInfo, TunnelInfo, OpType } from "./lib/bundle.js";
 
 interface PathItem {
     fromId: string;
@@ -25,8 +25,8 @@ const findOpType = (op: OpInfo): OpType | undefined => {
     return rinfOpTypes().find(m => m.Value == op.RinfType);
 }
 
-const findPath = (ids: string[], isCompactifyPath: boolean): PathResult => {
-    const spath = rinfFindPath(ids, isCompactifyPath);
+const findPath = (ids: string[], maxExtraCostInProcent: number): PathResult => {
+    const spath = rinfFindMoPath(ids[0], ids[1], maxExtraCostInProcent);
     let arr: PathItem[] = [];
     let cost: number = 0;
     rinfToCompactPath(spath).forEach(x => {
@@ -198,7 +198,7 @@ export function displayMetadata(idEndpoint: string, idDate: string, idCountries:
     }
     const countriesElement = document.getElementById(idCountries) as HTMLSpanElement;
     if (countriesElement) {
-        countriesElement.textContent = data.Countries.sort(stringCompare).join(",");
+        countriesElement.textContent = data.CountriesPrefLabel.sort(stringCompare).join(",");
     }
 }
 
@@ -350,19 +350,18 @@ export function lookupOsmComparison() {
     }
 }
 
-export function lookupPath(inputFrom: string, inputOver: string, inputTo: string, inputCheckExact: string) {
+export function lookupPath(inputFrom: string, inputTo: string, selectOption: string) {
     var tablePath = document.getElementById("result-path");
     var spanUrls = document.getElementById("result-url-of-path") as HTMLSpanElement;
     if (tablePath && spanUrls) {
         removeChilds(tablePath);
         removeChilds(spanUrls);
         var elementFrom = document.getElementById(inputFrom) as HTMLInputElement;
-        var elementOver = document.getElementById(inputOver) as HTMLInputElement;
         var elementTo = document.getElementById(inputTo) as HTMLInputElement;
-        var elementCheckExact = document.getElementById(inputCheckExact) as HTMLInputElement;
+        var elementSelectOption = document.getElementById(selectOption) as HTMLSelectElement;
         if (elementFrom.value.length > 0 && elementTo.value.length > 0) {
-            const ids = elementOver.value.length > 0 ? [elementFrom.value, elementOver.value, elementTo.value] : [elementFrom.value, elementTo.value];
-            const results = findPath(ids, elementCheckExact ? !elementCheckExact.checked : true)
+            const ids = [elementFrom.value, elementTo.value];
+            const results = findPath(ids, parseInt(elementSelectOption.value))
             results.path.forEach(x => {
                 if (tablePath) {
                     addRow(tablePath, [createUrl(rinfGetLocationUrlOfUOPID(x.fromId), x.fromId, getTooltipOfId(x.fromId)),

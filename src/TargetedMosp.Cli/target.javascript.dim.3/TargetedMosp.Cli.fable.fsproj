@@ -1,0 +1,25 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Fable.Core" Version="3.3.0" />
+    <PackageReference Include="Fable.Node" Version="1.6.0" />
+    <PackageReference Include="Fable.Promise" Version="2.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../TargetedMosp/target.javascript.dim.3/TargetedMosp.fable.fsproj"/>
+  </ItemGroup>
+
+  <PropertyGroup>
+    <DefineConstants>FABLE_COMPILER</DefineConstants>
+  </PropertyGroup>
+  
+  <ItemGroup>
+    <Compile Include="Program.fs" />  
+  </ItemGroup>
+
+</Project>

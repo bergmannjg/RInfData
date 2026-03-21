@@ -1,6 +1,6 @@
 # EraKGLoader
 
-Load data from [ERA knowledge graph](https://era-web.linkeddata.es/sparql.html).
+Load data from [ERA knowledge graph](https://data-interop.era.europa.eu/endpoint).
 
 ## Build
 

@@ -23,7 +23,7 @@ let ``calculate distance`` (p1Latitude, p1Longitude) (p2Latitude, p2Longitude) =
 
     r * c
 
-/// match OSM railwayRef with RInf opid, i.e. 'BL' with 'DE000BL' or 'KB G' with 'DEKB  G' 
+/// match OSM railwayRef with RInf opid, i.e. 'BL' with 'DE000BL' or 'KB G' with 'DEKB  G'
 let private matchesRailwayRefWithUOPID (railwayRef: string) (uOPID: string) =
     let fill (s: string) (len: int) (c: Char) =
         if s.Length < len then String(c, len - s.Length) else ""

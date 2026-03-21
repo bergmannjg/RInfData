@@ -26,11 +26,27 @@ const optypeExcludes = [operationalPointType.privatesiding, operationalPointType
 const mapOps = (opInfos as OpInfo[]).reduce((map, op) => map.set(op.UOPID, op), new Map());
 
 export function rinfFindPath(ids: string[], isCompactifyPath: boolean) {
-    const spath = rinfgraph.Graph_getShortestPathFromGraph(g, graph, ids);
-    if (isCompactifyPath) {
-        return rinfgraph.Graph_compactifyPath(spath, g);
-    } else {
-        return spath;
+    return rinfgraph.Graph_getShortestPathFromGraph(g, graph, ids);
+}
+
+export function rinfFindMoPath(source: string, target: string, maxExtraCostInProcent: number) {
+    const spaths = rinfgraph.MoGraph_getShortestPath(g, source, target, 10);
+    if (spaths.length == 0) return [];
+    else if (spaths.length == 1) return spaths[0].Path;
+    else {
+        const costOfShortestPath = spaths[spaths.length - 1].Cost;
+        const costOfFewestLines = spaths[0].Cost;
+        if (maxExtraCostInProcent <= 0) return spaths[spaths.length - 1].Path; // shortest path
+        else if (maxExtraCostInProcent >= 100
+            || spaths.length == 2
+            || costOfFewestLines <= costOfShortestPath) return spaths[0].Path; // fewest lines
+        else {
+            const toleratedCost = costOfShortestPath + costOfShortestPath * maxExtraCostInProcent / 100;
+            console.log("costOfShortestPath", costOfShortestPath, "costOfFewestLines", costOfFewestLines, "maxExtraCostInProcent", maxExtraCostInProcent, "toleratedCost", toleratedCost);
+            const index = spaths.findIndex(p => p.Cost <= toleratedCost);
+            if (0 <= index) return spaths[index].Path;
+            else return spaths[0].Path;
+        }
     }
 }
 
@@ -54,7 +70,8 @@ export function rinfOpTypes(): OpType[] {
 }
 
 export function rinfFindPathOfLine(line: string, country: string) {
-    const lineInfo = (lineInfos as LineInfo[]).find(li => li.Line === line && li.Country == country)
+    const lineInfo = (lineInfos as LineInfo[]).find(li => li.Line === line && li.Country == country);
+    console.log("lineInfo", lineInfo?.Line, lineInfo?.Name);
     if (lineInfo) return rinfgraph.Graph_getPathOfLineFromGraph(g, graph, lineInfo);
     else return [];
 }

@@ -10,11 +10,6 @@ readFile(process.argv[2])
         const cpath = rinfgraph.Graph_getCompactPath(path);
         console.log('compact path:')
         rinfgraph.Graph_printPath(cpath);
-        const ccpath = rinfgraph.Graph_getCompactPath(rinfgraph.Graph_compactifyPath(path, g));
-        if (cpath.length > ccpath.length) {
-            console.log('compactified path:')
-            rinfgraph.Graph_printPath(ccpath);
-        }
     }).catch((error) => {
         console.error(error);
     });

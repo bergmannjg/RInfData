@@ -365,302 +365,6 @@ module Graph =
 
         printfn "%.1f %i" (lengthOfPath path) (costOfPath path)
 
-    type internal Candidate = (string * string * string * string * string)
-
-    let getNodeLength (node: GraphNode) = node.Edges[0].Length
-
-    let isNodeOnLine (node: GraphNode) (line: string) (graphNodes: GraphNode[]) =
-        graphNodes
-        |> Array.exists (fun n1 -> n1.Node = node.Node && (n1.Edges |> Array.exists (fun n2 -> n2.Line = line)))
-
-    let private getCandidateFirstNodeToSameLine
-        (cpath: GraphNode[])
-        (graphNodes: GraphNode[])
-        (choosen: Candidate list)
-        =
-        let ccpath = getCompactPath cpath
-
-        let windowed = ccpath |> Array.windowed 3
-
-        let chooser (xs: GraphNode[]) =
-            if
-                getNodeLength xs[0] + getNodeLength xs[1] < 10.0
-                && getNodeLength xs[2] > 50.0
-                && isNodeOnLine xs[0] xs[2].Edges[0].Line graphNodes
-            then
-                let candidate =
-                    ("CandidateFirstNodeToSameLine", xs[2].Edges[0].Country, xs[2].Edges[0].Line, xs[0].Node, xs[2].Node)
-
-                if choosen |> List.contains candidate then
-                    None
-                else
-                    Some candidate
-            else
-                None
-
-        windowed |> Array.choose chooser |> Array.tryHead
-
-    // find 2 entries of same line in cpath
-    let private getCandidateSameLine (cpath: GraphNode[]) (graphNodes: GraphNode[]) (choosen: Candidate list) =
-        let groups = cpath |> Array.groupBy (fun p -> getLineOfGraphNode p)
-
-        match groups |> Array.tryFind (fun (_, l) -> l.Length >= 2) with
-        | Some((imcode, line), l) ->
-            let fromNode = l.[0].Edges.[0].Node
-            let toNode = l.[1].Node
-
-            let fromIndex = cpath |> Array.findIndex (fun n -> n.Edges.[0].Node = fromNode)
-
-            let toIndex = cpath |> Array.findIndex (fun n -> n.Node = toNode)
-
-            let nodesBetween =
-                cpath |> Array.skip (fromIndex + 1) |> Array.take (toIndex - (fromIndex + 1))
-
-            let length = lengthOfPath nodesBetween
-
-            if length > 0 && length < 50.0 && fromNode <> toNode then
-                let candidate = ("CandidateSameLine", imcode, line, fromNode, toNode)
-
-                if choosen |> List.contains candidate then
-                    None
-                else
-                    Some candidate
-
-            else
-                None
-        | None -> None
-
-    let private getCandidateReplaceSmallEdge (cpath: GraphNode[]) (graphNodes: GraphNode[]) (choosen: Candidate list) =
-        let windowed = cpath |> Array.windowed 2
-
-        let chooser (xs: GraphNode[]) =
-            let edgeOfLast = xs[1].Edges.[0]
-            let edgeOfFirst = xs[0].Edges.[0]
-
-            if
-                edgeOfLast.Length < 10.0
-                && edgeOfLast.Length * 5.0 < edgeOfFirst.Length
-                && edgeOfLast.Line <> edgeOfFirst.Line
-            then
-                let candidate =
-                    ("CandidateReplaceSmallEdge",
-                     edgeOfFirst.Country,
-                     edgeOfFirst.Line,
-                     edgeOfFirst.Node,
-                     edgeOfLast.Node)
-
-                if choosen |> List.contains candidate then
-                    None
-                else
-                    Some candidate
-            else if edgeOfFirst.Length < 10.0 && edgeOfFirst.Length * 5.0 < edgeOfLast.Length then
-                let candidate =
-                    ("CandidateReplaceSmallEdge", edgeOfLast.Country, edgeOfLast.Line, xs[0].Node, edgeOfFirst.Node)
-
-                if choosen |> List.contains candidate then
-                    None
-                else
-                    Some candidate
-            else
-                None
-
-        windowed |> Array.choose chooser |> Array.tryHead
-
-    let private getLastEdge (cpath: GraphNode[]) =
-        (cpath |> Array.last).Edges |> Array.last
-
-    let private getLastNode (cpath: GraphNode[]) = (getLastEdge cpath).Node
-
-    let private getCandidateSameLineToLastNode
-        (cpath: GraphNode[])
-        (graphNodes: GraphNode[])
-        (choosen: Candidate list)
-        =
-        if cpath.Length > 2 then
-            let lastNode = getLastNode cpath
-
-            let lineOfLastNode =
-                match graphNodes |> Array.tryFind (fun n -> n.Node = lastNode) with
-                | Some n -> n.Edges |> Array.map (fun e -> e.Country, e.Line)
-                | None -> [||]
-
-            match
-                cpath
-                |> Array.take (cpath.Length - 1)
-                |> Array.tryFind (fun n -> lineOfLastNode |> Array.contains (n.Edges.[0].Country, n.Edges.[0].Line))
-            with
-            | Some node ->
-                let candidate =
-                    ("CandidateSameLineToLastNode", node.Edges.[0].Country, node.Edges.[0].Line, node.Node, lastNode)
-
-                if choosen |> List.contains candidate then
-                    None
-                else
-                    Some candidate
-            | None -> None
-        else
-            None
-
-    let private getCandidateSameLineToFirstNode
-        (cpath: GraphNode[])
-        (graphNodes: GraphNode[])
-        (choosen: Candidate list)
-        =
-        if cpath.Length > 2 then
-            let firstNode = cpath.[0].Node
-
-            let existsEdgeToFirstNode (imcode: string) (line: string) =
-                match graphNodes |> Array.tryFind (fun n -> n.Node = firstNode) with
-                | Some n -> n.Edges |> Array.exists (fun e -> e.Country = imcode && e.Line = line)
-                | None -> false
-
-            match
-                cpath
-                |> Array.skip 1
-                |> Array.take (System.Math.Min(cpath.Length - 1, 4))
-                |> Array.tryFind (fun n -> existsEdgeToFirstNode n.Edges[0].Country n.Edges[0].Line)
-            with
-            | Some n ->
-                let candidate =
-                    ("CandidateSameLineToFirstNode", n.Edges[0].Country, n.Edges[0].Line, firstNode, n.Edges[0].Node)
-
-                if choosen |> List.contains candidate then
-                    None
-                else
-                    Some candidate
-            | None -> None
-        else
-            None
-
-    let private getCompactifyCandidate (path: GraphNode[]) (graphNodes: GraphNode[]) (choosen: Candidate list) =
-        let cpath = getCompactPath path
-
-        if cpath.Length > 1 then
-            [| getCandidateSameLine
-               getCandidateFirstNodeToSameLine
-               getCandidateReplaceSmallEdge
-               getCandidateSameLineToLastNode
-               getCandidateSameLineToFirstNode |]
-            |> Array.tryPick (fun s -> s cpath graphNodes choosen)
-        else
-            None
-
-    let private tryCompactifyPath (path: GraphNode[]) (graphNodes: GraphNode[]) (choosen: Candidate list) =
-        match getCompactifyCandidate path graphNodes choosen with
-        | Some candidate ->
-            let (s, imcode, line, fromNode, toNode) = candidate
-
-            let graphNodesOfLine = getGraphNodesOfLine imcode line graphNodes
-
-            let spath = getShortestPath graphNodesOfLine [| fromNode; toNode |]
-
-            if spath.Length > 0 then
-
-                let lengthOfCompactPath = lengthOfPath spath
-                let costOfCompactPath = costOfPath spath
-
-                let fromIndex = path |> Array.tryFindIndex (fun n -> n.Edges.[0].Node = fromNode)
-
-                let toIndex = path |> Array.tryFindIndex (fun n -> n.Node = toNode)
-
-                let isPathFromFirstNode = spath.[0].Node = path.[0].Node
-
-                let isPathToLastNode = (getLastNode path) = (getLastNode spath)
-
-                let pathParts =
-                    match fromIndex, toIndex, isPathFromFirstNode, isPathToLastNode with
-                    | Some fromIndex, Some toIndex, _, _ ->
-                        let n1 = path |> Array.take (fromIndex + 1)
-                        let n2 = path |> Array.skip (fromIndex + 1) |> Array.take (toIndex - fromIndex)
-                        let n3 = path |> Array.skip toIndex
-                        Some(n1, n2, n3)
-                    | Some fromIndex, None, _, true ->
-                        let n1 = path |> Array.take (fromIndex + 1)
-                        let n2 = path |> Array.skip (fromIndex + 1)
-                        Some(n1, n2, [||])
-                    | None, Some toIndex, true, _ ->
-                        let n2 = path |> Array.take toIndex
-                        let n3 = path |> Array.skip toIndex
-                        Some([||], n2, n3)
-                    | None, None, true, true -> Some([||], path, [||])
-                    | _ ->
-                        if verbose then
-                            printfn "unexpected candidate failure %s, line %s, from %s, to %s" s line fromNode toNode
-
-                        None
-
-                match pathParts with
-                | Some(left, middle, right) ->
-                    let lengthOfOrigPath = lengthOfPath middle
-                    let costOfOrigPath = costOfPath middle
-
-                    let costRatio =
-                        if costOfOrigPath > 0 then
-                            (float costOfCompactPath) / (float costOfOrigPath)
-                        else
-                            1.0
-
-                    let lengthRatio =
-                        if lengthOfOrigPath > 0 then
-                            (float lengthOfCompactPath) / (float lengthOfOrigPath)
-                        else
-                            1.0
-
-                    if verbose then
-                        printfn
-                            "candidate %s, line %s, from %s, to %s, costRatio %.3f, lengthRatio %.3f, lengthOfCompactPath %.3f"
-                            s
-                            line
-                            fromNode
-                            toNode
-                            costRatio
-                            lengthRatio
-                            lengthOfCompactPath
-
-                    if costRatio < 1.2 || lengthRatio < 1.2 || lengthOfCompactPath < 5.0 then
-                        Some(Array.concat [ left; spath; right ], candidate)
-                    else
-                        None
-                | None -> None
-            else
-                if verbose then
-                    printfn "failed candidate %s, line %s, from %s, to %s" s line fromNode toNode
-
-                Some(path, candidate)
-        | None -> None
-
-    /// path with sligthly more costs (at most 20%) but fewer lines
-    let compactifyPath (path: GraphNode[]) (graphNodes: GraphNode[]) =
-        let lengthOfOrigPath = lengthOfPath path
-
-        let rec multiCompactifyPath path graphNodes maxDepth choosen =
-            if verbose then
-                printfn "multiCompactifyPath, maxDepth %d" maxDepth
-
-            match tryCompactifyPath path graphNodes choosen with
-            | Some(cpath, candidate) ->
-                let pathlen = System.Math.Abs(lengthOfOrigPath - (lengthOfPath cpath))
-
-                if pathlen < 15.0 then
-                    if maxDepth > 0 then
-                        multiCompactifyPath cpath graphNodes (maxDepth - 1) (candidate :: choosen)
-                    else
-                        cpath
-                else
-                    if verbose then
-                        printfn
-                            "candidate path length incr %.3f"
-                            (System.Math.Abs(lengthOfOrigPath - (lengthOfPath cpath)))
-
-                    path
-            | _ ->
-                if verbose then
-                    printfn "tryCompactifyPath found none"
-
-                path
-
-        multiCompactifyPath path graphNodes 9 []
-
     let private enhancePathNodeWithMaxSpeed (n: GraphNode) (graphNodes: GraphNode[]) =
         let imcode = n.Edges.[0].Country
         let line = n.Edges.[0].Line
@@ -796,3 +500,183 @@ module Graph =
                 (lonlats)
         else
             ""
+
+/// edge in multi objective graph
+type MoGraphEdge =
+    { Node: string
+      LineCost: int
+      DistanceCost: int
+      Line: string
+      Country: string
+      MaxSpeed: int
+      Electrified: bool
+      StartKm: float
+      EndKm: float
+      Length: float }
+
+/// node in multi objective graph
+type MoGraphNode = { Node: string; Edges: MoGraphEdge[] }
+
+module MoGraph =
+    let toMoNodeName (node: string) (country: string) (line: string) : string = $"{node}/{country}/{line}"
+
+    let fromMoNodeName (node: string) : (string * string * string) option =
+        match node.Split [| '/' |] with
+        | [| node; country; line |] -> Some(node, country, line)
+        | _ -> None
+
+    let toGraphNodePath (g: MoGraphNode array) (nodes: (uint32 * (uint32 array)) array) : GraphNode array =
+        let toGraphEdge
+            (edges: MoGraphEdge array)
+            (moName: string)
+            (n: string)
+            (cost: int)
+            (line: string)
+            (country: string)
+            : GraphEdge option =
+            edges
+            |> Array.tryFind (fun edge -> edge.Node = moName && edge.Line = line)
+            |> Option.bind (fun edge ->
+                Some
+                    { Node = n
+                      Cost = cost
+                      Line = line
+                      Country = country
+                      MaxSpeed = edge.MaxSpeed
+                      Electrified = edge.Electrified
+                      StartKm = edge.StartKm
+                      EndKm = edge.EndKm
+                      Length = edge.Length })
+
+        nodes
+        |> Array.map (fun (n, c) -> g[int n], c[1])
+        |> Array.filter (fun (node, _) -> fromMoNodeName node.Node |> Option.isSome)
+        |> Array.pairwise
+        |> Array.choose (fun ((n1, c1), (n2, c2)) ->
+            match fromMoNodeName n1.Node, fromMoNodeName n2.Node with
+            | Some(fst, _, lFst), Some(snd, country, lSnd) ->
+                if lFst = lSnd then
+                    toGraphEdge n1.Edges n2.Node snd (int (c2 - c1)) lSnd country
+                    |> Option.bind (fun edge -> Some({ Node = fst; Edges = [| edge |] }: GraphNode))
+                else
+                    None
+            | _, _ -> None)
+
+    // three nodes are generated in the multi objective graph of type MoGraphNode[]
+    // for every edge n1 -> line -> n2 with cost c in the graph of type GraphNode[]
+    // 1) n1             -> line -> n1/contry/line with cost (10,0)
+    // 2) n1/contry/line -> line -> n2/contry/line with cost (0,c)
+    // 3) n2/contry/line -> line -> n2             with cost (10,0)
+    let toMoGraphNodes (node: string) (edge: GraphEdge) : MoGraphNode array =
+        [| { Node = node
+             Edges =
+               [| { Node = toMoNodeName node edge.Country edge.Line
+                    LineCost = 10
+                    DistanceCost = 0
+                    Line = edge.Line
+                    Country = edge.Country
+                    MaxSpeed = 0
+                    Electrified = false
+                    StartKm = 0
+                    EndKm = 0
+                    Length = 0 } |] }
+           { Node = toMoNodeName node edge.Country edge.Line
+             Edges =
+               [| { Node = toMoNodeName edge.Node edge.Country edge.Line
+                    LineCost = 0
+                    DistanceCost = edge.Cost
+                    Line = edge.Line
+                    Country = edge.Country
+                    MaxSpeed = edge.MaxSpeed
+                    Electrified = edge.Electrified
+                    StartKm = edge.StartKm
+                    EndKm = edge.EndKm
+                    Length = edge.Length } |] }
+           { Node = toMoNodeName edge.Node edge.Country edge.Line
+             Edges =
+               [| { Node = edge.Node
+                    LineCost = 10
+                    DistanceCost = 0
+                    Line = edge.Line
+                    Country = edge.Country
+                    MaxSpeed = 0
+                    Electrified = false
+                    StartKm = 0
+                    EndKm = 0
+                    Length = 0 } |] } |]
+
+    let toMoGraph (g: GraphNode array) : MoGraphNode array =
+        let map: Map<string, MoGraphEdge[]> =
+            g
+            |> Array.fold
+                (fun acc node ->
+                    node.Edges
+                    |> Array.fold
+                        (fun acc edge ->
+                            toMoGraphNodes node.Node edge
+                            |> Array.fold
+                                (fun acc n' ->
+                                    match acc.TryGetValue n'.Node with
+                                    | true, edges ->
+                                        if edges |> Array.exists (fun e -> e = n'.Edges[0]) then
+                                            acc
+                                        else
+                                            acc.Change(
+                                                n'.Node,
+                                                (fun edges ->
+                                                    match edges with
+                                                    | Some edges -> Some(Array.append edges [| n'.Edges[0] |])
+                                                    | None -> None)
+                                            )
+                                    | false, _ -> acc.Add(n'.Node, n'.Edges))
+                                acc)
+                        acc)
+                (Map<string, MoGraphEdge[]>([]))
+
+        map.Keys
+        |> Seq.toArray
+        |> Array.map (fun node -> { Node = node; Edges = map[node] })
+
+    let toMap (g: MoGraphNode array) : Map<string, int> =
+        g
+        |> Array.mapi (fun i n -> i, n)
+        |> Array.fold (fun acc (i, node) -> acc.Change(node.Node, (fun _ -> Some i))) (Map<string, int>([]))
+
+    let toArcs (g: MoGraphNode array) : (int * int * int * int) array =
+        let g' = g |> Array.mapi (fun i n -> i, n)
+        let map = toMap g
+
+        g'
+        |> Array.fold
+            (fun acc (i, node) ->
+                node.Edges
+                |> Array.fold
+                    (fun acc edge ->
+                        let arc: (int * int * int * int) =
+                            i, map[edge.Node], edge.LineCost, edge.DistanceCost
+
+                        arc :: acc)
+                    acc)
+            []
+        |> List.toArray
+
+    type Solution = { Cost: int; Path: GraphNode array }
+
+    let getShortestPath (g: GraphNode array) (source: string) (target: string) (maxSolutions: int) : Solution array =
+        let g = toMoGraph g
+
+        let arcs =
+            toArcs g
+            |> Array.mapi (fun i (f, t, c1, c2) -> uint32 f, TMosp.Arc(uint32 t, [| uint32 c1; uint32 c2 |], uint32 i))
+
+        let map = toMap g
+
+        match map.TryGetValue source, map.TryGetValue target with
+        | (true, source), (true, target) ->
+            TMosp.Api.fromArcs (arcs, uint32 source, uint32 target, maxSolutions)
+            |> Array.map (fun arr ->
+                let cost = (snd arr[arr.Length - 1])[1]
+
+                { Cost = int cost
+                  Path = toGraphNodePath g arr })
+        | _, _ -> [||]

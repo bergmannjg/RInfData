@@ -24,5 +24,6 @@ Installation in JavaScript project:
 * [ERAKGLoader](src/EraKGLoader): loads the data via the knowledge graph.
 * [RInfQuery](src/RInfQuery): query cached data.
 * [RInfGraph](src/RInfGraph): finds shortest path between operational points
+* [TargetedMosp](src/TargetedMosp): the multiobjective Dijkstra algorithm
 * [RInfGraphWeb](src/RInfGraphWeb): RInfGraph web app
 * [OSMComparison](src/OSMComparison): compares RInf data with OSM data.

@@ -9,6 +9,10 @@
     <PackageReference Include="Fable.Promise" Version="2.0.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="../../TargetedMosp/target.javascript.dim.2/TargetedMosp.fable.fsproj"/>
+  </ItemGroup>
+
   <PropertyGroup>
     <DefineConstants>FABLE_COMPILER</DefineConstants>
   </PropertyGroup>

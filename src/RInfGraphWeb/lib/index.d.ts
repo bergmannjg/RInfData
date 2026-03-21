@@ -45,6 +45,7 @@ export interface Metadata {
     Revision: string;
     Program: string;
     Countries: string[];
+    CountriesPrefLabel: string[];
     Date: string
 }
 
@@ -60,6 +61,7 @@ export interface OpType {
 }
 
 export function rinfFindPath(ids: string[], isCompactifyPath: boolean): GraphNode[];
+export function rinfFindMoPath(source: string, target: string, maxExtraCostInProcent: number): GraphNode[];
 export function rinfFindPathOfLine(ine: string, country: string): GraphNode[];
 export function rinfFindTunnelsOfLine(line: string, country: string): TunnelInfo[];
 export function rinfToCompactPath(path: GraphNode[]): GraphNode[];

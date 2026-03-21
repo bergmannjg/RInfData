@@ -164,11 +164,14 @@ module Api =
         let private countriesQuery () =
             $"""
                 PREFIX era: <http://data.europa.eu/949/>
+                PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
 
-                SELECT distinct ?country
+                SELECT distinct ?country ?label
                 WHERE {{
                   ?operationalPoint a era:OperationalPoint .
                   ?operationalPoint era:inCountry ?country .
+                  ?country skos:prefLabel ?label.
+              	  FILTER(lang(?label) = "en")                
                 }}
             """
 
@@ -178,9 +181,9 @@ module Api =
                 return JsonSerializer.Deserialize data
             }
 
-        let fromQueryResults (sparql: QueryResults) : string[] =
+        let fromQueryResults (sparql: QueryResults) : (string* string)[] =
             sparql.results.bindings
-            |> Array.map (fun b -> Properties.toCountryType b.["country"])
+            |> Array.map (fun b -> Properties.toCountryType b.["country"], Properties.toLiteral b.["label"])
 
         let toCountryCondition (item: string) (countries: string[]) : string =
             countries

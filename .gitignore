@@ -40,3 +40,4 @@ src/RInfGraphWeb/wwwroot/js/site.js
 src/RInfGraphWeb/lib/index.js
 src/RInfGraphWeb/lib/OpTypes.json
 src/RInfGraphWeb/lib/RInfOsmMatchings.json
+instances/
