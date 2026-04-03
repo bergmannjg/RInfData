@@ -254,7 +254,26 @@ module Graph =
     let getPathOfLineFromGraph (g: GraphNode[]) (graph: Map<string, Dijkstra.Vertex<string>>) (line: LineInfo) =
 #endif
         let graphNodesOfLine = getGraphNodesOfLine line.Country line.Line g
-        getShortestPath graphNodesOfLine line.UOPIDs
+        let path = getShortestPath graphNodesOfLine line.UOPIDs
+
+        // change inconsistent data
+        if
+            0 < path.Length
+            && 1 = path[0].Edges.Length
+            && 0.0 = path[0].Edges[0].Length
+            && 0.0 = path[0].Edges[0].StartKm
+        then
+            Array.set
+                path
+                0
+                { path[0] with
+                    Edges =
+                        [| { path[0].Edges[0] with
+                               StartKm = path[0].Edges[0].EndKm } |] }
+
+            path
+        else
+            path
 
     let getPathOfLine (g: GraphNode[]) (line: LineInfo) =
         getPathOfLineFromGraph g (toGraph g) line
@@ -662,21 +681,19 @@ module MoGraph =
 
     type Solution = { Cost: int; Path: GraphNode array }
 
-    let getShortestPath (g: GraphNode array) (source: string) (target: string) (maxSolutions: int) : Solution array =
-        let g = toMoGraph g
-
+    let getShortestPathFromGraph g arcs (map: Map<string, int>) source target maxSolutions : Solution array =
         let arcs =
-            toArcs g
+            arcs
             |> Array.mapi (fun i (f, t, c1, c2) -> uint32 f, TMosp.Arc(uint32 t, [| uint32 c1; uint32 c2 |], uint32 i))
-
-        let map = toMap g
 
         match map.TryGetValue source, map.TryGetValue target with
         | (true, source), (true, target) ->
             TMosp.Api.fromArcs (arcs, uint32 source, uint32 target, maxSolutions)
             |> Array.map (fun arr ->
-                let cost = (snd arr[arr.Length - 1])[1]
-
-                { Cost = int cost
+                { Cost = int ((snd arr[arr.Length - 1])[1])
                   Path = toGraphNodePath g arr })
         | _, _ -> [||]
+
+    let getShortestPath (g: GraphNode array) (source: string) (target: string) (maxSolutions: int) : Solution array =
+        let g = toMoGraph g
+        getShortestPathFromGraph g (toArcs g) (toMap g) source target maxSolutions

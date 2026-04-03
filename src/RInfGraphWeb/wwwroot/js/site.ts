@@ -1,4 +1,4 @@
-﻿import { GraphNode, rinfOsmMatchings, rinfOpTypes, rinfFindMoPath, rinfFindPathOfLine, rinfFindTunnelsOfLine, rinfGetBRouterUrls, rinfToCompactPath, rinfGetOpInfos, rinfMetadata, Metadata, OpInfo, TunnelInfo, OpType } from "./lib/bundle.js";
+﻿import { GraphNode, Matching, rinfOsmMatchings, rinfOpTypes, rinfFindMoPath, rinfFindPathOfLine, rinfFindTunnelsOfLine, rinfGetBRouterUrls, rinfToCompactPath, rinfGetOpInfo, rinfGetOpInfos, rinfMetadata, Metadata, OpInfo, TunnelInfo, OpType } from "./lib/bundle.js";
 
 interface PathItem {
     fromId: string;
@@ -6,7 +6,11 @@ interface PathItem {
     line: string;
     maxSpeed: number;
     startKm: number;
+    startLon?: number;
+    startLat?: number;
     endKm: number;
+    endLon?: number;
+    endLat?: number;
     length: number;
     cost: number;
 }
@@ -56,9 +60,13 @@ const findPathOfLine = (line: string, country: string): PathResult => {
         console.log(x);
         if (!!x.Node && !!x.Edges) {
             cost = cost + x.Edges[0].Cost;
+            const startOpInfo = rinfGetOpInfo(x.Node);
+            const endOpInfo = rinfGetOpInfo(x.Edges[0].Node);
             arr.push({
                 fromId: x.Node, toId: x.Edges[0].Node, line: x.Edges[0].Line,
-                maxSpeed: x.Edges[0].MaxSpeed, startKm: x.Edges[0].StartKm, endKm: x.Edges[0].EndKm, length: x.Edges[0].Length, cost: cost
+                maxSpeed: x.Edges[0].MaxSpeed, startKm: x.Edges[0].StartKm, startLat: startOpInfo?.Latitude, startLon: startOpInfo?.Longitude,
+                endKm: x.Edges[0].EndKm, endLat: endOpInfo?.Latitude, endLon: endOpInfo?.Longitude,
+                length: x.Edges[0].Length, cost: cost
             })
         }
     });
@@ -104,7 +112,7 @@ function createTextEnd(text: string): HTMLElement {
     return div;
 }
 
-function createOptions(options: string[], id: string): HTMLElement {
+function createOptions(options: string[], id: string, selected?: string): HTMLElement {
     const select = document.createElement("select");
     const clsAttr = document.createAttribute("class");
     clsAttr.value = "form-select";
@@ -115,8 +123,12 @@ function createOptions(options: string[], id: string): HTMLElement {
     options.forEach(name => {
         const option = document.createElement("option");
         const valueAttr = document.createAttribute("value");
-        valueAttr.value = name;
         option.setAttributeNode(valueAttr);
+        valueAttr.value = name;
+        if (name === selected) {
+            const selectedAttr = document.createAttribute("selected");
+            option.setAttributeNode(selectedAttr);
+        }
         option.textContent = name;
         select.add(option);
     });
@@ -181,7 +193,7 @@ function stringCompare(a: string, b: string) {
 export function displayCountryOptions(idCountryOptions: string, idInputCountry: string) {
     const div = document.getElementById(idCountryOptions) as HTMLDivElement;
     const data = rinfMetadata();
-    const options = createOptions(data.Countries.sort(stringCompare), idInputCountry);
+    const options = createOptions(data.Countries.sort(stringCompare), idInputCountry, "DEU");
     div.append(options);
 }
 
@@ -217,9 +229,9 @@ function getCenter(latitudes: number[], longitudes: number[]): number[] {
     return [latitude, longitude];
 }
 
-function getBRouterUrlOfLocations(latitude1: number, longitude1: number, latitude2: number, longitude2: number, info: string) {
+function getBRouterUrlOfLocations(latitude1: number, longitude1: number, latitude2: number, longitude2: number, info1: string, info2?: string) {
     const latlon = getCenter([latitude1, latitude2], [longitude1, longitude2])
-    const pois = longitude1 + ',' + latitude1 + ',' + info + ';' + longitude2 + ',' + latitude2 + ',' + info;
+    const pois = longitude1 + ',' + latitude1 + ',' + info1 + ';' + longitude2 + ',' + latitude2 + ',' + (info2 ?? info1);
     return 'https://brouter.de/brouter-web/#map=13/' + latlon[0] + '/' + latlon[1]
         + '/osm-mapnik-german_style&pois=' + pois;
 }
@@ -229,7 +241,7 @@ function getOrmUrlOfLocation(latitude: number, longitude: number) {
 }
 
 function getOverpassUrlOfLocation(op: OpInfo) {
-    return 'https://overpass-turbo.eu/?Q=node[railway~"stop|halt|station"](around:1000,' + op.Latitude + ',' + op.Longitude + ');out;';
+    return 'https://overpass-turbo.eu/?Q=nw[railway~"stop|halt|station|signal_box"](around:1000,' + op.Latitude + ',' + op.Longitude + ');(._;>;);out;';
 }
 
 function getOsmUrlOfLocation(op: OpInfo) {
@@ -309,12 +321,13 @@ export function lookupLocations(inputLocation: string, inputUPID: string) {
 
 export function lookupOsmComparison() {
     var tableSummary = document.getElementById("result-summary-osm-comparison");
+    var tableOsmTags = document.getElementById("result-usage-osm-tags");
     var tableLocations = document.getElementById("result-locations-osm-comparison");
     if (tableSummary && tableLocations) {
         removeChilds(tableSummary);
         removeChilds(tableLocations);
         const total = rinfOsmMatchings().length;
-        const found = rinfOsmMatchings().filter(m => m.OsmUrl).length;
+        const found = rinfOsmMatchings().filter(m => !!m.OsmUrl).length;
         addRow(tableSummary, ["Total (DE)", createTextEnd(total.toFixed(0))]);
         addRow(tableSummary, ["OSM data found", createTextEnd(found.toFixed(0))]);
         addRow(tableSummary, ["OSM data not found", createTextEnd((total - found).toFixed(0))]);
@@ -347,6 +360,13 @@ export function lookupOsmComparison() {
                     createElemsInSpan([url1, url2, url3, url4])]);
             }
         });
+        const tagUsage = Object.entries(Object.groupBy(rinfOsmMatchings().filter(m => !!m.OsmRailwayTag), m => m.OsmRailwayTag ?? ""));
+        tagUsage.sort((a,b)=> (b[1]??[]).length - (a[1]??[]).length);
+        for (const [key, value] of tagUsage) {
+            if (tableOsmTags && value) {
+                addRow(tableOsmTags, [key, value.length.toString()]);
+            }
+        }
     }
 }
 
@@ -397,7 +417,11 @@ export function lookupLine(inputLine: string, inputCountry: string) {
                 if (tablePath) {
                     addRow(tablePath, [createUrl(rinfGetLocationUrlOfUOPID(x.fromId), x.fromId, getTooltipOfId(x.fromId)),
                     createUrl(rinfGetLocationUrlOfUOPID(x.toId), x.toId, getTooltipOfId(x.toId)), createTextEnd(x.maxSpeed.toFixed(0)),
-                    createTextEnd(x.startKm.toFixed(3)), createTextEnd(x.endKm.toFixed(3)), createTextEnd(x.length.toFixed(3)),
+                    (x.startLat && x.startLon && x.endLat && x.endLon)
+                        ? createUrl(getBRouterUrlOfLocations(x.startLat, x.startLon, x.endLat, x.endLon, x.fromId, x.toId),
+                            x.startKm?.toFixed(3) + ' bis ' + x.endKm?.toFixed(3))
+                        : (x.startKm?.toFixed(3) + ' bis ' + x.endKm?.toFixed(3)),
+                    createTextEnd(x.length.toFixed(3)),
                     createTextEnd(x.cost.toFixed(0))])
                 }
             });

@@ -87,11 +87,10 @@ let private loadPaged<'T>
 let loadQueryResultsPaged (loader: (int -> int -> Async<QueryResults>)) : Async<QueryResults> =
     loadPaged 10000 loader QueryResults.fold QueryResults.length
 
-let kilometerOfLine (op: OperationalPoint) (line: string) =
+let kilometerOfLine (op: OperationalPoint) (line: string) : float option =
     op.RailwayLocations
     |> Array.tryFind (fun loc -> loc.NationalIdentNum = line)
     |> Option.map (fun loc -> loc.Kilometer)
-    |> Option.defaultValue 0.0
 
 let findOp ops opId =
     ops |> Array.find (fun op -> op.UOPID = opId)
@@ -151,19 +150,22 @@ let getLineInfo
                    |> Array.exists (fun (c, p) -> c = country && r.Wikipedia.StartsWith p))
             |> Option.map (fun r -> r.Wikipedia)
 
-        Some
-            { Line = line
-              Country = country
-              Name = name
-              Length =
-                nodesOfLine
-                |> List.sumBy (fun sol -> if sol.Edges.Length > 0 then sol.Edges.[0].Length else 0.0)
-                |> fun d -> Math.Truncate(d * 10.0) / 10.0
-              StartKm = kilometerOfLine firstOp line
-              EndKm = kilometerOfLine lastOp line
-              UOPIDs = uOPIDs
-              Tunnels = tunnelsOfLine
-              Wikipedia = wikipedia }
+        match kilometerOfLine firstOp line, kilometerOfLine lastOp line with
+        | Some startKm, Some endKm ->
+            Some
+                { Line = line
+                  Country = country
+                  Name = name
+                  Length =
+                    nodesOfLine
+                    |> List.sumBy (fun sol -> if sol.Edges.Length > 0 then sol.Edges.[0].Length else 0.0)
+                    |> fun d -> Math.Truncate(d * 10.0) / 10.0
+                  StartKm = startKm
+                  EndKm = endKm
+                  UOPIDs = uOPIDs
+                  Tunnels = tunnelsOfLine
+                  Wikipedia = wikipedia }
+        | _, _ -> None
     | _ -> None
 
 let buildLineInfo
@@ -183,25 +185,30 @@ let buildLineInfo
 
     let solsOfLine =
         nodes
-        |> Array.filter (fun sol ->
-            sol.Edges
+        |> Array.filter (fun node ->
+            node.Edges
             |> Array.exists (fun e -> e.Line = line && e.Country = country && e.StartKm < e.EndKm))
-        |> Array.map (fun sol ->
-            { sol with
+        |> Array.map (fun node ->
+            { node with
                 Edges =
-                    sol.Edges
+                    node.Edges
                     |> Array.filter (fun e -> e.Line = line && e.Country = country && e.StartKm < e.EndKm) })
         |> Array.sortBy (fun n -> n.Edges.[0].StartKm)
 
     let getFirstNodes (solsOfLine: GraphNode[]) =
         solsOfLine
-        |> Array.filter (fun solX -> not (solsOfLine |> Array.exists (fun solY -> solX.Node = solY.Edges.[0].Node)))
+        |> Array.filter (fun solX ->
+            not (
+                solsOfLine
+                |> Array.exists (fun solY -> solY.Edges |> Array.exists (fun edge -> edge.Node = solX.Node))
+            ))
 
     let firstNodes = getFirstNodes solsOfLine
 
     let rec getNextNodes (solsOfLine: GraphNode[]) (startSol: GraphNode) (nextNodes: GraphNode list) : GraphNode list =
         let nextNode =
-            solsOfLine |> Array.tryFind (fun sol -> sol.Node = startSol.Edges.[0].Node)
+            solsOfLine
+            |> Array.tryFind (fun sol -> startSol.Edges |> Array.exists (fun edge -> edge.Node = sol.Node))
 
         match nextNode with
         | Some nextNode -> getNextNodes solsOfLine nextNode (nextNode :: nextNodes)
@@ -396,35 +403,38 @@ let buildGraph (ops: OperationalPoint[]) (sols: SectionOfLine[]) : GraphNode arr
             let currLength = Math.Round(getLength sol, 2)
             let cost = getCost currLength maxSpeed
 
-            graph <-
-                graph.Add(
-                    opStart.UOPID,
-                    { Node = opEnd.UOPID
-                      Cost = cost
-                      Line = sol.LineIdentification
-                      Country = sol.Country
-                      MaxSpeed = maxSpeed
-                      Electrified = isElectrified sol
-                      StartKm = kilometerOfLine opStart sol.LineIdentification
-                      EndKm = kilometerOfLine opEnd sol.LineIdentification
-                      Length = currLength }
-                    :: graph.[opStart.UOPID]
-                )
+            match kilometerOfLine opStart sol.LineIdentification, kilometerOfLine opEnd sol.LineIdentification with
+            | Some startKm, Some endKm ->
+                graph <-
+                    graph.Add(
+                        opStart.UOPID,
+                        { Node = opEnd.UOPID
+                          Cost = cost
+                          Line = sol.LineIdentification
+                          Country = sol.Country
+                          MaxSpeed = maxSpeed
+                          Electrified = isElectrified sol
+                          StartKm = startKm
+                          EndKm = endKm
+                          Length = currLength }
+                        :: graph.[opStart.UOPID]
+                    )
 
-            graph <-
-                graph.Add(
-                    opEnd.UOPID,
-                    { Node = opStart.UOPID
-                      Cost = cost
-                      Line = sol.LineIdentification
-                      Country = sol.Country
-                      MaxSpeed = maxSpeed
-                      Electrified = isElectrified sol
-                      StartKm = kilometerOfLine opEnd sol.LineIdentification
-                      EndKm = kilometerOfLine opStart sol.LineIdentification
-                      Length = currLength }
-                    :: graph.[opEnd.UOPID]
-                )
+                graph <-
+                    graph.Add(
+                        opEnd.UOPID,
+                        { Node = opStart.UOPID
+                          Cost = cost
+                          Line = sol.LineIdentification
+                          Country = sol.Country
+                          MaxSpeed = maxSpeed
+                          Electrified = isElectrified sol
+                          StartKm = endKm
+                          EndKm = startKm
+                          Length = currLength }
+                        :: graph.[opEnd.UOPID]
+                    )
+            | _, _ -> ()
         | _ -> fprintfn stderr "addSol, not found %A or %A" sol.StartOP sol.EndOP
 
     ops |> Array.iter addOp
@@ -445,32 +455,25 @@ let optCreateIsDir (path: string) =
     if not (checkIsDir path) then
         Directory.CreateDirectory path |> ignore
 
-let allowedCountries =
-    "EST;GRC;DEU;NLD;BEL;LUX;FRA;POL;LVA;HRV;HUN;FIN;SVN;ESP;BGR;AUT;ITA;NOR;SWE;DNK;ROU;SVK;CZE;CHE;GBR;PRT"
+let countries = JsonSerializer.Deserialize<Country[]> Api.Country.Cache
 
 let countrySplitChars = [| ';' |]
 
-let testIsCountry (countries: string) : bool =
-    let allCountries = allowedCountries.Split countrySplitChars
+let testIsCountry (scountries: string) : bool =
+    scountries.Split countrySplitChars
+    |> Array.forall (fun country -> countries |> Array.exists (fun c -> c.Code = country))
 
-    countries.Split countrySplitChars
-    |> Array.forall (fun country -> allCountries |> Array.contains country)
-
-let checkIsCountry (path: string) (countries: string[]) : Async<string[]> =
+let checkIsCountry (path: string) (countryCodes: string[]) : Async<string[]> =
     async {
 
-        let! result = loadDataCached path "sparql-countries.json" (fun () -> Api.Country.loadData ())
-
-        let allCountries = Api.Country.fromQueryResults result |> Array.map fst
-
         let isCountry =
-            countries
-            |> Array.forall (fun country -> allCountries |> Array.contains country)
+            countryCodes
+            |> Array.forall (fun country -> countries |> Array.exists (fun c -> c.Code = country))
 
         if not isCountry then
-            raise (System.ArgumentException($"unkown country {countries}, should be one of '{allowedCountries}'"))
+            raise (System.ArgumentException $"unkown country {countryCodes}, should be one of '{countryCodes}'")
 
-        return countries
+        return countryCodes
     }
 
 let getCountries () : Async<string> =
@@ -480,7 +483,7 @@ let getCountries () : Async<string> =
 
         let allCountries = Api.Country.fromQueryResults result
 
-        return String.concat ";" (allCountries |> Array.map (fun c -> $"({fst c},{snd c})"))
+        return JsonSerializer.Serialize allCountries
     }
 
 let getOpTypes () : Async<string> =
@@ -492,11 +495,11 @@ let getOpTypes () : Async<string> =
         return JsonSerializer.Serialize opTypes
     }
 
-let getOsmRoutesFrom (loader: string -> Async<string>) : Async<OSM.Sparql.Entry[]> =
+let getOsmRoutesFrom (loader: unit -> Async<string>) : Async<OSM.Sparql.Entry[]> =
     async {
 
         try
-            let! result = loader EraKG.Request.applicationSparqlResults
+            let! result = loader ()
 
             return OSM.Sparql.Api.fromQueryResults (JsonSerializer.Deserialize<QueryResults>(result))
         with e ->
@@ -634,29 +637,26 @@ let execTracksBuild (path: string) (countries: string[]) : Async<string> =
         return ""
     }
 
-let execMetadataBuild (path: string) (countries: string[])  : Async<string> =
+let execMetadataBuild (path: string) (countryCodes: string[]) : Async<string> =
     async {
-        let! result = loadDataCached path "sparql-countries.json" (fun () -> Api.Country.loadData ())
-
         let countriesPrefLabel =
-            Api.Country.fromQueryResults result
-            |> Array.filter (fun c -> countries |> Array.contains (fst c))
-            |> Array.map snd
+            countries
+            |> Array.filter (fun c -> countryCodes |> Array.contains c.Code)
+            |> Array.map _.Label
 
         fprintfn stderr $"buildMetadata  {DateTime.Now}"
 
         let metadata: Metadata =
             { Endpoint = "https://data-interop.era.europa.eu/endpoint"
               Ontology = "https://data-interop.era.europa.eu/era-vocabulary"
-              Revision = "v3.1.6"
+              Revision = "v3.2.0"
               Program = "https://github.com/bergmannjg/RInfData/tree/main/src/EraKGLoader"
-              Countries = countries
+              Countries = countryCodes
               CountriesPrefLabel = countriesPrefLabel
               Date = DateTime.Now }
 
         return JsonSerializer.Serialize metadata
     }
-
 
 let execBuild (path: string) (countries: string[]) (useCache: bool) : Async<string> =
     async {
@@ -691,7 +691,13 @@ let execBuild (path: string) (countries: string[]) (useCache: bool) : Async<stri
         File.WriteAllText(path + "TunnelInfos.json", result)
 
         fprintfn stderr $"getOsmRoutes"
-        let! result = getOsmRoutes ()
+
+        let! result =
+            if countries |> Array.contains "DEU" then
+                getOsmRoutes ()
+            else
+                async { return "[]" }
+
         File.WriteAllText(path + "OsmRoutes.json", result)
 
         fprintfn stderr $"execLineInfoBuild {now ()}"

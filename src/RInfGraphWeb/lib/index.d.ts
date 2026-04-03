@@ -52,6 +52,7 @@ export interface Metadata {
 export interface Matching {
     UOPID: string;
     OsmUrl?: string;
+    OsmRailwayTag?: string;
 }
 
 export interface OpType {
@@ -70,5 +71,6 @@ export function rinfGetBRouterUrls(arr: GraphNode[], compactifyPath: boolean): s
 export function rinfMetadata() : Metadata;
 export function rinfOsmMatchings(): Matching[];
 export function rinfOpTypes(): OpType[];
+export function rinfGetOpInfo(opid: string) : OpInfo | undefined;
 
 

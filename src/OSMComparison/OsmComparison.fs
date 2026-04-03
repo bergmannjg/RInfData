@@ -43,17 +43,29 @@ let private findRInfOsmMatchings
 
     operationalPoints
     |> Array.map (fun op ->
-        match
+        let candidates =
             osmEntries
-            |> Array.tryFind (fun entry ->
+            |> Array.filter (fun entry ->
                 matchesRailwayRefWithUOPID entry.RailwayRef op.UOPID
                 && ``calculate distance`` (op.Latitude, op.Longitude) (entry.Latitude, entry.Longitude) < 4.0)
-        with
-        | Some entry -> (op, Some entry)
-        | None -> (op, None))
+
+        if 0 < candidates.Length then
+            let sorted =
+                candidates
+                |> Array.sortBy (fun c ->
+                    if c.Railway = "station" then 0
+                    else if c.Railway = "halt" then 1
+                    else if c.Railway = "stop" then 2
+                    else 3)
+
+            op, Some sorted[0]
+        else
+            op, None)
 
 type Matching =
-    { UOPID: string; OsmUrl: string option }
+    { UOPID: string
+      OsmUrl: string option
+      OsmRailwayTag: string option }
 
 let findMatchings (operationalPoints: RInfGraph.OpInfo[]) (osmEntries: Entry[]) (verbose: bool) : Matching[] =
 
@@ -84,4 +96,5 @@ let findMatchings (operationalPoints: RInfGraph.OpInfo[]) (osmEntries: Entry[]) 
     result
     |> Array.map (fun (op, entry) ->
         { UOPID = op.UOPID
-          OsmUrl = Option.map (fun entry -> entry.Url) entry })
+          OsmUrl = Option.map (fun entry -> entry.Url) entry
+          OsmRailwayTag = Option.map (fun entry -> entry.Railway) entry })

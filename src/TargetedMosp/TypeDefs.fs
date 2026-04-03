@@ -31,7 +31,7 @@ module Constants =
 type CostArray = CostType array
 
 #if DIM2
-type internal TruncatedCosts= CostType
+type internal TruncatedCosts = CostType
 #else
 type internal TruncatedCosts(c0: CostType, c1: CostType) =
     member val c0 = c0

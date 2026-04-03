@@ -28,7 +28,14 @@ SELECT distinct ?id (geof:latitude(?centroid) AS ?lat) (geof:longitude(?centroid
   { osmrel:51477 ogc:sfContains ?id . } UNION { osmrel:51701 ogc:sfContains ?id . }
   { ?id osmkey:name ?name . } UNION { ?id osmkey:disused:name ?name . }
   ?id rdf:type ?type .
-  { ?id osmkey:railway ?railway . } UNION { ?id osmkey:disused:railway ?railway . }
+  { ?id osmkey:railway ?railway . } 
+  UNION 
+  { ?id osmkey:disused:railway ?railway . }
+  UNION 
+  { ?id osmkey:proposed:railway ?railway . }
+  UNION 
+  { ?id osmkey:public_transport ?railway .
+    FILTER (STR(?railway) = "stop_area") }
   { ?id osmkey:railway:ref ?railway_ref . } UNION { ?id osmkey:railway:ref:DBAG ?railway_ref . } UNION { ?id osmkey:disused:railway:ref ?railway_ref . }
   OPTIONAL { ?id osmkey:uic_ref ?uic_ref . }
   OPTIONAL { ?id osmkey:operator ?operator . }
@@ -37,7 +44,7 @@ SELECT distinct ?id (geof:latitude(?centroid) AS ?lat) (geof:longitude(?centroid
 """
 
     let loadData (endpoint: string) : Async<string> =
-        EraKG.Request.PostAsync endpoint (osmQuery ()) EraKG.Request.applicationSparqlResults
+        EraKG.Request.PostAsync endpoint (osmQuery ())
 
     let private toOptLiteral (b: Map<string, Rdf>) (key: string) =
         match b.TryGetValue key with

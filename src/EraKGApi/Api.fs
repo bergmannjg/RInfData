@@ -6,6 +6,13 @@ open FSharp.Collections
 open System.Text.Json
 open System.Collections.Generic
 
+type Country =
+    {
+        /// ISO 3166-1 alpha-3, https://en.wikipedia.org/wiki/ISO_3166-1_alpha-3
+        Code: string
+        Label: string
+    }
+
 type RailwayLocation =
     { NationalIdentNum: string
       Kilometer: float }
@@ -57,6 +64,17 @@ module Api =
     open Sparql
 
     let private endpoint = "https://data-interop.era.europa.eu/api/sparql"
+
+#if DEBUG
+    let private verbose =
+        try
+            not (isNull (System.Environment.GetEnvironmentVariable "ERAKGVerbose"))
+        with _ ->
+            false
+#else
+    let private verbose = false
+#endif
+
 
     module private Utils =
         let appendElem<'T when 'T: equality> (elem: 'T) (arr: 'T array) =
@@ -153,13 +171,25 @@ module Api =
 
         let currentlyValid (item: string) : string =
             $"""
-              {item} era:validityStartDate ?startDate .
-              {item} era:validityEndDate ?endDate .
-              BIND(xsd:dateTime(NOW()) AS ?now) .
-              Filter(?startDate <= ?now && ?now <= ?endDate) .
+              ?{item} era:validityStartDate ?startDate{item} .
+              ?{item} era:validityEndDate ?endDate{item} .
+              BIND(xsd:dateTime(NOW()) AS ?now{item}) .
+              Filter(?startDate{item} <= ?now{item} && ?now{item} <= ?endDate{item}) .
             """
 
-    /// see <a href="https://op.europa.eu/en/web/eu-vocabularies/dataset/-/resource?uri=http://publications.europa.eu/resource/dataset/country">Countries and territories</a>
+        let currentlyValidIfExists (item: string) : string =
+            $"""
+              {{ FILTER NOT EXISTS {{ ?{item} era:validityStartDate ?startDate{item} }} }}
+              UNION 
+              {{
+                  ?{item} era:validityStartDate ?startDate{item} .
+                  ?{item} era:validityEndDate ?endDate{item} .
+                  BIND(xsd:dateTime(NOW()) AS ?now{item}) .
+                  Filter(?startDate{item} <= ?now{item} && ?now{item} <= ?endDate{item}) .
+              }}
+            """
+
+    /// see <a href="https://data-interop.era.europa.eu/era-vocabulary/#http://data.europa.eu/949/inCountry">Countries and territories</a>
     module Country =
         let private countriesQuery () =
             $"""
@@ -170,28 +200,41 @@ module Api =
                 WHERE {{
                   ?operationalPoint a era:OperationalPoint .
                   ?operationalPoint era:inCountry ?country .
-                  ?country skos:prefLabel ?label.
-              	  FILTER(lang(?label) = "en")                
+                  ?country skos:prefLabel ?label .
+              	  FILTER(lang(?label) = "en") .           
                 }}
             """
 
         let loadData () : Async<QueryResults> =
             async {
-                let! data = Request.GetAsync endpoint (countriesQuery ()) Request.applicationSparqlResults
+                let query = countriesQuery ()
+
+                if verbose then
+                    fprintfn stderr $"Country query {query}"
+
+                let! data = Request.GetAsync endpoint query
                 return JsonSerializer.Deserialize data
             }
 
-        let fromQueryResults (sparql: QueryResults) : (string* string)[] =
+        let fromQueryResults (sparql: QueryResults) : Country[] =
             sparql.results.bindings
-            |> Array.map (fun b -> Properties.toCountryType b.["country"], Properties.toLiteral b.["label"])
+            |> Array.map (fun b ->
+                { Code = Properties.toCountryType b.["country"]
+                  Label = Properties.toLiteral b.["label"] })
 
         let toCountryCondition (item: string) (countries: string[]) : string =
             countries
             |> Array.map (fun country ->
                 $"{{ {item} era:inCountry <http://publications.europa.eu/resource/authority/country/{country}> . }}")
             |> String.concat " UNION "
+        
+        let Cache = 
+            """
+                [{"Code":"AUT","Label":"Austria"},{"Code":"ITA","Label":"Italy"},{"Code":"SWE","Label":"Sweden"},{"Code":"FRA","Label":"France"},{"Code":"LVA","Label":"Latvia"},{"Code":"BGR","Label":"Bulgaria"},{"Code":"DEU","Label":"Germany"},{"Code":"CHE","Label":"Switzerland"},{"Code":"SVN","Label":"Slovenia"},{"Code":"POL","Label":"Poland"},{"Code":"BEL","Label":"Belgium"},{"Code":"SVK","Label":"Slovakia"},{"Code":"FIN","Label":"Finland"},{"Code":"EST","Label":"Estonia"},{"Code":"GRC","Label":"Greece"},{"Code":"HUN","Label":"Hungary"},{"Code":"DNK","Label":"Denmark"},{"Code":"PRT","Label":"Portugal"},{"Code":"LTU","Label":"Lithuania"},{"Code":"IRL","Label":"Ireland"},{"Code":"LUX","Label":"Luxembourg"},{"Code":"ESP","Label":"Spain"},{"Code":"ROU","Label":"Romania"},{"Code":"NOR","Label":"Norway"},{"Code":"NLD","Label":"Netherlands"},{"Code":"CZE","Label":"Czechia"}]
 
-    /// see <a href="https://data-interop.era.europa.eu/era-vocabulary/#http://data.europa.eu/949/OperationalPoint">Operational Point</a>
+            """
+
+    /// see <a href="https://data-interop.era.europa.eu/era-vocabulary/rinf-appGuide/#OperationalPoint">Operational Point</a>
     module OperationalPoint =
         let private operationalPointQuery (countries: string[]) (limit: int) (offset: int) =
             $"""
@@ -216,17 +259,18 @@ module Api =
                   ?operationalPoint era:opType ?opType .
                   ?operationalPoint era:inCountry ?country .
                   {Country.toCountryCondition "?operationalPoint" countries}
-                  {Properties.currentlyValid "?operationalPoint"}
+                  {Properties.currentlyValidIfExists "operationalPoint"}
                 }} LIMIT {limit} OFFSET {offset}
             """
 
         let loadData (countries: string[]) (limit: int) (offset: int) : Async<QueryResults> =
             async {
-                let! data =
-                    Request.GetAsync
-                        endpoint
-                        (operationalPointQuery countries limit offset)
-                        Request.applicationSparqlResults
+                let query = operationalPointQuery countries limit offset
+
+                if verbose && offset = 0 then
+                    fprintfn stderr $"OperationalPoint query {query}"
+
+                let! data = Request.GetAsync endpoint query
 
                 return JsonSerializer.Deserialize data
             }
@@ -291,7 +335,7 @@ module Api =
 
         let loadData () : Async<QueryResults> =
             async {
-                let! data = Request.GetAsync endpoint opTypesQuery Request.applicationSparqlResults
+                let! data = Request.GetAsync endpoint opTypesQuery
 
                 return JsonSerializer.Deserialize data
             }
@@ -303,7 +347,7 @@ module Api =
                   Label = Properties.toLiteral rdf["l"]
                   Value = int (Properties.toLiteral rdf["n"]) })
 
-    /// see <a href="https://data-interop.era.europa.eu/era-vocabulary/#http://data.europa.eu/949/Track">Track</a>
+    /// see <a href="https://data-interop.era.europa.eu/era-vocabulary/rinf-appGuide/#Track">Track</a>
     module Track =
         let private trackQuery (countries: string[]) (limit: int) (offset: int) =
             $"""
@@ -325,14 +369,18 @@ module Api =
                   OPTIONAL {{ ?track era:maximumPermittedSpeed ?maximumPermittedSpeed . }}
 
                   {Country.toCountryCondition "?sectionOfLine" countries}
-                  {Properties.currentlyValid "?track"}
+                  {Properties.currentlyValidIfExists "track"}
                 }} LIMIT {limit} OFFSET {offset}
             """
 
         let loadData (countries: string[]) (limit: int) (offset: int) : Async<QueryResults> =
             async {
-                let! data =
-                    Request.GetAsync endpoint (trackQuery countries limit offset) Request.applicationSparqlResults
+                let query = trackQuery countries limit offset
+
+                if verbose && offset = 0 then
+                    fprintfn stderr $"Track query {query}"
+
+                let! data = Request.GetAsync endpoint query
 
                 return JsonSerializer.Deserialize data
             }
@@ -375,7 +423,7 @@ module Api =
             tracks.results.bindings
             |> Array.fold folder (Dictionary tracks.results.bindings.Length)
 
-    /// see <a href="https://data-interop.era.europa.eu/era-vocabulary/#http://data.europa.eu/949/SectionOfLine">SectionOfLine</a>
+    /// see <a href="https://data-interop.era.europa.eu/era-vocabulary/rinf-appGuide/#SectionOfLine">SectionOfLine</a>
     module SectionOfLine =
         let private sectionOfLineQuery (countries: string[]) (limit: int) (offset: int) =
             $"""
@@ -396,17 +444,19 @@ module Api =
                   ?sectionOfLine era:track ?track .
                   ?sectionOfLine era:inCountry ?country .
                   {Country.toCountryCondition "?sectionOfLine" countries}
-                  {Properties.currentlyValid "?sectionOfLine"}
+                  {Properties.currentlyValidIfExists "sectionOfLine"}
+                  {Properties.currentlyValidIfExists "track"}
                 }} LIMIT {limit} OFFSET {offset}
             """
 
         let loadData (countries: string[]) (limit: int) (offset: int) : Async<QueryResults> =
             async {
-                let! data =
-                    Request.GetAsync
-                        endpoint
-                        (sectionOfLineQuery countries limit offset)
-                        Request.applicationSparqlResults
+                let query = sectionOfLineQuery countries limit offset
+
+                if verbose && offset = 0 then
+                    fprintfn stderr $"SectionOfLine query {query}"
+
+                let! data = Request.GetAsync endpoint query
 
                 return JsonSerializer.Deserialize data
             }
@@ -415,48 +465,54 @@ module Api =
         let private isPassengerLine (lineCategories: int array) =
             lineCategories.Length = 0 || lineCategories |> Array.exists (fun c -> c <= 60)
 
-        let private folder (getTrack: Rdf -> Track) (sols: Dictionary<string, SectionOfLine>) (b: Map<string, Rdf>) =
-            let id = Properties.toSectionsOfLineId b.["sectionOfLine"]
-            let track = getTrack b.["track"]
+        let private folder
+            (getTrack: Rdf -> Track option)
+            (sols: Dictionary<string, SectionOfLine>)
+            (b: Map<string, Rdf>)
+            =
+            match getTrack b.["track"] with
+            | Some track ->
+                let id = Properties.toSectionsOfLineId b.["sectionOfLine"]
 
-            Utils.change (
-                sols,
-                id,
-                fun sol ->
-                    match sol with
-                    | Some sol ->
-                        { sol with
-                            Tracks = Utils.appendElem track sol.Tracks }
-                        |> Some
-                    | None ->
-                        if isPassengerLine track.lineCategories then
-                            { Name = id
-                              Country = Properties.toCountryType b.["country"]
-                              Length = Properties.toFloat b.["length"]
-                              LineIdentification = Properties.toLiteral b.["lineNationalLabel"]
-                              IMCode = Properties.toLiteral b.["imCode"]
-                              StartOP = Properties.toUOPID b.["startOp"]
-                              EndOP = Properties.toUOPID b.["endOp"]
-                              Tracks = [| track |] }
+                Utils.change (
+                    sols,
+                    id,
+                    fun sol ->
+                        match sol with
+                        | Some sol ->
+                            { sol with
+                                Tracks = Utils.appendElem track sol.Tracks }
                             |> Some
-                        else
-                            None
-            )
+                        | None ->
+                            if isPassengerLine track.lineCategories then
+                                { Name = id
+                                  Country = Properties.toCountryType b.["country"]
+                                  Length = Properties.toFloat b.["length"]
+                                  LineIdentification = Properties.toLiteral b.["lineNationalLabel"]
+                                  IMCode = Properties.toLiteral b.["imCode"]
+                                  StartOP = Properties.toUOPID b.["startOp"]
+                                  EndOP = Properties.toUOPID b.["endOp"]
+                                  Tracks = [| track |] }
+                                |> Some
+                            else
+                                None
+                )
+            | None -> sols
 
         let fromQueryResults (sparql: QueryResults) (tracks: QueryResults) : SectionOfLine[] =
             let dictTracks = Track.fromQueryResults tracks
 
             let getTrack (r: Rdf) =
                 match dictTracks.TryGetValue(Properties.toTrackLabel r) with
-                | true, track -> track
-                | _ -> raise (System.Exception $"getTrack track not found {r}")
+                | true, track -> Some track
+                | _ -> None
 
             sparql.results.bindings
             |> Array.fold (folder getTrack) (Dictionary sparql.results.bindings.Length)
             |> _.Values
             |> Seq.toArray
 
-    /// see <a href="https://data-interop.era.europa.eu/era-vocabulary/#http://data.europa.eu/949/Tunnel">Tunnel</a>
+    /// see <a href="https://data-interop.era.europa.eu/era-vocabulary/rinf-appGuide/#tunnel">Tunnel</a>
     module Tunnel =
         let private tunnelQuery (countries: string[]) =
             $"""
@@ -483,7 +539,12 @@ module Api =
 
         let loadData (countries: string[]) : Async<QueryResults> =
             async {
-                let! data = Request.GetAsync endpoint (tunnelQuery countries) Request.applicationSparqlResults
+                let query = tunnelQuery countries
+
+                if verbose then
+                    fprintfn stderr $"SectionOfLine query {query}"
+
+                let! data = Request.GetAsync endpoint query
                 return JsonSerializer.Deserialize data
             }
 

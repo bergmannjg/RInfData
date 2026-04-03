@@ -21,7 +21,7 @@ module.exports = {
         outputModule: true
     },
     target: "web",
-    mode: "development",
+    mode: "production",
     entry: './index.js',
     output: {
         filename: 'bundle.js',

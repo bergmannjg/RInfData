@@ -9,14 +9,33 @@
     <title>RInfGraph</title>
 </head>
 
+<style>
+    @media (max-width: 767px) {
+        .custom-medium {
+            display: none;
+        }
+    }
+
+    @media (min-width: 768px) {
+        .custom-small {
+            display: none;
+        }
+    }
+</style>
+
 <body>
     <div class="container" style="width:80%;">
         <h1>RInfGraph</h1>
         <div>Searching for data about the european static rail network.</div>
         <div class="row">&nbsp;</div>
         <div class="row">
-            <div class="col col-sm-1 me-1">Command:</div>
-            <div class="col">
+            <div class="col col-sm-1 me-2">Command:</div>
+            <select class="col custom-small" id="idCmdOptions">
+                <option selected value="Location">Location</option>
+                <option value="Path">Path</option>
+                <option value="Line">Line</option>
+            </select>
+            <div class="col custom-medium">
                 <div class="form-check form-check-inline">
                     <input type="radio" class="form-check-input" name="btnradioCommands" id="idLocations"
                         autocomplete="off" checked>
@@ -41,13 +60,13 @@
         <div class="row">&nbsp;</div>
         <div class="row">
             <div id='locations-box'>
-                <div class=" row mb-3">
+                <div class="row">
                     <label for="inputLocation" class="col-sm-1 col-form-label text-end">Name</label>
-                    <div class="col-sm-3">
+                    <div class="col-sm-1">
                         <input type="text" class="form-control" id="inputLocation">
                     </div>
                     <label for="inputUPID" class="col-sm-1 col-form-label text-end">UPID</label>
-                    <div class="col-sm-2">
+                    <div class="col-sm-1 col-md-2">
                         <input type="text" class="form-control" id="inputUPID">
                     </div>
                     <button type="submit" class="btn btn-primary col-sm-2" id="btnLookupLocation">lookup
@@ -141,7 +160,7 @@
                     <label for="inputCountry" class="col-sm-1 col-form-label text-end">Country</label>
                     <div class="col-sm-2" id="idCountryOptions">
                     </div>
-                    <button type="submit" class="btn btn-primary col-sm-2" id="btnLookupLine">lookup line</button>
+                    <button type="submit" class="btn btn-primary col-sm-3" id="btnLookupLine">lookup line</button>
                 </div>
                 <br />
 
@@ -154,8 +173,7 @@
                             <th scope="col">Start Op</th>
                             <th scope="col">End Op</th>
                             <th scope="col" class="text-end">MaxSpeed</th>
-                            <th scope="col" class="text-end">StartKm</th>
-                            <th scope="col" class="text-end">EndKm</th>
+                            <th scope="col" class="text-end">Position</th>
                             <th scope="col" class="text-end">Length</th>
                             <th scope="col" class="text-end">Cost</th>
                         </tr>
@@ -188,7 +206,10 @@
             </div>
 
             <div id='osm-comparison-box' style="display:none">
-                <div>OpenStreetMap elements which have a tag 'railway:ref' correspondsing to the point UOPID
+                <div>OpenStreetMap elements which have a tag <a
+                        href="https://wiki.openstreetmap.org/wiki/Key:railway:ref">railway:ref</a> corresponding
+                    to the operational point <a
+                        href="https://data-interop.era.europa.eu/era-vocabulary/rinf-appGuide/#uopid">unique OPID</a>
                     were searched for all operational points with type station or passenger stop.
                 </div>
                 <br />
@@ -207,6 +228,22 @@
                     </table>
                 </div>
                 <br />
+                <div class="col-md-4">
+                    <table class="table caption-top">
+                        <caption>
+                            <p class="fw-bold">Usage of OSM <a
+                                    href="https://wiki.openstreetmap.org/wiki/Key:railway">railway</a> tags</p>
+                        </caption>
+                        <thead>
+                            <tr>
+                                <th scope="col">Tag</th>
+                                <th scope="col">Count</th>
+                            </tr>
+                        </thead>
+                        <tbody id="result-usage-osm-tags"></tbody>
+                    </table>
+                </div>
+                <br />
                 <table class="table caption-top">
                     <caption>
                         <p class="fw-bold">Operational Points without matching OpenStreetMap element</p>
@@ -220,9 +257,7 @@
                         </tr>
                     </thead>
                     <tbody id="result-locations-osm-comparison"></tbody>
-
                 </table>
-
             </div>
 
         </div>
@@ -238,6 +273,9 @@
                 OSM data loaded from the SPARQL <a href="https://qlever.dev/osm-planet">Endpoint</a>
                 of <a href="https://ad-publications.informatik.uni-freiburg.de/CIKM_qlever_BB_2017.pdf">QLever</a>.
             </div>
+            <div class="col-md-12">
+                Source <a href="https://github.com/bergmannjg/RInfData">Repository</a>.
+            </div>
         </div>
     </div>
     <script type="module">
@@ -250,6 +288,12 @@
 
         document.getElementById('idLocations').onclick = function () {
             displayElement('locations-box');
+        }
+        document.getElementById('idCmdOptions').onchange = function () {
+            const selected = document.getElementById('idCmdOptions').selectedIndex;
+            if (selected === 0) displayElement('locations-box');
+            else if (selected === 1) displayElement('path-box');
+            else if (selected === 2) displayElement('line-box');
         }
         document.getElementById('idPaths').onclick = function () {
             displayElement('path-box');

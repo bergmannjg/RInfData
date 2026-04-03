@@ -18,6 +18,7 @@ export interface Metadata {
 }
 
 const g = _g as GraphNode[];
+console.log('Graph nodes', g.length);
 
 const graph = rinfgraph.Graph_toGraph(g);
 const operationalPointType = rinfgraph.Graph_operationalPointType;
@@ -29,8 +30,14 @@ export function rinfFindPath(ids: string[], isCompactifyPath: boolean) {
     return rinfgraph.Graph_getShortestPathFromGraph(g, graph, ids);
 }
 
+const mo_g = rinfgraph.MoGraph_toMoGraph(g);
+console.log('MoGraph nodes', mo_g.length);
+const mo_arcs = rinfgraph.MoGraph_toArcs(mo_g);
+console.log('MoGraph arcs', mo_arcs.length);
+const mo_map = rinfgraph.MoGraph_toMap(mo_g);
+
 export function rinfFindMoPath(source: string, target: string, maxExtraCostInProcent: number) {
-    const spaths = rinfgraph.MoGraph_getShortestPath(g, source, target, 10);
+    const spaths = rinfgraph.MoGraph_getShortestPathFromGraph(mo_g, mo_arcs, mo_map, source, target, 10);
     if (spaths.length == 0) return [];
     else if (spaths.length == 1) return spaths[0].Path;
     else {
@@ -70,16 +77,15 @@ export function rinfOpTypes(): OpType[] {
 }
 
 export function rinfFindPathOfLine(line: string, country: string) {
-    const lineInfo = (lineInfos as LineInfo[]).find(li => li.Line === line && li.Country == country);
-    console.log("lineInfo", lineInfo?.Line, lineInfo?.Name);
-    if (lineInfo) return rinfgraph.Graph_getPathOfLineFromGraph(g, graph, lineInfo);
-    else return [];
+    return (lineInfos as LineInfo[])
+        .filter(li => li.Line === line && li.Country == country)
+        .sort((a, b) => a.StartKm - b.StartKm)
+        .map(lineInfo => rinfgraph.Graph_getPathOfLineFromGraph(g, graph, lineInfo))
+        .flat();
 }
 
 export function rinfFindTunnelsOfLine(line: string, country: string) {
-    const result = (tunnelInfos as TunnelInfo[]).filter(li => li.Line === line && li.Country == country)
-    if (result) return result;
-    else return [];
+    return (tunnelInfos as TunnelInfo[]).filter(li => li.Line === line && li.Country == country);
 }
 
 export function rinfToCompactPath(spath: GraphNode[]) {
@@ -106,6 +112,10 @@ function findText(s: string, searchString: string): Boolean {
     } catch (_) {
         return s.indexOf(searchString) != -1
     }
+}
+
+export function rinfGetOpInfo(opid: string) : OpInfo | undefined {
+    return mapOps.get(opid);
 }
 
 export function rinfGetOpInfos(name: string, uopid: string) {

@@ -41,7 +41,7 @@ export interface LineInfo {
     EndKm: number;
     UOPIDs: Array<string>;
     Tunnels: Array<string>;
-    Wikipedia?: string;
+    Wikipedia: string | null | undefined;
 }
 
 export interface TunnelInfo {
@@ -113,4 +113,8 @@ export interface RInfGraph {
     Graph_isWalkingPath: (node: GraphNode) => boolean
     Graph_getBRouterUrl: (locations: Location[]) => string
     MoGraph_getShortestPath: (g: Array<GraphNode>, source: string, target: string, maxSolutions: number) => Array<Solution>
+    MoGraph_toMoGraph: (g: Array<GraphNode>) => Array<any>;
+    MoGraph_toArcs: (g: Array<any>) => Array<any>;
+    MoGraph_toMap: (g: Array<any>) => Map<string, number>;
+    MoGraph_getShortestPathFromGraph: (g: Array<any>, arcs: Array<any>, map: Map<string, number>, source: string, target: string, maxSolutions: number) => Array<Solution>
 }

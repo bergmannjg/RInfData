@@ -324,7 +324,10 @@ let main argv =
 
                     sol.Path
                     |> fun arr -> if compactify then Graph.getCompactPath arr else arr
-                    |> Array.iter (fun n -> printfn $"{n.Node} {n.Edges[0].Node} Line={n.Edges[0].Line} StartKm=%.1f{n.Edges[0].StartKm} EndKm=%.1f{n.Edges[0].EndKm} Length=%.1f{n.Edges[0].Length} Cost={n.Edges[0].Cost}"))
+                    |> Array.iter (fun n ->
+                        printfn
+                            $"{n.Node} {n.Edges[0].Node} Line={n.Edges[0].Line} StartKm=%.1f{n.Edges[0].StartKm} EndKm=%.1f{n.Edges[0].EndKm} Length=%.1f{n.Edges[0].Length} Cost={n.Edges[0].Cost}"))
+
                 return ""
             }
         else

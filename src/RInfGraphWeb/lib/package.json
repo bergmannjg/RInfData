@@ -10,7 +10,7 @@
         "isomorphic-fetch": "^3.0.0",
         "luxon": "^2.3.0",
         "md5": "^2.3.0",
-        "rinf-graph": "https://github.com/bergmannjg/RInfData/releases/download/1.19.0/rinf-graph-1.19.0.tgz",
+        "rinf-graph": "https://github.com/bergmannjg/RInfData/releases/download/1.20.0/rinf-graph-1.20.0.tgz",
         "slugg": "^1.2.1"
     },
     "devDependencies": {
@@ -22,9 +22,9 @@
         "fable-compiler": "^2.13.0",
         "fable-loader": "^2.1.9",
         "typescript": "^5.9.3",
-        "webpack": "^5.94.0",
-        "webpack-cli": "^5.1.4",
-        "webpack-node-externals": "^2.5.2"
+        "webpack": "^5.105.4",
+        "webpack-cli": "^7.0.2",
+        "webpack-node-externals": "^3.0.0"
     },
     "author": "",
     "license": "ISC"

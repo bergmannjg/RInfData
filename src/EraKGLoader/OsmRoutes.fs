@@ -57,11 +57,11 @@ SELECT distinct ?id ?ref ?wikidata ?wikipedia WHERE {
 
     type QleverResults = { query: string; res: (string[])[] }
 
-    let loadWikipediaArticles (format: string) : Async<string> =
-        EraKG.Request.PostAsync endpointPlanet (osmWikipediaQuery ()) format
+    let loadWikipediaArticles () : Async<string> =
+        EraKG.Request.PostAsync endpointPlanet (osmWikipediaQuery ())
 
-    let loadWikidataArticles (format: string) : Async<string> =
-        EraKG.Request.PostAsync endpointPlanet (osmWikidataQuery ()) format
+    let loadWikidataArticles () : Async<string> =
+        EraKG.Request.PostAsync endpointPlanet (osmWikidataQuery ())
 
     let fromQueryResults (sparql: QueryResults) : Entry[] =
         sparql.results.bindings

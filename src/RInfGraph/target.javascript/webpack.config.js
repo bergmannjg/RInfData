@@ -15,7 +15,7 @@ console.log("Bundling function...");
 // webpack.development.config.js
 
 module.exports = {
-  mode: "development",
+  mode: "production",
   target: "node",
   externals: [nodeExternals()],
   node: {
