@@ -324,8 +324,9 @@ export function lookupOsmComparison() {
     var tableSummary = document.getElementById("result-summary-osm-comparison");
     var tableOsmTags = document.getElementById("result-usage-osm-tags");
     var tableLocations = document.getElementById("result-locations-osm-comparison");
-    if (tableSummary && tableLocations) {
+    if (tableSummary && tableOsmTags && tableLocations) {
         removeChilds(tableSummary);
+        removeChilds(tableOsmTags);
         removeChilds(tableLocations);
         const total = rinfOsmMatchings().length;
         const found = rinfOsmMatchings().filter(m => !!m.OsmUrl).length;

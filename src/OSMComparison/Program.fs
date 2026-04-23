@@ -29,6 +29,23 @@ let server = "qlever.cs.uni-freiburg.de"
 
 let endpoint (server: string) = $"https://{server}/api/osm-planet"
 
+let getOsmEntries (path: string) (file: string) (endpoint: string) : Async<Entry[]> =
+    async {
+        let fullpath = path + file
+
+        try
+            if not (File.Exists fullpath) then
+                let! result = OSM.Sparql.Api.loadData endpoint
+                fprintfn stderr $"loadOsmData, {result.Length} bytes"
+                File.WriteAllText(fullpath, result)
+
+            let result = readFile<QueryResults> path file
+            return OSM.Sparql.Api.fromQueryResults result
+        with e ->
+            fprintfn stderr "getOsmEntries: endpoint {endpoint}, error '%s'" e.Message
+            return Array.empty
+    }
+
 [<EntryPoint>]
 let main argv =
     try
@@ -41,16 +58,8 @@ let main argv =
             async { return printHelp () }
         else if argv.[0] = "--Osm" && argv.Length > 1 && checkIsDir argv.[1] then
             async {
-                let file = argv.[1] + $"sparql-osm.json"
-
-                if not (File.Exists file) then
-                    let! result = OSM.Sparql.Api.loadData (getEndpoint ())
-                    fprintfn stderr $"loadOsmData, {result.Length} bytes"
-                    File.WriteAllText(file, result)
-
-                let result = readFile<QueryResults> argv.[1] "sparql-osm.json"
-                let entries = OSM.Sparql.Api.fromQueryResults result
-
+                let! entries = getOsmEntries argv.[1] "sparql-osm.json" (getEndpoint ())
+                fprintfn stderr $"getOsmEntries, count {entries.Length}"
                 File.WriteAllText(argv.[1] + "OsmEntries.json", JsonSerializer.Serialize entries)
 
                 return ""

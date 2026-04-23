@@ -30,7 +30,7 @@ pushd ./lib
 rm -rf node_modules/rinf-graph/ package-lock.json dist
 npm install
 
-if [ $3 = "--version" ]; then
+if [ "$3" = "--version" ]; then
     PACKAGE="../../RInfGraph/target.javascript/rinf-graph-$4.tgz"
     if [ ! -f ${PACKAGE} ]; then
         echo "file '${PACKAGE}' not found"

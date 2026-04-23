@@ -29,7 +29,11 @@ module Request =
         }
 
     let private resultOk: Http.HttpResponseMessage -> bool =
-                fun res -> res.IsSuccessStatusCode || res.StatusCode = HttpStatusCode.BadRequest
+        fun res ->
+            if not res.IsSuccessStatusCode then
+                fprintfn stderr $"unexpected StatusCode {res.StatusCode}"
+
+            res.IsSuccessStatusCode || res.StatusCode = HttpStatusCode.BadRequest
 
     let GetAsync (endpoint: string) (query: string) : Async<string> =
         async {
