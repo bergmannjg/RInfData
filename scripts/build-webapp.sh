@@ -30,6 +30,15 @@ pushd ./lib
 rm -rf node_modules/rinf-graph/ package-lock.json dist
 npm install
 
+if [ $3 = "--version" ]; then
+    PACKAGE="../../RInfGraph/target.javascript/rinf-graph-$4.tgz"
+    if [ ! -f ${PACKAGE} ]; then
+        echo "file '${PACKAGE}' not found"
+        exit 1
+    fi
+    npm install ${PACKAGE} --save false
+fi
+
 if [ $1 = "--countries" ] 
   then
     ./node_modules/rinf-graph/bin/EraKGLoader $2

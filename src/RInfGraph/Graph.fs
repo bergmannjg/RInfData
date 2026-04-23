@@ -1,12 +1,15 @@
 namespace RInfGraph
 
 open FSharpx.Collections
+open RInf.Types
 
-type Location = { Latitude: float; Longitude: float }
+type Location =
+    { Latitude: float<degree>
+      Longitude: float<degree> }
 
 type PoILocation =
-    { Latitude: float
-      Longitude: float
+    { Latitude: float<degree>
+      Longitude: float<degree>
       Content: string }
 
 type OperationalPointType =
@@ -29,32 +32,29 @@ type OpInfo =
     { UOPID: string
       Name: string
       RinfType: int
-      Latitude: float
-      Longitude: float }
+      Latitude: float<degree>
+      Longitude: float<degree> }
 
 type LineInfo =
     { Line: string
       Country: string
       Name: string
-      Length: float
-      StartKm: float
-      EndKm: float
+      Length: float<km>
+      StartKm: float<km>
+      EndKm: float<km>
       UOPIDs: string[]
       Tunnels: string[]
       Wikipedia: string Option }
 
 type TunnelInfo =
     { Tunnel: string
-      Length: float
-      StartLong: float
-      StartLat: float
-      StartKm: float option
-      StartOP: string
-      EndLong: float
-      EndLat: float
-      EndKm: float option
-      EndOP: string
-      SingelTrack: bool
+      Length: float<km>
+      StartLong: float<degree>
+      StartLat: float<degree>
+      StartKm: float<km>
+      EndLong: float<degree>
+      EndLat: float<degree>
+      EndKm: float<km>
       Line: string
       Country: string }
 
@@ -63,11 +63,11 @@ type GraphEdge =
       Cost: int
       Line: string
       Country: string
-      MaxSpeed: int
+      MaxSpeed: int<km / h>
       Electrified: bool
-      StartKm: float
-      EndKm: float
-      Length: float }
+      StartKm: float<km>
+      EndKm: float<km>
+      Length: float<km> }
 
 type GraphNode = { Node: string; Edges: GraphEdge[] }
 
@@ -79,9 +79,9 @@ type PathElement =
       Line: string
       LineText: string
       Country: string
-      StartKm: float
-      EndKm: float
-      MaxSpeed: int }
+      StartKm: float<km>
+      EndKm: float<km>
+      MaxSpeed: int<km / h> }
 
 module Graph =
 
@@ -114,20 +114,20 @@ module Graph =
         (line: string)
         (imcode: string)
         (cost: int)
-        (maxSpeed: int)
-        (startKm: float)
-        (endKm: float)
-        (length: float)
+        (maxSpeed: int<km / h>)
+        (startKm: float<km>)
+        (endKm: float<km>)
+        (length: float<km>)
         (graph: Map<string, GraphEdge list>)
         =
         let createEdge
             (opEndId: string)
             (line: string)
             (cost: int)
-            (maxSpeed: int)
-            (startKm: float)
-            (endKm: float)
-            (length: float)
+            (maxSpeed: int<km / h>)
+            (startKm: float<km>)
+            (endKm: float<km>)
+            (length: float<km>)
             : GraphEdge =
             { Node = opEndId
               Cost = cost
@@ -187,7 +187,7 @@ module Graph =
                      edge.StartKm,
                      edge.EndKm,
                      edge.Length))
-                |> Option.defaultValue (0, "", "", 0, false, 0.0, 0.0, 0.0)
+                |> Option.defaultValue (0, "", "", 0<_>, false, 0.0<_>, 0.0<_>, 0.0<_>)
 
             { Node = n1
               Edges =
@@ -260,8 +260,8 @@ module Graph =
         if
             0 < path.Length
             && 1 = path[0].Edges.Length
-            && 0.0 = path[0].Edges[0].Length
-            && 0.0 = path[0].Edges[0].StartKm
+            && 0.0<_> = path[0].Edges[0].Length
+            && 0.0<_> = path[0].Edges[0].StartKm
         then
             Array.set
                 path
@@ -360,7 +360,7 @@ module Graph =
 
     let printPathEx (opInfos: System.Collections.Generic.Dictionary<string, OpInfo>) (path: GraphNode[]) =
         let mutable totalCost = 0
-        let mutable totalLength = 0.0
+        let mutable totalLength = 0.0<_>
 
         path
         |> Array.iter (fun node ->
@@ -527,11 +527,11 @@ type MoGraphEdge =
       DistanceCost: int
       Line: string
       Country: string
-      MaxSpeed: int
+      MaxSpeed: int<km / h>
       Electrified: bool
-      StartKm: float
-      EndKm: float
-      Length: float }
+      StartKm: float<km>
+      EndKm: float<km>
+      Length: float<km> }
 
 /// node in multi objective graph
 type MoGraphNode = { Node: string; Edges: MoGraphEdge[] }
@@ -594,11 +594,11 @@ module MoGraph =
                     DistanceCost = 0
                     Line = edge.Line
                     Country = edge.Country
-                    MaxSpeed = 0
+                    MaxSpeed = 0<_>
                     Electrified = false
-                    StartKm = 0
-                    EndKm = 0
-                    Length = 0 } |] }
+                    StartKm = 0.0<_>
+                    EndKm = 0.0<_>
+                    Length = 0.0<_> } |] }
            { Node = toMoNodeName node edge.Country edge.Line
              Edges =
                [| { Node = toMoNodeName edge.Node edge.Country edge.Line
@@ -618,11 +618,11 @@ module MoGraph =
                     DistanceCost = 0
                     Line = edge.Line
                     Country = edge.Country
-                    MaxSpeed = 0
+                    MaxSpeed = 0<_>
                     Electrified = false
-                    StartKm = 0
-                    EndKm = 0
-                    Length = 0 } |] } |]
+                    StartKm = 0.0<_>
+                    EndKm = 0.0<_>
+                    Length = 0.0<_> } |] } |]
 
     let toMoGraph (g: GraphNode array) : MoGraphNode array =
         let map: Map<string, MoGraphEdge[]> =

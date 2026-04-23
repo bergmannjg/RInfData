@@ -7,6 +7,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="../RInfTypes/RInfTypes.fsproj"/>
     <ProjectReference Include="../EraKGApi/EraKGApi.fsproj"/>
     <ProjectReference Include="../RInfGraph/target.dotnet/RInfGraph.fsproj"/>
   </ItemGroup>

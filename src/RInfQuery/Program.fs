@@ -5,6 +5,7 @@ open System.Collections.Generic
 
 open RInfGraph
 open EraKG
+open RInf.Types
 
 let printHelp () =
     """
@@ -35,7 +36,7 @@ let kilometerOfLine (op: OperationalPoint) (line: string) =
     op.RailwayLocations
     |> Array.tryFind (fun loc -> loc.NationalIdentNum = line)
     |> Option.map (fun loc -> loc.Kilometer)
-    |> Option.defaultValue 0.0
+    |> Option.defaultValue 0.0<km>
 
 let findOpByOPID (ops: OperationalPoint[]) opId =
     match (Array.tryFind (fun (op: OperationalPoint) -> op.UOPID = opId) ops) with
@@ -75,12 +76,12 @@ let main argv =
                         let loc =
                             op.RailwayLocations |> Array.find (fun loc -> argv.[3] = loc.NationalIdentNum)
 
-                        ({ UOPID = op.UOPID
-                           Name = op.Name
-                           RinfType = System.Int32.Parse(op.Type.Substring 5)
-                           Latitude = op.Latitude
-                           Longitude = op.Longitude },
-                         loc.Kilometer))
+                        { UOPID = op.UOPID
+                          Name = op.Name
+                          RinfType = System.Int32.Parse(op.Type.Substring 5)
+                          Latitude = op.Latitude
+                          Longitude = op.Longitude },
+                        loc.Kilometer)
                     |> Array.sortBy (fun (_, km) -> km)
                     |> Array.distinct
 
@@ -110,12 +111,12 @@ let main argv =
                         let loc =
                             op.RailwayLocations |> Array.find (fun loc -> argv.[3] = loc.NationalIdentNum)
 
-                        ({ UOPID = op.UOPID
-                           Name = op.Name
-                           RinfType = System.Int32.Parse(op.Type.Substring 5)
-                           Latitude = op.Latitude
-                           Longitude = op.Longitude },
-                         loc.Kilometer))
+                        { UOPID = op.UOPID
+                          Name = op.Name
+                          RinfType = System.Int32.Parse(op.Type.Substring 5)
+                          Latitude = op.Latitude
+                          Longitude = op.Longitude },
+                        loc.Kilometer)
                     |> Array.sortBy (fun (_, km) -> km)
                     |> Array.distinct
 
@@ -151,7 +152,7 @@ let main argv =
 
                 let solsOfLine =
                     sols
-                    |> Array.filter (fun sol -> sol.IMCode = argv.[2] && sol.LineIdentification = argv.[3])
+                    |> Array.filter (fun sol -> sol.Country = argv.[2] && sol.LineIdentification = argv.[3])
                     |> Array.map (fun sol ->
                         sol,
                         opsOfLine |> Array.tryFind (fun (op, _) -> op.UOPID = sol.StartOP),
@@ -159,7 +160,7 @@ let main argv =
                     |> Array.sortBy (fun (_, startOp, _) ->
                         match startOp with
                         | Some(_, km) -> km
-                        | None -> 0.0)
+                        | None -> 0.0<km>)
 
                 solsOfLine
                 |> Array.iter (fun (sol, startOp, endOp) ->
@@ -198,7 +199,7 @@ let main argv =
 
                 let solsOfLine =
                     sols
-                    |> Array.filter (fun sol -> sol.IMCode = argv.[2] && sol.LineIdentification = argv.[3])
+                    |> Array.filter (fun sol -> sol.Country = argv.[2] && sol.LineIdentification = argv.[3])
                     |> Array.map (fun sol ->
                         (sol,
                          opsOfLine |> Array.tryFind (fun (op, _) -> op.UOPID = sol.StartOP),
@@ -206,9 +207,9 @@ let main argv =
                     |> Array.sortBy (fun (_, startOp, _) ->
                         match startOp with
                         | Some(_, km) -> km
-                        | None -> 0.0)
+                        | None -> 0.0<km>)
 
-                let getMaxSpeed (sol: EraKG.SectionOfLine) (defaultValue: int) =
+                let getMaxSpeed (sol: EraKG.SectionOfLine) (defaultValue: int<km / h>) =
                     sol.Tracks
                     |> Array.choose (fun t -> t.maximumPermittedSpeed)
                     |> Array.tryHead
@@ -227,7 +228,7 @@ let main argv =
                             startKm
                             endKm
                             (sol.Length / 1000.0)
-                            (getMaxSpeed sol 50)
+                            (getMaxSpeed sol 50<km / h>)
                             (isElectrified sol)
                             sol.Name
                     | _ -> printfn "ops not found: %s" sol.Name)

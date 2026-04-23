@@ -3,9 +3,13 @@ module OSM.Comparison
 open System
 open EraKG
 open OSM.Sparql
+open RInf.Types
 
 // see http://www.fssnip.net/7P8/title/Calculate-distance-between-two-GPS-latitudelongitude-points
-let ``calculate distance`` (p1Latitude, p1Longitude) (p2Latitude, p2Longitude) =
+let ``calculate distance``
+    (p1Latitude: float<degree>, p1Longitude: float<degree>)
+    (p2Latitude: float<degree>, p2Longitude: float<degree>)
+    : float<km> =
     let r = 6371.0 // km
 
     let dLat = (p2Latitude - p1Latitude) * Math.PI / 180.0
@@ -16,10 +20,13 @@ let ``calculate distance`` (p1Latitude, p1Longitude) (p2Latitude, p2Longitude) =
     let lat2 = p2Latitude * Math.PI / 180.0
 
     let a =
-        Math.Sin(dLat / 2.0) * Math.Sin(dLat / 2.0)
-        + Math.Sin(dLon / 2.0) * Math.Sin(dLon / 2.0) * Math.Cos(lat1) * Math.Cos(lat2)
+        Math.Sin(dLat / 2.0<_>) * Math.Sin(dLat / 2.0<_>)
+        + Math.Sin(dLon / 2.0<_>)
+          * Math.Sin(dLon / 2.0<_>)
+          * Math.Cos(lat1 / 1.0<_>)
+          * Math.Cos(lat2 / 1.0<_>)
 
-    let c = 2.0 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1.0 - a))
+    let c = 2.0<km> * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1.0 - a))
 
     r * c
 
@@ -47,7 +54,7 @@ let private findRInfOsmMatchings
             osmEntries
             |> Array.filter (fun entry ->
                 matchesRailwayRefWithUOPID entry.RailwayRef op.UOPID
-                && ``calculate distance`` (op.Latitude, op.Longitude) (entry.Latitude, entry.Longitude) < 4.0)
+                && ``calculate distance`` (op.Latitude, op.Longitude) (entry.Latitude, entry.Longitude) < 4.0<_>)
 
         if 0 < candidates.Length then
             let sorted =

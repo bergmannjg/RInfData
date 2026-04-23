@@ -6,6 +6,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="../RInfTypes/RInfTypes.fsproj"/>
+  </ItemGroup>
+
+  <ItemGroup>
     <Compile Include="Request.fs" />
     <Compile Include="Sparql.fs" />
     <Compile Include="Api.fs" />

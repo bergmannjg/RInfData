@@ -6,6 +6,7 @@ open System.Text.RegularExpressions
 open RInfGraph
 open Sparql
 open EraKG
+open RInf.Types
 
 type Metadata =
     { Endpoint: string
@@ -66,7 +67,7 @@ let private loadPaged<'T>
     (length: 'T -> int)
     : Async<'T> =
     async {
-        let maxLoop = 20
+        let maxLoop = 50
         let mutable offset = 0
         let mutable arr = Array.empty
 
@@ -85,9 +86,9 @@ let private loadPaged<'T>
     }
 
 let loadQueryResultsPaged (loader: (int -> int -> Async<QueryResults>)) : Async<QueryResults> =
-    loadPaged 10000 loader QueryResults.fold QueryResults.length
+    loadPaged 2000 loader QueryResults.fold QueryResults.length
 
-let kilometerOfLine (op: OperationalPoint) (line: string) : float option =
+let kilometerOfLine (op: OperationalPoint) (line: string) : float<km> option =
     op.RailwayLocations
     |> Array.tryFind (fun loc -> loc.NationalIdentNum = line)
     |> Option.map (fun loc -> loc.Kilometer)
@@ -99,6 +100,9 @@ let findOpByOPID (ops: Collections.Generic.Dictionary<string, OperationalPoint>)
     match ops.TryGetValue opId with
     | true, op -> Some op
     | _ -> None
+
+let private round (v: float<km>, digits: int) =
+    1.0<_> * Math.Round(v / 1.0<km>, digits)
 
 let getLineInfo
     (name: string)
@@ -158,8 +162,12 @@ let getLineInfo
                   Name = name
                   Length =
                     nodesOfLine
-                    |> List.sumBy (fun sol -> if sol.Edges.Length > 0 then sol.Edges.[0].Length else 0.0)
-                    |> fun d -> Math.Truncate(d * 10.0) / 10.0
+                    |> List.sumBy (fun sol ->
+                        if sol.Edges.Length > 0 then
+                            sol.Edges.[0].Length
+                        else
+                            0.0<_>)
+                    |> fun d -> round (d, 1)
                   StartKm = startKm
                   EndKm = endKm
                   UOPIDs = uOPIDs
@@ -179,7 +187,9 @@ let buildLineInfo
         ops
         |> Array.fold
             (fun acc op ->
-                acc.Add(op.UOPID, op)
+                if not (acc.ContainsKey op.UOPID) then
+                    acc.Add(op.UOPID, op)
+
                 acc)
             (Collections.Generic.Dictionary ops.Length)
 
@@ -262,7 +272,10 @@ let buildLineInfos
     |> Array.sortBy (fun line -> line.Line)
 
 // see http://www.fssnip.net/7P8/title/Calculate-distance-between-two-GPS-latitudelongitude-points
-let ``calculate distance`` (p1Latitude, p1Longitude) (p2Latitude, p2Longitude) =
+let ``calculate distance``
+    (p1Latitude: float<degree>, p1Longitude: float<degree>)
+    (p2Latitude: float<degree>, p2Longitude: float<degree>)
+    : float<km> =
     let r = 6371.0 // km
 
     let dLat = (p2Latitude - p1Latitude) * Math.PI / 180.0
@@ -273,10 +286,13 @@ let ``calculate distance`` (p1Latitude, p1Longitude) (p2Latitude, p2Longitude) =
     let lat2 = p2Latitude * Math.PI / 180.0
 
     let a =
-        Math.Sin(dLat / 2.0) * Math.Sin(dLat / 2.0)
-        + Math.Sin(dLon / 2.0) * Math.Sin(dLon / 2.0) * Math.Cos(lat1) * Math.Cos(lat2)
+        Math.Sin(dLat / 2.0<_>) * Math.Sin(dLat / 2.0<_>)
+        + Math.Sin(dLon / 2.0<_>)
+          * Math.Sin(dLon / 2.0<_>)
+          * Math.Cos(lat1 / 1.0<_>)
+          * Math.Cos(lat2 / 1.0<_>)
 
-    let c = 2.0 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1.0 - a))
+    let c = 2.0<km> * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1.0 - a))
 
     r * c
 
@@ -293,12 +309,12 @@ let estimateKilometres
         | Some edge ->
             match ops |> Array.tryFind (fun op -> op.UOPID = startOp) with
             | Some op ->
-                let startKm =
+                let startKm: float<km> =
                     edge.StartKm
                     + ``calculate distance`` (op.Latitude, op.Longitude) (tunnel.StartLatitude, tunnel.StartLongitude)
 
-                let endKm = startKm + tunnel.Length / 1000.0
-                Some(System.Math.Round(startKm, 3)), Some(System.Math.Round(endKm, 3))
+                let endKm: float<km> = startKm + tunnel.Length * 0.001<km / m>
+                Some(round (startKm, 3)), Some(round (endKm, 3))
             | None -> None, None
         | None -> None, None
     | None -> None, None
@@ -313,51 +329,21 @@ let splitTunnelContainingTrack (input: String) : (String * String * String) Opti
     else
         None
 
-let buildTunnelInfos
-    (sols: SectionOfLine[])
-    (ops: OperationalPoint[])
-    (nodes: GraphNode[])
-    (tunnels: Tunnel[])
-    : TunnelInfo[] =
+let buildTunnelInfos (tunnels: Tunnel[]) : TunnelInfo[] =
     tunnels
-    |> Array.choose (fun t ->
-        match
-            sols
-            |> Array.tryFind (fun sol ->
-                t.LineIdentification = sol.LineIdentification
-                && sol.Tracks
-                   |> Array.exists (fun track ->
-                       t.ContainingTracks
-                       |> Array.exists (fun t ->
-                           track.id = t
-                           || match splitTunnelContainingTrack t with
-                              | Some(n, op1, op2) ->
-                                  n = sol.LineIdentification && op1 = sol.StartOP && op2 = sol.EndOP
-                              | None -> false)))
-        with
-        | Some sol ->
-            let startKm, endKm = estimateKilometres sol.StartOP sol.EndOP ops nodes t
+    |> Array.map (fun t ->
+        { Tunnel = t.Name
+          Length = 0.001<km> * float t.Length
+          StartLong = t.StartLongitude
+          StartLat = t.StartLatitude
+          StartKm = t.StartKm
+          EndLong = t.EndLongitude
+          EndLat = t.EndLatitude
+          EndKm = t.EndKm
+          Line = t.LineIdentification
+          Country = t.Country })
 
-            Some
-                { Tunnel = t.Name
-                  Length = t.Length / 1000.0
-                  StartLong = t.StartLongitude
-                  StartLat = t.StartLatitude
-                  StartKm = startKm
-                  StartOP = sol.StartOP
-                  EndLong = t.EndLongitude
-                  EndLat = t.EndLatitude
-                  EndKm = endKm
-                  EndOP = sol.EndOP
-                  SingelTrack = t.ContainingTracks.Length = 1
-                  Line = sol.LineIdentification
-                  Country = sol.Country }
-        | None ->
-            fprintfn stderr "sol not found for trackid: %s" t.Name
-            None)
-    |> Array.distinct
-
-let getMaxSpeed (sol: SectionOfLine) (defaultValue: int) =
+let getMaxSpeed (sol: SectionOfLine) (defaultValue: int<km / h>) =
     sol.Tracks
     |> Array.choose (fun t -> t.maximumPermittedSpeed)
     |> Array.sortDescending
@@ -372,13 +358,16 @@ let isElectrified (sol: SectionOfLine) =
 let nullDefaultValue<'a when 'a: null> (defaultValue: 'a) (value: 'a) =
     if isNull value then defaultValue else value
 
-let scale (maxSpeed: int) = 1.0
+let travelTime (length: float<km>) (maxSpeed: int<km / h>) : float<h> =
+    let maxSpeed =
+        if maxSpeed = 0<km / h> then
+            80.0<km / h>
+        else
+            1.0<_> * float maxSpeed
 
-let travelTime (length: float) (maxSpeed: int) =
-    let maxSpeed = if maxSpeed = 0 then 80 else maxSpeed
-    length / (float maxSpeed * scale maxSpeed)
+    length / maxSpeed
 
-let getCost (length: float) (maxSpeed: int) =
+let getCost (length: float<km>) (maxSpeed: int<km / h>) =
     let cost = int (10000.0 * travelTime length maxSpeed)
 
     if cost <= 0 then 1 else cost
@@ -392,62 +381,63 @@ let buildGraph (ops: OperationalPoint[]) (sols: SectionOfLine[]) : GraphNode arr
             graph <- graph.Add(op.UOPID, List.empty)
 
     let findOp (opId: string) =
-        ops |> Array.tryFind (fun op -> op.UOPID = opId)
-
-    let getLength (sol: SectionOfLine) = sol.Length / 1000.0
+        ops |> Array.tryFind (fun op -> op.UOPID = opId || op.Id = opId)
 
     let addSol (sol: SectionOfLine) =
         match findOp sol.StartOP, findOp sol.EndOP with
-        | Some(opStart), Some(opEnd) ->
-            let maxSpeed = getMaxSpeed sol 100
-            let currLength = Math.Round(getLength sol, 2)
+        | Some opStart, Some opEnd ->
+            let maxSpeed = getMaxSpeed sol 100<_>
+            let currLength = round (sol.Length, 2)
             let cost = getCost currLength maxSpeed
 
-            match kilometerOfLine opStart sol.LineIdentification, kilometerOfLine opEnd sol.LineIdentification with
-            | Some startKm, Some endKm ->
-                graph <-
-                    graph.Add(
-                        opStart.UOPID,
-                        { Node = opEnd.UOPID
-                          Cost = cost
-                          Line = sol.LineIdentification
-                          Country = sol.Country
-                          MaxSpeed = maxSpeed
-                          Electrified = isElectrified sol
-                          StartKm = startKm
-                          EndKm = endKm
-                          Length = currLength }
-                        :: graph.[opStart.UOPID]
-                    )
+            let startKm, endKm =
+                kilometerOfLine opStart sol.LineIdentification, kilometerOfLine opEnd sol.LineIdentification
 
-                graph <-
-                    graph.Add(
-                        opEnd.UOPID,
-                        { Node = opStart.UOPID
-                          Cost = cost
-                          Line = sol.LineIdentification
-                          Country = sol.Country
-                          MaxSpeed = maxSpeed
-                          Electrified = isElectrified sol
-                          StartKm = endKm
-                          EndKm = startKm
-                          Length = currLength }
-                        :: graph.[opEnd.UOPID]
-                    )
-            | _, _ -> ()
+            graph <-
+                graph.Add(
+                    opStart.UOPID,
+                    { Node = opEnd.UOPID
+                      Cost = cost
+                      Line = sol.LineIdentification
+                      Country = sol.Country
+                      MaxSpeed = maxSpeed
+                      Electrified = isElectrified sol
+                      StartKm = Option.defaultValue 0.0<_> startKm
+                      EndKm = Option.defaultValue 0.0<_> endKm
+                      Length = currLength }
+                    :: graph.[opStart.UOPID]
+                )
+
+            graph <-
+                graph.Add(
+                    opEnd.UOPID,
+                    { Node = opStart.UOPID
+                      Cost = cost
+                      Line = sol.LineIdentification
+                      Country = sol.Country
+                      MaxSpeed = maxSpeed
+                      Electrified = isElectrified sol
+                      StartKm = Option.defaultValue 0.0<_> endKm
+                      EndKm = Option.defaultValue 0.0<_> startKm
+                      Length = currLength }
+                    :: graph.[opEnd.UOPID]
+                )
         | _ -> fprintfn stderr "addSol, not found %A or %A" sol.StartOP sol.EndOP
 
-    ops |> Array.iter addOp
+    if 0 < ops.Length && 0 < sols.Length then
+        ops |> Array.iter addOp
 
-    sols |> Array.iter addSol
+        sols |> Array.iter addSol
 
-    fprintfn stderr "Nodes: %i, Edges: %i" graph.Count (graph |> Seq.sumBy (fun item -> item.Value.Length))
+        fprintfn stderr "Nodes: %i, Edges: %i" graph.Count (graph |> Seq.sumBy (fun item -> item.Value.Length))
 
-    graph
-    |> Seq.map<_, GraphNode> (fun kv ->
-        { Node = kv.Key
-          Edges = graph.[kv.Key] |> List.toArray })
-    |> Seq.toArray
+        graph
+        |> Seq.map<_, GraphNode> (fun kv ->
+            { Node = kv.Key
+              Edges = graph.[kv.Key] |> List.toArray })
+        |> Seq.toArray
+    else
+        [||]
 
 let checkIsDir (path: string) = Directory.Exists path
 
@@ -534,7 +524,7 @@ let execOpInfohBuild (path: string) : Async<string> =
             |> Array.map (fun op ->
                 { UOPID = op.UOPID
                   Name = op.Name
-                  RinfType = System.Int32.Parse(op.Type.Substring 5)
+                  RinfType = System.Int32.Parse op.Type
                   Latitude = op.Latitude
                   Longitude = op.Longitude })
 
@@ -566,7 +556,7 @@ let execTunnelInfoBuild (path: string) : Async<string> =
 
         let tunnels = readFile<Tunnel[]> path "Tunnels.json"
 
-        let tunnelInfos = buildTunnelInfos sols ops nodes tunnels
+        let tunnelInfos = buildTunnelInfos tunnels
 
         return JsonSerializer.Serialize tunnelInfos
     }
@@ -581,6 +571,7 @@ let execOperationalPointsBuild (path: string) (countries: string[]) : Async<stri
             loadDataCached path filename (fun () -> loadQueryResultsPaged (Api.OperationalPoint.loadData countries))
 
         let kgOps = Api.OperationalPoint.fromQueryResults result
+        fprintfn stderr $"OperationalPoint: length {kgOps.Length}"
 
         return JsonSerializer.Serialize kgOps
     }
@@ -593,19 +584,7 @@ let execTunnelBuild (path: string) (countries: string[]) : Async<string> =
 
         let sols = readFile<SectionOfLine[]> path "SectionsOfLines.json"
 
-        let tunnels =
-            EraKG.Api.Tunnel.fromQueryResults result sols
-            |> fun tunnels -> // filter double entries
-                tunnels
-                |> Array.filter (fun tunnel ->
-                    tunnels
-                    |> Array.filter (fun t ->
-                        t.Length = tunnel.Length
-                        && ``calculate distance``
-                            (t.StartLatitude, t.StartLongitude)
-                            (tunnel.StartLatitude, tunnel.StartLongitude) < 0.05)
-                    |> Array.sortBy (fun t -> t.Name.Length)
-                    |> fun filtered -> tunnel.Name = filtered.[0].Name)
+        let tunnels = EraKG.Api.Tunnel.fromQueryResults result sols
 
         return JsonSerializer.Serialize tunnels
     }
@@ -622,7 +601,7 @@ let execSectionsOfLineBuild (path: string) (countries: string[]) : Async<string>
         let tracks = readFile<QueryResults> path "sparql-tracks.json"
 
         let sols = EraKG.Api.SectionOfLine.fromQueryResults result tracks
-
+        fprintfn stderr $"SectionOfLine: length {sols.Length}, tracks: length {tracks.results.bindings.Length} "
         return JsonSerializer.Serialize sols
     }
 

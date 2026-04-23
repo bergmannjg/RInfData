@@ -1,5 +1,7 @@
 namespace OSM.Sparql
 
+open RInf.Types
+
 type Entry =
     { Url: string
       Name: string
@@ -7,8 +9,8 @@ type Entry =
       RailwayRef: string
       UicRef: string option
       Operator: string option
-      Latitude: float
-      Longitude: float
+      Latitude: float<degree>
+      Longitude: float<degree>
       OsmType: string }
 
 module Api =
@@ -60,6 +62,6 @@ SELECT distinct ?id (geof:latitude(?centroid) AS ?lat) (geof:longitude(?centroid
               RailwayRef = EraKG.Api.Properties.toLiteral b.["railway_ref"]
               UicRef = toOptLiteral b "uic_ref"
               Operator = toOptLiteral b "operator"
-              Latitude = EraKG.Api.Properties.toFloat b.["lat"]
-              Longitude = EraKG.Api.Properties.toFloat b.["lng"]
+              Latitude = 1.0<degree> * EraKG.Api.Properties.toFloat b.["lat"]
+              Longitude = 1.0<degree> * EraKG.Api.Properties.toFloat b.["lng"]
               OsmType = EraKG.Api.Properties.uriTypeToString b.["type"] "https://www.openstreetmap.org/" })

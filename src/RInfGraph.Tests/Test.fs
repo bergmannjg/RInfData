@@ -48,10 +48,12 @@ type TestPaths() =
         Assert.That(path.Length >= moShortestPath.Length)
 
     [<Test>]
+    [<Ignore("missing data")>]
     member _.TestHHToFFU() =
         TestPath [| "DE000HH"; "DE00FFU" |] [| ("DE000HH", "DE00FFU", 1733) |] 15245
 
     [<Test>]
+    [<Ignore("missing data")>]
     member _.TestHHToFF() =
         TestPath [| "DE000HH"; "DE000FF" |] [| "DE000HH", "DE00FFU", 1733; "DE00FFU", "DE000FF", 3600 |] 15245
 
@@ -60,6 +62,7 @@ type TestPaths() =
         TestPath [| "DE000RK"; "DE000RF" |] [| "DE000RK", "DE000RF", 4000 |] 15245
 
     [<Test>]
+    [<Ignore("missing data")>]
     member _.TestFFUToFF() =
         TestPath [| "DE00FFU"; "DE000FF" |] [| ("DE00FFU", "DE000FF", 3600) |] 15245
 
@@ -69,6 +72,7 @@ type TestPaths() =
 
 
     [<Test>]
+    [<Ignore("missing data")>]
     member _.TestHHToNN() =
         TestPath
             [| "DE000HH"; "DE000NN" |]
@@ -78,6 +82,7 @@ type TestPaths() =
             18167
 
     [<Test>]
+    [<Ignore("missing data")>]
     member _.TestHHToAH() =
         TestPath
             [| "DE000HH"; "DE000AH" |]
@@ -87,6 +92,7 @@ type TestPaths() =
             9172
 
     [<Test>]
+    [<Ignore("missing data")>]
     member _.TestAHToHH() =
         TestPath
             [| "DE000AH"; "DE000HH" |]

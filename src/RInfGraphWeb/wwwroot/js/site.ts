@@ -262,7 +262,8 @@ function getBRouterUrlOfOpInfos(arr: OpInfo[]) {
 }
 
 function rinfGetKgUrlOfUOPID(uopid: string) {
-    return 'http://data.europa.eu/949/functionalInfrastructure/operationalPoints/' + (uopid.replace(' ', '%2520'));
+    return 'https://graph.data.era.europa.eu/resource?uri='
+        + encodeURIComponent('http://data.europa.eu/949/operationalPoint/' + uopid) + '&role=object';
 }
 
 function rinfGetLocationUrlOfUOPID(uopid: string) {
@@ -361,7 +362,7 @@ export function lookupOsmComparison() {
             }
         });
         const tagUsage = Object.entries(Object.groupBy(rinfOsmMatchings().filter(m => !!m.OsmRailwayTag), m => m.OsmRailwayTag ?? ""));
-        tagUsage.sort((a,b)=> (b[1]??[]).length - (a[1]??[]).length);
+        tagUsage.sort((a, b) => (b[1] ?? []).length - (a[1] ?? []).length);
         for (const [key, value] of tagUsage) {
             if (tableOsmTags && value) {
                 addRow(tableOsmTags, [key, value.length.toString()]);
@@ -427,9 +428,7 @@ export function lookupLine(inputLine: string, inputCountry: string) {
             });
             results.tunnels.forEach(x => {
                 if (tableTunnels) {
-                    addRow(tableTunnels, [x.Tunnel, createUrl(rinfGetLocationUrlOfUOPID(x.StartOP), x.StartOP),
-                    createUrl(rinfGetLocationUrlOfUOPID(x.EndOP), x.EndOP),
-                    createUrl(getBRouterUrlOfLocations(x.StartLat, x.StartLong, x.EndLat, x.EndLong, x.Tunnel), x.StartKm?.toFixed(3) + ' bis ' + x.EndKm?.toFixed(3)),
+                    addRow(tableTunnels, [x.Tunnel, createUrl(getBRouterUrlOfLocations(x.StartLat, x.StartLong, x.EndLat, x.EndLong, x.Tunnel), x.StartKm?.toFixed(3) + ' bis ' + x.EndKm?.toFixed(3)),
                     createTextEnd(x.Length.toFixed(3))])
                 }
             });

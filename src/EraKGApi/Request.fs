@@ -28,20 +28,23 @@ module Request =
                 return! retry work resultOk (retries - 1) (delay * 10)
         }
 
+    let private resultOk: Http.HttpResponseMessage -> bool =
+                fun res -> res.IsSuccessStatusCode || res.StatusCode = HttpStatusCode.BadRequest
+
     let GetAsync (endpoint: string) (query: string) : Async<string> =
         async {
             let baseurl = endpoint + "?query="
 
             let url = baseurl + System.Web.HttpUtility.UrlEncode(query)
 
-            let! response = retry (client.GetAsync url |> Async.AwaitTask) _.IsSuccessStatusCode 3 10
+            let! response = retry (client.GetAsync url |> Async.AwaitTask) resultOk 3 10
 
             let! body = response.Content.ReadAsStringAsync() |> Async.AwaitTask
 
             return
                 match response.IsSuccessStatusCode with
                 | true -> body
-                | false -> raise (System.InvalidOperationException(response.ToString()))
+                | false -> raise (System.InvalidOperationException $"{response.StatusCode} {body}")
         }
 
     let PostAsync (endpoint: string) (query: string) : Async<string> =
@@ -53,7 +56,7 @@ module Request =
 
             use content = new Http.FormUrlEncodedContent(dict)
 
-            use! response = retry (client.PostAsync(url, content) |> Async.AwaitTask) _.IsSuccessStatusCode 3 10
+            use! response = retry (client.PostAsync(url, content) |> Async.AwaitTask) resultOk 3 10
 
             let! body = response.Content.ReadAsStringAsync() |> Async.AwaitTask
 

@@ -11,6 +11,7 @@
 
   <ItemGroup>
     <ProjectReference Include="../../TargetedMosp/target.javascript.dim.2/TargetedMosp.fable.fsproj"/>
+    <ProjectReference Include="../../RInfTypes/RInfTypes.fsproj"/>
   </ItemGroup>
 
   <PropertyGroup>

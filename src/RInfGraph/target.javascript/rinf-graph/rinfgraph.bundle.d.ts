@@ -49,13 +49,10 @@ export interface TunnelInfo {
     Length: number;
     StartLong: number;
     StartLat: number;
-    StartKm?: number;
-    StartOP: string;
+    StartKm: number;
     EndLong: number;
     EndLat: number;
-    EndKm?: number;
-    EndOP: string;
-    SingelTrack: boolean;
+    EndKm: number;
     Line: string;
     Country: string;
 }
