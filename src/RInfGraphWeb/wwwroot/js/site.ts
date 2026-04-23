@@ -97,6 +97,11 @@ export function displayElement(nameShown: string) {
     if (element) element.style.display = 'initial';
 }
 
+export function displayOsmComparison(nameShown: string) {
+    const element = document.getElementById(nameShown);
+    if (element && 0 < rinfOsmMatchings().length) element.style.display = 'initial';
+}
+
 function removeChilds(element: HTMLElement) {
     while (element.firstChild) {
         element.removeChild(element.firstChild);

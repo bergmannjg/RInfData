@@ -59,11 +59,13 @@ export function rinfFindMoPath(source: string, target: string, maxExtraCostInPro
 
 export interface Matching {
     UOPID: string;
-    OsmUrl?: string;
+    OsmUrl: string | null;
+    OsmRailwayTag: string | null;
 }
 
 export function rinfOsmMatchings(): Matching[] {
-    return matchings as Matching[];
+    const typedMatchings = matchings as Matching[];
+    if (typedMatchings.find(m => !!m.OsmUrl)) return typedMatchings; else return [];
 }
 
 export interface OpType {
