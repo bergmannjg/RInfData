@@ -4,7 +4,9 @@ import _g from 'rinf-graph/data/Graph.json' with { type: 'json' };
 import opInfos from 'rinf-graph/data/OpInfos.json' with { type: 'json' };
 import lineInfos from 'rinf-graph/data/LineInfos.json' with { type: 'json' };
 import tunnelInfos from 'rinf-graph/data/TunnelInfos.json' with { type: 'json' };
+// see scripts/restore-osm-comparison.sh
 import matchings from './RInfOsmMatchings.json' with { type: 'json' };
+// see scripts/restore-optypes-file.sh
 import opTypes from './OpTypes.json' with { type: 'json' };
 import metadata from 'rinf-graph/data/Metadata.json' with { type: 'json' };
 

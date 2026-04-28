@@ -18,6 +18,4 @@ if [ $# -eq 0 ]
     exit 1
 fi
 
-dotnet run --project src/OSMComparison/OsmComparison.fsproj --Osm ${RINF_DATA_DIR}/
-
 dotnet run --project src/EraKGLoader/EraKGLoader.fsproj --Build ${RINF_DATA_DIR}/ $1 $2

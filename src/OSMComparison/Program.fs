@@ -68,12 +68,6 @@ let main argv =
             async {
                 let pathInput = argv.[1]
 
-                let pathOutput =
-                    if argv.Length > 2 && checkIsDir argv.[2] then
-                        argv.[2]
-                    else
-                        argv.[1]
-
                 // operational points with type station or passenger stop in germany
                 let ops =
                     readFile<RInfGraph.OpInfo[]> pathInput "OpInfos.json"
@@ -91,9 +85,7 @@ let main argv =
                     stderr
                     $"total {ops.Length}, found {ops.Length - opsNotFound.Length}, not found {opsNotFound.Length}"
 
-                File.WriteAllText(pathOutput + "RInfOsmMatchings.json", JsonSerializer.Serialize(result))
-
-                return ""
+                return  JsonSerializer.Serialize result
             }
         else
             async {

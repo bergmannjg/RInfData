@@ -17,6 +17,17 @@ module Api =
 
     open Sparql
 
+#if DEBUG
+    let private verbose =
+        try
+            not (isNull (System.Environment.GetEnvironmentVariable "QLEVERVerbose"))
+        with _ ->
+            false
+#else
+    let private verbose = false
+#endif
+
+
     // search in germany and switzerland
     let private osmQuery () =
         """
@@ -46,7 +57,12 @@ SELECT distinct ?id (geof:latitude(?centroid) AS ?lat) (geof:longitude(?centroid
 """
 
     let loadData (endpoint: string) : Async<string> =
-        EraKG.Request.PostAsync endpoint (osmQuery ())
+        let query = osmQuery ()
+
+        if verbose then
+            fprintfn stderr $"osm: endpoint {endpoint}, query {query}"
+
+        EraKG.Request.PostAsync endpoint query
 
     let private toOptLiteral (b: Map<string, Rdf>) (key: string) =
         match b.TryGetValue key with

@@ -53,14 +53,7 @@ if [ $1 = "--cache" ]
     cp ${DATA_DIR}/OpInfos.json node_modules/rinf-graph/data/
     cp ${DATA_DIR}/TunnelInfos.json node_modules/rinf-graph/data/ 
     cp ${DATA_DIR}/Metadata.json node_modules/rinf-graph/data/ 
-    if [ -f "${DATA_DIR}/sparql-osm.json" ]; then
-        cp ${DATA_DIR}/sparql-osm.json node_modules/rinf-graph/data/
-    fi
 fi
-
-dotnet run --project ../../OSMComparison/OsmComparison.fsproj --Osm node_modules/rinf-graph/data/
-dotnet run --project ../../OSMComparison/OsmComparison.fsproj --Osm.Compare node_modules/rinf-graph/data/ ./
-dotnet run --project ../../EraKGLoader/EraKGLoader.fsproj --OpTypes > OpTypes.json
 
 npx tsc
 npx webpack --config webpack.config.cjs
