@@ -13,6 +13,6 @@ dotnet run --project src/TargetedMosp.Cli/target.dotnet.dim.3/TargetedMosp.Cli.f
 JavaScript:
 
 ```txt
-dotnet fable src/TargetedMosp.Cli/target.javascript.dim.3/TargetedMosp.Cli.fsproj -o build
+dotnet fable src/TargetedMosp.Cli/target.javascript.dim.3/TargetedMosp.Cli.fable.fsproj -o build
 node build/Program.js <path> <source> <target>
 ```

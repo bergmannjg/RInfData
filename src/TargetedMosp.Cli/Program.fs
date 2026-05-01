@@ -1,3 +1,7 @@
+#if FABLE_COMPILER
+module Program
+#endif
+
 open TMosp
 
 #if FABLE_COMPILER

@@ -18,14 +18,11 @@ type Vertex =
       Edges: Edge list
       Path: string list }
 
-    interface IComparable<Vertex> with
-        member this.CompareTo other = compare this.Cost other.Cost
-
     interface IComparable with
-        member this.CompareTo(obj: obj) =
-            match obj with
-            | :? Vertex -> compare this.Cost (unbox<Vertex> obj).Cost
-            | _ -> invalidArg "obj" "Must be of type Vertex"
+        member this.CompareTo(other: obj) =
+            match other with
+            | :? Vertex -> compare this.Cost (unbox<Vertex> other).Cost
+            | _ -> invalidArg "other" "Must be of type Vertex"
 
     override x.Equals(yobj) =
         match yobj with
