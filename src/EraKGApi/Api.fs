@@ -208,22 +208,14 @@ module Api =
             else
                 raise (System.Exception $"toFloat unexpected datatype {r}")
 
-        // example label "Railway location of OP Hamburg Norderelbbrücke, km 352.474 on line 2200"
-        let toRailwayLocation (netReferenceLabel: Rdf) : RailwayLocation option =
-            let label = toLiteral netReferenceLabel
-            let index1 = label.IndexOf " km "
-            let index2 = label.IndexOf " on line "
+        // https://rinf.data.era.europa.eu/era-vocabulary/rinf-appGuide/#LinearPositioningSystemCoordinate
+        let toRailwayLocation (lineId: Rdf) (kilometer: Rdf) (offset: Rdf) : RailwayLocation =
+            let lineId = toLiteral lineId
+            let kilometer = 1.0<km> * toFloat kilometer
+            let offset = 1.0<m> * toFloat offset
 
-            if 0 <= index1 && 0 <= index2 then
-                let nationalIdentNum = label.Substring(index2 + 9)
-                let kilometer = label.Substring(index1 + 4, index2 - (index1 + 4))
-
-                Some
-                    { NationalIdentNum = nationalIdentNum
-                      Kilometer = 1.0<km> * float kilometer }
-            else
-                fprintfn stderr $"toRailwayLocation: string not found in '{label}'"
-                None
+            { NationalIdentNum = lineId
+              Kilometer = kilometer + 0.001<km> * float offset }
 
         // return (startLongitude, startLatitude, endLongitude, endLatitude)
         let fromWKT (wkt: Rdf) : (float * float * float * float) option =
@@ -308,15 +300,23 @@ module Api =
                 PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
                 PREFIX time: <http://www.w3.org/2006/time#>
 
-                SELECT distinct ?operationalPoint ?opName ?uopid ?opType ?lat ?lon ?netReferenceLabel ?country
+                SELECT distinct ?operationalPoint ?opName ?uopid ?opType ?lat ?lon ?lineId ?kilometer ?offset ?country
                 WHERE {{
                   ?operationalPoint a era:OperationalPoint .
                   ?operationalPoint era:opName ?opName .
                   ?operationalPoint era:uopid ?uopid .
-                  ?operationalPoint era:netReference ?netReference .
-                  ?netReference rdfs:label ?netReferenceLabel .
+                  ?operationalPoint era:netReference ?netReference .                 
                   ?netReference wgs:lat ?lat .
                   ?netReference wgs:long ?lon .
+
+                  ?netReference rdf:type era:NetPointReference .
+                  ?netReference era:hasLrsCoordinate ?lrsCoordinate .
+                  ?lrsCoordinate era:kmPost ?kmPost .
+                  ?lrsCoordinate era:offsetFromKilometricPost ?offset .
+                  ?kmPost era:kilometer ?kilometer .
+                  ?kmPost era:hasLRS ?lrs .
+                  ?lrs era:lineId ?lineId . 
+
                   ?operationalPoint era:opType ?opType .
                   ?operationalPoint era:inCountry ?country .
                   {Country.toCountryCondition "?operationalPoint" countries}
@@ -339,29 +339,29 @@ module Api =
         let private folder (ops: Dictionary<string, OperationalPoint>) (b: Map<string, Rdf>) =
             let id = Properties.toUOPID b.["operationalPoint"]
 
-            match Properties.toRailwayLocation b.["netReferenceLabel"] with
-            | Some railwayLocation ->
-                Utils.change (
-                    ops,
-                    id,
-                    fun op ->
-                        match op with
-                        | Some op ->
-                            Some
-                                { op with
-                                    RailwayLocations = Utils.appendElem railwayLocation op.RailwayLocations }
-                        | None ->
-                            Some
-                                { Id = Properties.toUOPID b.["operationalPoint"]
-                                  Name = Properties.toLiteral b.["opName"]
-                                  Type = Properties.toOpType b.["opType"]
-                                  Country = Properties.toCountryType b.["country"]
-                                  UOPID = Properties.toLiteral b.["uopid"]
-                                  Latitude = 1.0<degree> * Properties.toFloat b.["lat"]
-                                  Longitude = 1.0<degree> * Properties.toFloat b.["lon"]
-                                  RailwayLocations = [| railwayLocation |] }
-                )
-            | None -> ops
+            let railwayLocation =
+                Properties.toRailwayLocation b.["lineId"] b.["kilometer"] b.["offset"]
+
+            Utils.change (
+                ops,
+                id,
+                fun op ->
+                    match op with
+                    | Some op ->
+                        Some
+                            { op with
+                                RailwayLocations = Utils.appendElem railwayLocation op.RailwayLocations }
+                    | None ->
+                        Some
+                            { Id = Properties.toUOPID b.["operationalPoint"]
+                              Name = Properties.toLiteral b.["opName"]
+                              Type = Properties.toOpType b.["opType"]
+                              Country = Properties.toCountryType b.["country"]
+                              UOPID = Properties.toLiteral b.["uopid"]
+                              Latitude = 1.0<degree> * Properties.toFloat b.["lat"]
+                              Longitude = 1.0<degree> * Properties.toFloat b.["lon"]
+                              RailwayLocations = [| railwayLocation |] }
+            )
 
         let fromQueryResults (sparql: QueryResults) : OperationalPoint[] =
             sparql.results.bindings
@@ -584,27 +584,31 @@ module Api =
                 PREFIX rdf:	<http://www.w3.org/1999/02/22-rdf-syntax-ns#>
                 PREFIX geo: <http://www.opengis.net/ont/geosparql#> 
 
-                SELECT distinct ?tunnel ?tunnelIdentification ?length  ?labelStartsAt ?labelEndsAt ?wkt ?country
+                SELECT distinct ?tunnel ?tunnelIdentification ?lineId ?length ?startsAtKilometer ?startsAtOffset ?endsAtKilometer ?endsAtOffset ?wkt ?country
                 WHERE {{
                   ?tunnel a era:Tunnel.
-
                   ?tunnel era:tunnelIdentification ?tunnelIdentification .
                   ?tunnel era:lengthOfTunnel ?length .
                   ?tunnel era:netReference ?netReference .
                   ?netReference geo:hasGeometry ?geo .
   				  ?geo geo:asWKT ?wkt .
-				  ?netReference era:endsAt ?endsAt .
-  				  ?endsAt era:hasLrsCoordinate ?endsAtCoordinate .
-                  ?endsAtCoordinate rdfs:label ?labelEndsAt .
+				  
+                  ?netReference era:endsAt ?endsAt .
+                  ?endsAt era:hasLrsCoordinate ?endsAtCoordinate .
+                  ?endsAtCoordinate era:kmPost ?endsAtKmPost .
+                  ?endsAtCoordinate era:offsetFromKilometricPost ?endsAtOffset .
+                  ?endsAtKmPost era:kilometer ?endsAtKilometer .
+
 				  ?netReference era:startsAt ?startsAt .
   				  ?startsAt era:hasLrsCoordinate ?startsAtCoordinate .
-                  ?startsAtCoordinate rdfs:label ?labelStartsAt .
-                  ?tunnel era:isPartOf ?track .
-                  ?track rdf:type era:RunningTrack .
-				  ?tunnel era:isPartOf ?track .
-				  ?track era:isPartOf ?sectionOfLine .
-                  ?sectionOfLine era:inCountry ?country .
-                  {Country.toCountryCondition "?sectionOfLine" countries}
+                  ?startsAtCoordinate era:kmPost ?startsAtKmPost .
+                  ?startsAtCoordinate era:offsetFromKilometricPost ?startsAtOffset .
+                  ?startsAtKmPost era:kilometer ?startsAtKilometer .
+                  ?startsAtKmPost era:hasLRS ?startsAtLrs .
+                  ?startsAtLrs era:lineId ?lineId . 
+                  ?startsAtLrs era:inCountry ?country .
+
+                  {Country.toCountryCondition "?startsAtLrs" countries}
                 }}
             """
 
@@ -622,6 +626,12 @@ module Api =
         let private folder (sols: SectionOfLine array) (tunnels: Dictionary<string, Tunnel>) (b: Map<string, Rdf>) =
             let name = Properties.toLiteral b.["tunnelIdentification"]
 
+            let startsAtRailwayLocation =
+                Properties.toRailwayLocation b.["lineId"] b.["startsAtKilometer"] b.["startsAtOffset"]
+
+            let endsAtRailwayLocation =
+                Properties.toRailwayLocation b.["lineId"] b.["endsAtKilometer"] b.["endsAtOffset"]
+
             Utils.change (
                 tunnels,
                 name,
@@ -629,23 +639,19 @@ module Api =
                     match op with
                     | Some op -> Some op
                     | None ->
-                        match
-                            Properties.toRailwayLocation b.["labelStartsAt"],
-                            Properties.toRailwayLocation b.["labelEndsAt"],
-                            Properties.fromWKT b.["wkt"]
-                        with
-                        | Some startsAt, Some endsAt, Some(startLongitude, startLatitude, endLongitude, endLatitude) ->
+                        match Properties.fromWKT b.["wkt"] with
+                        | Some(startLongitude, startLatitude, endLongitude, endLatitude) ->
                             Some
                                 { Name = name
                                   Country = Properties.toCountryType b.["country"]
-                                  LineIdentification = startsAt.NationalIdentNum
+                                  LineIdentification = Properties.toLiteral b.["lineId"]
                                   Length = 1.0<m> * Properties.toFloat b.["length"]
                                   StartLatitude = 1.0<degree> * startLatitude
                                   StartLongitude = 1.0<degree> * startLongitude
-                                  StartKm = startsAt.Kilometer
+                                  StartKm = startsAtRailwayLocation.Kilometer
                                   EndLatitude = 1.0<degree> * endLatitude
                                   EndLongitude = 1.0<degree> * endLongitude
-                                  EndKm = endsAt.Kilometer }
+                                  EndKm = endsAtRailwayLocation.Kilometer }
                         | _ -> None // line is no passengerLine
             )
 

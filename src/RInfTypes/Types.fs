@@ -2,7 +2,7 @@ namespace RInf.Types
 
 /// Meter
 [<Measure>]
-type m 
+type m
 
 /// Kilometer
 [<Measure>]

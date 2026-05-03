@@ -85,7 +85,7 @@ let main argv =
                     stderr
                     $"total {ops.Length}, found {ops.Length - opsNotFound.Length}, not found {opsNotFound.Length}"
 
-                return  JsonSerializer.Serialize result
+                return JsonSerializer.Serialize result
             }
         else
             async {

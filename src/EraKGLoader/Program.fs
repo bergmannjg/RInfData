@@ -45,6 +45,8 @@ let readFile<'a> path name =
 
 let mutable cacheEnabled = true
 
+let mutable buildGraphByRailwayLocationsActive = true
+
 let loadDataCached<'a> path name (loader: unit -> Async<'a>) =
     async {
         let file = path + name
@@ -372,7 +374,165 @@ let getCost (length: float<km>) (maxSpeed: int<km / h>) =
 
     if cost <= 0 then 1 else cost
 
-let buildGraph (ops: OperationalPoint[]) (sols: SectionOfLine[]) : GraphNode array =
+let private buildGraphByRailwayLocations (ops: OperationalPoint[]) (sols: SectionOfLine[]) : GraphNode array =
+    let dictOps: Collections.Generic.Dictionary<string, OperationalPoint> =
+        ops
+        |> Array.fold
+            (fun acc op ->
+                match acc.TryGetValue op.UOPID with
+                | true, _ -> fprintfn stderr $"dictOps key '{op.UOPID}' is not unique"
+                | _ -> acc.Add(op.UOPID, op)
+
+                acc)
+            (Collections.Generic.Dictionary ops.Length)
+
+    let concat =
+        fun (line: string) (op1: string) (op2: string) -> line + "-" + op1 + "-" + op2
+
+    let dictSols: Collections.Generic.Dictionary<string, SectionOfLine> =
+        sols
+        |> Array.fold
+            (fun acc sol ->
+                let k = concat sol.LineIdentification sol.StartOP sol.EndOP
+
+                match acc.TryGetValue k with
+                | true, _ -> fprintfn stderr $"dictSols key '{k}' is not unique"
+                | _ -> acc.Add(k, sol)
+
+                acc)
+            (Collections.Generic.Dictionary sols.Length)
+
+    let tuples =
+        ops
+        |> Array.map (fun op ->
+            op.RailwayLocations
+            |> Array.map (fun rl -> op.Country, rl.NationalIdentNum, rl.Kilometer, op.UOPID))
+        |> Array.concat
+        |> Array.groupBy (fun (country, line, _, _) -> country, line)
+
+    let mutable graph = Map.empty
+
+    let addOp (op: OperationalPoint) =
+        if not (graph.ContainsKey op.UOPID) then
+            graph <- graph.Add(op.UOPID, List.empty)
+
+    let findOp (opId: string) =
+        match dictOps.TryGetValue opId with
+        | true, op -> Some op
+        | _ -> None
+
+    let addSol (sol: SectionOfLine) =
+        match findOp sol.StartOP, findOp sol.EndOP with
+        | Some opStart, Some opEnd ->
+            let maxSpeed = getMaxSpeed sol 100<_>
+            let currLength = round (sol.Length, 2)
+            let cost = getCost currLength maxSpeed
+
+            let startKm, endKm =
+                kilometerOfLine opStart sol.LineIdentification, kilometerOfLine opEnd sol.LineIdentification
+
+            graph <-
+                graph.Add(
+                    opStart.UOPID,
+                    { Node = opEnd.UOPID
+                      Cost = cost
+                      Line = sol.LineIdentification
+                      Country = sol.Country
+                      MaxSpeed = maxSpeed
+                      Electrified = isElectrified sol
+                      StartKm = Option.defaultValue 0.0<_> startKm
+                      EndKm = Option.defaultValue 0.0<_> endKm
+                      Length = currLength }
+                    :: graph.[opStart.UOPID]
+                )
+
+            graph <-
+                graph.Add(
+                    opEnd.UOPID,
+                    { Node = opStart.UOPID
+                      Cost = cost
+                      Line = sol.LineIdentification
+                      Country = sol.Country
+                      MaxSpeed = maxSpeed
+                      Electrified = isElectrified sol
+                      StartKm = Option.defaultValue 0.0<_> endKm
+                      EndKm = Option.defaultValue 0.0<_> startKm
+                      Length = currLength }
+                    :: graph.[opEnd.UOPID]
+                )
+        | _ -> fprintfn stderr "addSol, not found %A or %A" sol.StartOP sol.EndOP
+
+    let addWithoutSol
+        (line: string)
+        (country: string)
+        (startOP: string)
+        (startKm: float<km>)
+        (endOP: string)
+        (endKm: float<km>)
+        =
+        match findOp startOP, findOp endOP with
+        | Some opStart, Some opEnd ->
+            let maxSpeed = 120<km / h>
+            let currLength = round (endKm - startKm, 2)
+            let cost = getCost currLength maxSpeed
+
+            graph <-
+                graph.Add(
+                    opStart.UOPID,
+                    { Node = opEnd.UOPID
+                      Cost = cost
+                      Line = line
+                      Country = country
+                      MaxSpeed = maxSpeed
+                      Electrified = true
+                      StartKm = startKm
+                      EndKm = endKm
+                      Length = currLength }
+                    :: graph.[opStart.UOPID]
+                )
+
+            graph <-
+                graph.Add(
+                    opEnd.UOPID,
+                    { Node = opStart.UOPID
+                      Cost = cost
+                      Line = line
+                      Country = country
+                      MaxSpeed = maxSpeed
+                      Electrified = true
+                      StartKm = endKm
+                      EndKm = startKm
+                      Length = currLength }
+                    :: graph.[opEnd.UOPID]
+                )
+        | _ -> fprintfn stderr "addWithoutSol, not found %s or %s" startOP endOP
+
+    let addTuple (tuple: ((string * string) * (string * string * float<km> * string) array)) =
+        let (country, line), rls = tuple
+
+        rls
+        |> Array.sortBy (fun (_, _, km, _) -> km)
+        |> Array.pairwise
+        |> Array.iter (fun ((_, _, startKm, startOp), (_, _, endKm, endOp)) ->
+            match dictSols.TryGetValue(concat line startOp endOp) with
+            | true, sol -> addSol sol
+            | _ -> addWithoutSol line country startOp startKm endOp endKm)
+
+    if 0 < ops.Length && 0 < sols.Length then
+        ops |> Array.iter addOp
+        tuples |> Array.iter addTuple
+
+        fprintfn stderr "Nodes: %i, Edges: %i" graph.Count (graph |> Seq.sumBy (fun item -> item.Value.Length))
+
+        graph
+        |> Seq.map<_, GraphNode> (fun kv ->
+            { Node = kv.Key
+              Edges = graph.[kv.Key] |> List.toArray })
+        |> Seq.toArray
+    else
+        [||]
+
+let private buildGraphBySectionOfLines (ops: OperationalPoint[]) (sols: SectionOfLine[]) : GraphNode array =
 
     let mutable graph = Map.empty
 
@@ -512,7 +672,11 @@ let execGraphBuild (path: string) : Async<string> =
 
         let sols = readFile<SectionOfLine[]> path "SectionsOfLines.json"
 
-        let g = buildGraph ops sols
+        let g =
+            if buildGraphByRailwayLocationsActive then
+                buildGraphByRailwayLocations ops sols
+            else
+                buildGraphBySectionOfLines ops sols
 
         return JsonSerializer.Serialize g
     }
@@ -741,8 +905,6 @@ let main argv =
             async { return! execLineInfoBuild argv.[1] }
         else if argv.[0] = "--TunnelInfo.Build" && argv.Length > 1 && checkIsDir argv.[1] then
             async { return! execTunnelInfoBuild argv.[1] }
-        else if argv.[0] = "--OperationalPoints" && argv.Length > 2 && checkIsDir argv.[1] then
-            async { return! execOperationalPointsBuild argv.[1] (argv.[2].Split countrySplitChars) }
         else if argv.[0] = "--OperationalPoints" && argv.Length > 2 && checkIsDir argv.[1] then
             async { return! execOperationalPointsBuild argv.[1] (argv.[2].Split countrySplitChars) }
         else if argv.[0] = "--Tunnel" && argv.Length > 2 && checkIsDir argv.[1] then
