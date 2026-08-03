@@ -217,18 +217,26 @@ let buildLineInfo
 
     let firstNodes = getFirstNodes solsOfLine
 
-    let rec getNextNodes (solsOfLine: GraphNode[]) (startSol: GraphNode) (nextNodes: GraphNode list) : GraphNode list =
+    let rec getNextNodes
+        (fuel: int)
+        (solsOfLine: GraphNode[])
+        (startSol: GraphNode)
+        (nextNodes: GraphNode list)
+        : GraphNode list =
         let nextNode =
             solsOfLine
             |> Array.tryFind (fun sol -> startSol.Edges |> Array.exists (fun edge -> edge.Node = sol.Node))
 
-        match nextNode with
-        | Some nextNode -> getNextNodes solsOfLine nextNode (nextNode :: nextNodes)
-        | None -> nextNodes |> List.rev
+        if fuel <= 0 then
+            nextNodes
+        else
+            match nextNode with
+            | Some nextNode -> getNextNodes (fuel - 1) solsOfLine nextNode (nextNode :: nextNodes)
+            | None -> nextNodes
 
     let nextNodesLists =
         firstNodes
-        |> Array.map (fun firstNode -> getNextNodes solsOfLine firstNode [ firstNode ])
+        |> Array.map (fun firstNode -> getNextNodes 20 solsOfLine firstNode [ firstNode ] |> List.rev)
 
     if nextNodesLists.Length > 0 then
         let firstOp = findOpByOPID dictOps nextNodesLists.[0].Head.Node
@@ -541,7 +549,7 @@ let private buildGraphBySectionOfLines (ops: OperationalPoint[]) (sols: SectionO
             graph <- graph.Add(op.UOPID, List.empty)
 
     let findOp (opId: string) =
-        ops |> Array.tryFind (fun op -> op.UOPID = opId || op.Id = opId)
+        ops |> Array.tryFind (fun op -> op.UOPID = opId)
 
     let addSol (sol: SectionOfLine) =
         match findOp sol.StartOP, findOp sol.EndOP with

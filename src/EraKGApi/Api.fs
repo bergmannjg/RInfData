@@ -26,7 +26,6 @@ type RailwayLocation =
 /// https://rinf.data.era.europa.eu/era-vocabulary/rinf-appGuide/#OperationalPoint
 type OperationalPoint =
     {
-        Id: string
         Name: string
         /// https://rinf.data.era.europa.eu/era-vocabulary/rinf-appGuide/#opType
         Type: string
@@ -268,7 +267,7 @@ module Api =
                 if verbose then
                     fprintfn stderr $"Country query {query}"
 
-                let! data = Request.GetAsync endpoint query
+                let! data = Request.PostAsync endpoint query
                 return JsonSerializer.Deserialize data
             }
 
@@ -300,7 +299,7 @@ module Api =
                 PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
                 PREFIX time: <http://www.w3.org/2006/time#>
 
-                SELECT distinct ?operationalPoint ?opName ?uopid ?opType ?lat ?lon ?lineId ?kilometer ?offset ?country
+                SELECT distinct ?opName ?uopid ?opType ?lat ?lon ?lineId ?kilometer ?offset ?country
                 WHERE {{
                   ?operationalPoint a era:OperationalPoint .
                   ?operationalPoint era:opName ?opName .
@@ -331,13 +330,13 @@ module Api =
                 if verbose && offset = 0 then
                     fprintfn stderr $"OperationalPoint query {query}"
 
-                let! data = Request.GetAsync endpoint query
+                let! data = Request.PostAsync endpoint query
 
                 return JsonSerializer.Deserialize data
             }
 
         let private folder (ops: Dictionary<string, OperationalPoint>) (b: Map<string, Rdf>) =
-            let id = Properties.toUOPID b.["operationalPoint"]
+            let id = Properties.toLiteral b.["uopid"]
 
             let railwayLocation =
                 Properties.toRailwayLocation b.["lineId"] b.["kilometer"] b.["offset"]
@@ -353,11 +352,10 @@ module Api =
                                 RailwayLocations = Utils.appendElem railwayLocation op.RailwayLocations }
                     | None ->
                         Some
-                            { Id = Properties.toUOPID b.["operationalPoint"]
-                              Name = Properties.toLiteral b.["opName"]
+                            { Name = Properties.toLiteral b.["opName"]
                               Type = Properties.toOpType b.["opType"]
                               Country = Properties.toCountryType b.["country"]
-                              UOPID = Properties.toLiteral b.["uopid"]
+                              UOPID = id
                               Latitude = 1.0<degree> * Properties.toFloat b.["lat"]
                               Longitude = 1.0<degree> * Properties.toFloat b.["lon"]
                               RailwayLocations = [| railwayLocation |] }
@@ -389,7 +387,7 @@ module Api =
 
         let loadData () : Async<QueryResults> =
             async {
-                let! data = Request.GetAsync endpoint opTypesQuery
+                let! data = Request.PostAsync endpoint opTypesQuery
 
                 return JsonSerializer.Deserialize data
             }
@@ -438,7 +436,7 @@ module Api =
                 if verbose && offset = 0 then
                     fprintfn stderr $"Track query {query}"
 
-                let! data = Request.GetAsync endpoint query
+                let! data = Request.PostAsync endpoint query
 
                 return JsonSerializer.Deserialize data
             }
@@ -519,7 +517,7 @@ module Api =
                 if verbose && offset = 0 then
                     fprintfn stderr $"SectionOfLine query {query}"
 
-                let! data = Request.GetAsync endpoint query
+                let! data = Request.PostAsync endpoint query
 
                 return JsonSerializer.Deserialize data
             }
@@ -619,7 +617,7 @@ module Api =
                 if verbose then
                     fprintfn stderr $"SectionOfLine query {query}"
 
-                let! data = Request.GetAsync endpoint query
+                let! data = Request.PostAsync endpoint query
                 return JsonSerializer.Deserialize data
             }
 
