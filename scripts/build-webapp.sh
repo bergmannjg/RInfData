@@ -42,7 +42,7 @@ fi
 
 if [ $1 = "--countries" ] 
   then
-    dotnet run --project ../../EraKGLoader/EraKGLoader.fsproj $2
+    dotnet run --project ../../EraKGLoader/EraKGLoader.fsproj --Build node_modules/rinf-graph/data/ $2
 fi
 
 if [ $1 = "--cache" ] 
