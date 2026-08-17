@@ -24,8 +24,8 @@ module Request =
                     raise (System.InvalidOperationException "Request: execute retry, max retries reached")
 
                 fprintfn stderr $"Request: execute retry {retries} delay {delay}"
-                System.Threading.Thread.Sleep delay
-                return! retry work resultOk (retries - 1) (delay * 10)
+                System.Threading.Thread.Sleep(delay * 1000)
+                return! retry work resultOk (retries - 1) (delay * 2)
         }
 
     let private resultOk: Http.HttpResponseMessage -> bool =
@@ -67,5 +67,7 @@ module Request =
             return
                 match response.IsSuccessStatusCode with
                 | true -> body
-                | false -> raise (System.InvalidOperationException(response.ToString()))
+                | false ->
+                    fprintfn stderr $"PostAsync failed, status {response.StatusCode}"
+                    raise (System.InvalidOperationException(response.ToString()))
         }

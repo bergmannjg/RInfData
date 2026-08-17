@@ -31,7 +31,7 @@ jobs:
         with:
           dotnet-version: '10.0.x'
       - name: build web app
-        run: ./scripts/build-webapp.sh --countries DEU
+        run: ./scripts/build-webapp.sh --countries DEU --skipOsm
       - name: Upload artifact
         id: deployment
         uses: actions/upload-pages-artifact@v4

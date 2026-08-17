@@ -45,7 +45,7 @@ const getPossibleDistantMatch = (id: string): PossibleMatch | undefined => {
     if (mOsm && !!mOsm.OsmUrl && !!mOsm.Distance) {
         return {
             UOPID: id,
-            OsmUrl: mOsm.OsmUrl,
+            OsmUrl: 'https://www.openstreetmap.org/' + mOsm.OsmUrl,
             OsmName: 'Node with distance ' + mOsm.Distance + ' km'
         };
     } else return undefined;
@@ -371,7 +371,7 @@ export function lookupLocations(inputLocation: string, inputUPID: string) {
                 const url1 = createUrl(getBRouterUrlOfOpInfos([x]), 'BRouter');
                 const url2 = createUrl(getOrmUrlOfLocation(x.Latitude, x.Longitude), 'ORM');
                 const osmUrl = findOsmUrl(x);
-                const url3 = osmUrl ? createUrl(osmUrl, osmUrl.replace('https://www.openstreetmap.org/', '')) : undefined;
+                const url3 = osmUrl ? createUrl('https://www.openstreetmap.org/' + osmUrl, osmUrl) : undefined;
                 const opType = findOpType(x);
                 if (tableLocations) {
                     addRow(tableLocations, [

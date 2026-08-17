@@ -162,7 +162,7 @@ let getLineInfo
                 { Line = line
                   Country = country
                   Name = name
-                  Length =  round (endKm - startKm, 3)
+                  Length = round (endKm - startKm, 3)
                   StartKm = startKm
                   EndKm = endKm
                   UOPIDs = uOPIDs
@@ -759,7 +759,7 @@ let execMetadataBuild (path: string) (countryCodes: string[]) : Async<string> =
         return JsonSerializer.Serialize metadata
     }
 
-let execBuild (path: string) (countries: string[]) (useCache: bool) : Async<string> =
+let execBuild (path: string) (countries: string[]) (useCache: bool) (skipOsm: bool) : Async<string> =
     async {
         cacheEnabled <- useCache
         let now = fun () -> DateTime.Now.ToLongTimeString()
@@ -791,10 +791,10 @@ let execBuild (path: string) (countries: string[]) (useCache: bool) : Async<stri
         let! result = execTunnelInfoBuild path
         File.WriteAllText(path + "TunnelInfos.json", result)
 
-        fprintfn stderr $"getOsmRoutes"
+        fprintfn stderr $"getOsmRoutes, skipOsm {skipOsm}"
 
         let! result =
-            if countries |> Array.contains "DEU" then
+            if not skipOsm && countries |> Array.contains "DEU" then
                 getOsmRoutes ()
             else
                 async { return "[]" }
@@ -837,11 +837,12 @@ let main argv =
         let dataDirectory = AppDomain.CurrentDomain.BaseDirectory + "../data/"
 
         let useCache = argv |> Array.exists (fun arg -> arg = "--useCache")
+        let skipOsm = argv |> Array.exists (fun arg -> arg = "--skipOsm")
 
         if argv.Length = 0 then
             async { return printHelp () }
         else if checkIsDir dataDirectory && testIsCountry argv.[0] then
-            async { return! execBuild dataDirectory (argv.[0].Split countrySplitChars) useCache }
+            async { return! execBuild dataDirectory (argv.[0].Split countrySplitChars) useCache skipOsm }
         else if argv.[0] = "--Countries" then
             async { return! getCountries () }
         else if argv.[0] = "--OpTypes" then
@@ -854,7 +855,7 @@ let main argv =
             && argv.Length >= 3
             && testIsCountry argv.[2]
         then
-            async { return! execBuild argv.[1] (argv.[2].Split countrySplitChars) useCache }
+            async { return! execBuild argv.[1] (argv.[2].Split countrySplitChars) useCache skipOsm }
         else if argv.[0] = "--Graph.Build" && argv.Length > 1 && checkIsDir argv.[1] then
             async { return! execGraphBuild argv.[1] }
         else if argv.[0] = "--OpInfo.Build" && argv.Length > 1 && checkIsDir argv.[1] then

@@ -14,7 +14,7 @@ if [[ $1 != "--countries" ]] && [[ $1 != "--cache" ]]
     exit 1
 fi
 
-if [[ $1 = "--countries" ]] && [[ $# -ne 2 ]]; then
+if [[ $1 = "--countries" ]] && [[ $# -lt 2 ]]; then
     echo "country arg expected"
     exit 1
 fi
@@ -40,9 +40,13 @@ else
     npm install
 fi
 
+if [ "$3" = "--skipOsm" ]; then
+    SKIPOSM="--skipOsm"
+fi
+
 if [ $1 = "--countries" ] 
   then
-    dotnet run --project ../../EraKGLoader/EraKGLoader.fsproj --Build node_modules/rinf-graph/data/ $2
+    dotnet run --project ../../EraKGLoader/EraKGLoader.fsproj --Build node_modules/rinf-graph/data/ $2 ${SKIPOSM}
 fi
 
 if [ $1 = "--cache" ] 
