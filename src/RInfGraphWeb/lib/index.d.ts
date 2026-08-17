@@ -53,6 +53,8 @@ export interface Matching {
     UOPID: string;
     OsmUrl?: string;
     OsmRailwayTag?: string;
+    OsmRailwayTagPrefix?: string;
+    Distance?: number;
 }
 
 export interface OpType {
@@ -67,10 +69,12 @@ export function rinfFindPathOfLine(ine: string, country: string): GraphNode[];
 export function rinfFindTunnelsOfLine(line: string, country: string): TunnelInfo[];
 export function rinfToCompactPath(path: GraphNode[]): GraphNode[];
 export function rinfGetOpInfos(name: string, uopid: string): OpInfo[];
+export function rinfGetOtherOpInfosWithSameLocation(uopid: string, lat: number, lon: number): OpInfo[];
 export function rinfGetBRouterUrls(arr: GraphNode[], compactifyPath: boolean): string[];
-export function rinfMetadata() : Metadata;
+export function rinfMetadata(): Metadata;
 export function rinfOsmMatchings(): Matching[];
+export function rinfOpInfoChanges(): any[];
 export function rinfOpTypes(): OpType[];
-export function rinfGetOpInfo(opid: string) : OpInfo | undefined;
+export function rinfGetOpInfo(opid: string): OpInfo | undefined;
 
 

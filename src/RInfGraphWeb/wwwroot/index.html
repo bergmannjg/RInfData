@@ -63,7 +63,7 @@
             <div id='locations-box'>
                 <div class="row">
                     <label for="inputLocation" class="col-sm-1 col-form-label text-end">Name</label>
-                    <div class="col-sm-1">
+                    <div class="col-sm-1 col-md-2">
                         <input type="text" class="form-control" id="inputLocation">
                     </div>
                     <label for="inputUPID" class="col-sm-1 col-form-label text-end">UPID</label>
@@ -135,8 +135,7 @@
                             <th scope="col">End</th>
                             <th scope="col">Line</th>
                             <th scope="col" class="text-end">MaxSpeed</th>
-                            <th scope="col" class="text-end">StartKm</th>
-                            <th scope="col" class="text-end">EndKm</th>
+                            <th scope="col">Position</th>
                             <th scope="col" class="text-end">Length</th>
                             <th scope="col" class="text-end">Cost</th>
                         </tr>
@@ -174,7 +173,7 @@
                             <th scope="col">Start Op</th>
                             <th scope="col">End Op</th>
                             <th scope="col" class="text-end">MaxSpeed</th>
-                            <th scope="col" class="text-end">Position</th>
+                            <th scope="col">Position</th>
                             <th scope="col" class="text-end">Length</th>
                             <th scope="col" class="text-end">Cost</th>
                         </tr>
@@ -206,10 +205,12 @@
 
             <div id='osm-comparison-box' style="display:none">
                 <div>OpenStreetMap elements which have a tag <a
-                        href="https://wiki.openstreetmap.org/wiki/Key:railway:ref">railway:ref</a> corresponding
-                    to the operational point <a
-                        href="https://data-interop.era.europa.eu/era-vocabulary/rinf-appGuide/#uopid">unique OPID</a>
-                    were searched for all operational points with type station or passenger stop.
+                        href="https://wiki.openstreetmap.org/wiki/Key:railway:ref" target="_blank">railway:ref</a>
+                    corresponding to an operational point <a
+                        href="https://data-interop.era.europa.eu/era-vocabulary/rinf-appGuide/#uopid"
+                        target="_blank">unique OPID</a>
+                    were searched for all operational points with type station or passenger stop and maximum distance
+                    less than 1.0 km.
                 </div>
                 <br />
                 <div class="col-md-4">
@@ -230,13 +231,13 @@
                 <div class="col-md-4">
                     <table class="table caption-top">
                         <caption>
-                            <p class="fw-bold">Usage of OSM <a
-                                    href="https://wiki.openstreetmap.org/wiki/Key:railway">railway</a> tags</p>
+                            <p class="fw-bold">Usage of OSM <a href="https://wiki.openstreetmap.org/wiki/Key:railway"
+                                    target="_blank">railway</a> tag</p>
                         </caption>
                         <thead>
                             <tr>
-                                <th scope="col">Tag</th>
-                                <th scope="col">Count</th>
+                                <th scope="col">Value</th>
+                                <th scope="col" class="text-end">Count</th>
                             </tr>
                         </thead>
                         <tbody id="result-usage-osm-tags"></tbody>
@@ -253,6 +254,7 @@
                             <th scope="col">Type</th>
                             <th scope="col">UOPID</th>
                             <th scope="col">Location</th>
+                            <th scope="col">Possiblle Match</th>
                         </tr>
                     </thead>
                     <tbody id="result-locations-osm-comparison"></tbody>
@@ -269,11 +271,12 @@
                 Railways at <span id="idMetadata.Date"></span> for countries <span id="idMetadata.Countries"></span>.
             </div>
             <div class="col-md-12">
-                OSM data loaded from the SPARQL <a href="https://qlever.dev/osm-planet">Endpoint</a>
-                of <a href="https://ad-publications.informatik.uni-freiburg.de/CIKM_qlever_BB_2017.pdf">QLever</a>.
+                OSM data loaded from the SPARQL <a href="https://qlever.dev/osm-planet" target="_blank">Endpoint</a>
+                of <a href="https://ad-publications.informatik.uni-freiburg.de/CIKM_qlever_BB_2017.pdf"
+                    target="_blank">QLever</a>.
             </div>
             <div class="col-md-12">
-                Source <a href="https://github.com/bergmannjg/RInfData">Repository</a>.
+                Source <a href="https://github.com/bergmannjg/RInfData" target="_blank">Repository</a>.
             </div>
         </div>
     </div>

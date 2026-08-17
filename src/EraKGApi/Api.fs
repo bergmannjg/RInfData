@@ -49,6 +49,7 @@ type OpType =
 type Track =
     {
         id: string
+        sectionOfLine: string
         label: string
         /// https://rinf.data.era.europa.eu/era-vocabulary/rinf-appGuide/#maximumPermittedSpeed
         maximumPermittedSpeed: int<km / h> option
@@ -149,42 +150,60 @@ module Api =
 
     /// see <a href="https://data-interop.era.europa.eu/era-vocabulary/#overv">Object Properties</a>
     module Properties =
-        let uriTypeToString (r: Rdf) (prefix: string) : string =
+        let uriTypeToString (r: Rdf) (prefixes: string list) : string =
             if r.``type`` = "uri" then
-                if not (r.value.StartsWith prefix) then
-                    raise (System.Exception $"uriTypeToString: prefix '{prefix}' value '{r.value}' unexpected")
-
-                System.Web.HttpUtility.UrlDecode(r.value.Substring prefix.Length)
+                match prefixes |> List.tryFind (fun prefix -> r.value.StartsWith prefix) with
+                | Some prefix -> System.Web.HttpUtility.UrlDecode(r.value.Substring prefix.Length)
+                | None ->
+                    raise (System.Exception $"uriTypeToString: prefixes '{prefixes}' value '{r.value}' unexpected")
             else
                 raise (System.Exception $"uriTypeToString: type {r.``type``} unexpected")
 
         let toOpType (r: Rdf) : string =
-            uriTypeToString r "http://data.europa.eu/949/concepts/op-types/"
+            uriTypeToString r [ "http://data.europa.eu/949/concepts/op-types/" ]
 
         let toCountryType (r: Rdf) : string =
-            uriTypeToString r "http://publications.europa.eu/resource/authority/country/"
+            uriTypeToString r [ "http://publications.europa.eu/resource/authority/country/" ]
 
         let toSectionsOfLineId (r: Rdf) : string =
-            uriTypeToString r "http://data.europa.eu/949/sectionOfLine/"
+            uriTypeToString
+                r
+                [ "http://data.europa.eu/949/sectionOfLine/"
+                  "http://data.europa.eu/949/functionalInfrastructure/sectionsOfLine/" ]
 
         let toLineCategory (r: Rdf) : int =
-            let s = uriTypeToString r "http://data.europa.eu/949/concepts/line-category/"
+            let s = uriTypeToString r [ "http://data.europa.eu/949/concepts/line-category/" ]
 
             match System.Int32.TryParse s with
             | true, value -> value
             | _ -> raise (System.Exception $"toLineCategory int expected {r}")
 
         let toTrackLabel (r: Rdf) =
-            uriTypeToString r "http://data.europa.eu/949/track/"
+            uriTypeToString
+                r
+                [ "http://data.europa.eu/949/track/"
+                  "http://data.europa.eu/949/functionalInfrastructure/tracks/" ]
 
         let toUOPID (r: Rdf) : string =
-            uriTypeToString r "http://data.europa.eu/949/operationalPoint/"
+            uriTypeToString
+                r
+                [ "http://data.europa.eu/949/operationalPoint/"
+                  "http://data.europa.eu/949/functionalInfrastructure/operationalPoints/" ]
 
         let toLiteral (r: Rdf) : string =
             if r.``type`` = "literal" then
                 r.value
             else
                 raise (System.Exception $"toLiteral unexpected datatype {r}")
+
+        let toWktLiteral (r: Rdf) : string =
+            if
+                r.``type`` = "literal"
+                && r.datatype = Some "http://www.opengis.net/ont/geosparql#wktLiteral"
+            then
+                r.value
+            else
+                raise (System.Exception $"toWktLiteral unexpected datatype {r}")
 
         let toInt (r: Rdf) : int =
             if r.datatype = Some "http://www.w3.org/2001/XMLSchema#integer" then
@@ -216,16 +235,27 @@ module Api =
             { NationalIdentNum = lineId
               Kilometer = kilometer + 0.001<km> * float offset }
 
-        // return (startLongitude, startLatitude, endLongitude, endLatitude)
-        let fromWKT (wkt: Rdf) : (float * float * float * float) option =
-            let label = toLiteral wkt
+        // return (startLongitude, startLatitude)
+        let pointFromWKT (wkt: Rdf) : (float * float) option =
+            let value = toWktLiteral wkt
+            let pattern = "POINT\s*\(([0-9.]*)\s+([0-9.]*)\)"
+            let m = System.Text.RegularExpressions.Regex.Match(value, pattern)
+
+            if m.Success && m.Groups.Count = 3 then
+                Some(float m.Groups[1].Value, float m.Groups[2].Value)
+            else
+                fprintfn stderr $"fromWKT: string not found in '{value}'"
+                None
+
+        let lineFromWKT (wkt: Rdf) : (float * float * float * float) option =
+            let value = toWktLiteral wkt
             let pattern = "LINESTRING \(([0-9.]*)\s+([0-9.]*),\s*([0-9.]*)\s+([0-9.]*)\)"
-            let m = System.Text.RegularExpressions.Regex.Match(label, pattern)
+            let m = System.Text.RegularExpressions.Regex.Match(value, pattern)
 
             if m.Success && m.Groups.Count = 5 then
                 Some(float m.Groups[1].Value, float m.Groups[2].Value, float m.Groups[3].Value, float m.Groups[4].Value)
             else
-                fprintfn stderr $"fromWKT: string not found in '{label}'"
+                fprintfn stderr $"fromWKT: string not found in '{value}'"
                 None
 
         // https://rinf.data.era.europa.eu/era-vocabulary/#http://data.europa.eu/949/validity
@@ -298,6 +328,8 @@ module Api =
                 PREFIX wgs: <http://www.w3.org/2003/01/geo/wgs84_pos#> 
                 PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
                 PREFIX time: <http://www.w3.org/2006/time#>
+                PREFIX rdf:	<http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+                PREFIX geo: <http://www.opengis.net/ont/geosparql#> 
 
                 SELECT distinct ?opName ?uopid ?opType ?lat ?lon ?lineId ?kilometer ?offset ?country
                 WHERE {{
@@ -305,9 +337,14 @@ module Api =
                   ?operationalPoint era:opName ?opName .
                   ?operationalPoint era:uopid ?uopid .
                   ?operationalPoint era:netReference ?netReference .                 
-                  ?netReference wgs:lat ?lat .
-                  ?netReference wgs:long ?lon .
-
+                  OPTIONAL {{
+                   ?netReference wgs:lat ?lat .
+                   ?netReference wgs:long ?lon . 
+                  }} 
+                  OPTIONAL {{ 
+                    ?netReference geo:hasGeometry ?geo .
+  				    ?geo geo:asWKT ?wkt .
+                  }}
                   ?netReference rdf:type era:NetPointReference .
                   ?netReference era:hasLrsCoordinate ?lrsCoordinate .
                   ?lrsCoordinate era:kmPost ?kmPost .
@@ -337,6 +374,16 @@ module Api =
 
         let private folder (ops: Dictionary<string, OperationalPoint>) (b: Map<string, Rdf>) =
             let id = Properties.toLiteral b.["uopid"]
+
+            let lat, lon =
+                match b.TryGetValue "lat", b.TryGetValue "lon", b.TryGetValue "wkt" with
+                | (true, lat), (true, lon), _ ->
+                    1.0<degree> * Properties.toFloat lat, 1.0<degree> * Properties.toFloat lon
+                | _, _, (true, wkt) ->
+                    match Properties.pointFromWKT wkt with
+                    | Some(lat, lon) -> 1.0<degree> * lat, 1.0<degree> * lon
+                    | None -> raise (System.Exception $"OperationalPoint.folder: wkt {wkt} not found")
+                | _ -> raise (System.Exception $"OperationalPoint.folder: lat, lon not found")
 
             let railwayLocation =
                 Properties.toRailwayLocation b.["lineId"] b.["kilometer"] b.["offset"]
@@ -410,7 +457,7 @@ module Api =
                 PREFIX rdf:	<http://www.w3.org/1999/02/22-rdf-syntax-ns#>
                 PREFIX time: <http://www.w3.org/2006/time#>
 
-                SELECT distinct ?track ?label ?lineCategory ?contactLineSystemTypeLabel ?maximumPermittedSpeed ?minimumHorizontalRadius
+                SELECT distinct ?track ?sectionOfLine ?label ?lineCategory ?contactLineSystemTypeLabel ?maximumPermittedSpeed ?minimumHorizontalRadius
                 WHERE {{
                   ?sectionOfLine a era:SectionOfLine .
                   ?sectionOfLine era:hasPart ?track .
@@ -448,6 +495,7 @@ module Api =
 
         let private toTrackEntry (b: Map<string, Rdf>) : Track =
             { id = Properties.toTrackLabel b["track"]
+              sectionOfLine = Properties.toSectionsOfLineId b.["sectionOfLine"]
               label = Properties.toLiteral b["label"]
               maximumPermittedSpeed =
                 match b.TryGetValue "maximumPermittedSpeed" with
@@ -466,20 +514,33 @@ module Api =
                 | Some lineCategory -> [| lineCategory |]
                 | None -> [||] }
 
-        let private folder (acc: Dictionary<string, Track>) (b: Map<string, Rdf>) =
+        let private folder (acc: Dictionary<string, Track list>) (b: Map<string, Rdf>) =
+            let idSol = Properties.toSectionsOfLineId b.["sectionOfLine"]
+
             Utils.change (
                 acc,
-                Properties.toTrackLabel b.["track"],
-                fun track ->
-                    match track with
-                    | Some track ->
-                        { track with
-                            lineCategories = Utils.optAppendElem (tryGetLineCategory b) track.lineCategories }
-                    | None -> toTrackEntry b
+                idSol,
+                fun tracks ->
+                    match tracks with
+                    | Some tracks ->
+                        let idTrack = Properties.toTrackLabel b["track"]
+
+                        if tracks |> List.exists (fun track -> track.id = idTrack) then
+                            tracks
+                            |> List.map (fun track ->
+                                if track.id = idTrack then
+                                    { track with
+                                        lineCategories =
+                                            Utils.optAppendElem (tryGetLineCategory b) track.lineCategories }
+                                else
+                                    track)
+                        else
+                            toTrackEntry b :: tracks
+                    | None -> [ toTrackEntry b ]
                     |> Some
             )
 
-        let fromQueryResults (tracks: QueryResults) : Dictionary<string, Track> =
+        let fromQueryResults (tracks: QueryResults) : Dictionary<string, Track list> =
             tracks.results.bindings
             |> Array.fold folder (Dictionary tracks.results.bindings.Length)
 
@@ -492,7 +553,7 @@ module Api =
                 PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
                 PREFIX time: <http://www.w3.org/2006/time#>
 
-                SELECT distinct ?sectionOfLine ?length ?solNature ?lineId ?startUopid ?endUopid ?track ?country
+                SELECT distinct ?sectionOfLine ?length ?solNature ?lineId ?startUopid ?endUopid ?country
                 WHERE {{
                   ?sectionOfLine a era:SectionOfLine .
                   ?sectionOfLine era:nationalLine ?nationalLine .
@@ -503,7 +564,6 @@ module Api =
                   ?startOp era:uopid ?startUopid .
                   ?sectionOfLine era:opEnd ?endOp .
                   ?endOp era:uopid ?endUopid .
-                  ?sectionOfLine era:hasPart ?track .
                   ?sectionOfLine era:inCountry ?country .
                   {Country.toCountryCondition "?sectionOfLine" countries}
                   {Properties.currentlyValidIfExists "sectionOfLine"}
@@ -522,53 +582,49 @@ module Api =
                 return JsonSerializer.Deserialize data
             }
 
-        /// see <a href="https://data-interop.era.europa.eu/era-vocabulary/rinf-appGuide/#lineCategory">Category of line</>
+        /// see <a href="https://data-interop.era.europa.eu/era-vocabulary/rinf-appGuide/#lineCategory">Category of line</a>
         let private isPassengerLine (lineCategories: int array) =
             lineCategories.Length = 0 || lineCategories |> Array.exists (fun c -> c <= 60)
 
         let private folder
-            (getTrack: Rdf -> Track option)
+            (dictTracksOfSols: Dictionary<string, list<Track>>)
             (sols: Dictionary<string, SectionOfLine>)
             (b: Map<string, Rdf>)
             =
-            match getTrack b.["track"] with
-            | Some track ->
-                let id = Properties.toSectionsOfLineId b.["sectionOfLine"]
+            let id = Properties.toSectionsOfLineId b.["sectionOfLine"]
 
+            match dictTracksOfSols.TryGetValue id with
+            | true, tracks ->
                 Utils.change (
                     sols,
                     id,
                     fun sol ->
                         match sol with
                         | Some sol ->
-                            { sol with
-                                Tracks = Utils.appendElem track sol.Tracks }
-                            |> Some
+                            fprintfn stderr $"sectionOfLine {id} not unique"
+                            Some sol
                         | None ->
-                            if isPassengerLine track.lineCategories then
+                            if tracks |> List.exists (fun track -> isPassengerLine track.lineCategories) then
                                 { Name = id
                                   Country = Properties.toCountryType b.["country"]
                                   Length = 1.0<km> * Properties.toFloat b.["length"]
                                   LineIdentification = Properties.toLiteral b.["lineId"]
                                   StartOP = Properties.toLiteral b.["startUopid"]
                                   EndOP = Properties.toLiteral b.["endUopid"]
-                                  Tracks = [| track |] }
+                                  Tracks = tracks |> List.toArray }
                                 |> Some
                             else
                                 None
                 )
-            | _ -> sols
+            | _ ->
+                fprintfn stderr $"sectionOfLine {id} without tracks"
+                sols
 
         let fromQueryResults (sparql: QueryResults) (tracks: QueryResults) : SectionOfLine[] =
-            let dictTracks = Track.fromQueryResults tracks
-
-            let getTrack (r: Rdf) =
-                match dictTracks.TryGetValue(Properties.toTrackLabel r) with
-                | true, track -> Some track
-                | _ -> None
+            let dictTracksOfSols = Track.fromQueryResults tracks
 
             sparql.results.bindings
-            |> Array.fold (folder getTrack) (Dictionary sparql.results.bindings.Length)
+            |> Array.fold (folder dictTracksOfSols) (Dictionary sparql.results.bindings.Length)
             |> _.Values
             |> Seq.toArray
 
@@ -637,7 +693,7 @@ module Api =
                     match op with
                     | Some op -> Some op
                     | None ->
-                        match Properties.fromWKT b.["wkt"] with
+                        match Properties.lineFromWKT b.["wkt"] with
                         | Some(startLongitude, startLatitude, endLongitude, endLatitude) ->
                             Some
                                 { Name = name

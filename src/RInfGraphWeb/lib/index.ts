@@ -63,6 +63,7 @@ export interface Matching {
     UOPID: string;
     OsmUrl: string | null;
     OsmRailwayTag: string | null;
+    Distance: number | null;
 }
 
 export function rinfOsmMatchings(): Matching[] {
@@ -118,12 +119,11 @@ function findText(s: string, searchString: string): Boolean {
     }
 }
 
-export function rinfGetOpInfo(opid: string) : OpInfo | undefined {
+export function rinfGetOpInfo(opid: string): OpInfo | undefined {
     return mapOps.get(opid);
 }
 
 export function rinfGetOpInfos(name: string, uopid: string) {
-    console.log('rinfGetOpInfos', name, uopid);
     return (opInfos as OpInfo[]).filter(op => {
         if (name && name.length > 0 && uopid && uopid.length > 0) { return op.Name.indexOf(name) != -1 && op.UOPID.indexOf(uopid) != -1; }
         else if (name && name.length > 0) { return findText(op.Name, name); }
@@ -132,17 +132,10 @@ export function rinfGetOpInfos(name: string, uopid: string) {
     })
 }
 
+export function rinfGetOtherOpInfosWithSameLocation(uopid: string, lat: number, lon: number) {
+    return (opInfos as OpInfo[]).filter(op => op.UOPID !== uopid && lat === op.Latitude && lon === op.Longitude);
+}
+
 export function rinfMetadata(): Metadata {
     return metadata as Metadata;
 }
-
-// @ts-expect-error
-if (typeof globalThis.window !== "object") {
-    const args = process.argv.slice(2);
-    const path = args.length === 1 ? rinfFindPathOfLine(args[0], 'DEU') : (args.length === 2) ? rinfFindPath([args[0], args[1]], true) : [];
-    rinfToCompactPath(path).forEach(node => console.log(node.Node, node.Edges[0].Node, node.Edges[0].Line, node.Edges[0].MaxSpeed.toFixed(0)));
-
-    const urls = rinfGetBRouterUrls(path, true);
-    console.log('urls', urls);
-}
-

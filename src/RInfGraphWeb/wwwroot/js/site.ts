@@ -1,4 +1,4 @@
-﻿import { GraphNode, Matching, rinfOsmMatchings, rinfOpTypes, rinfFindMoPath, rinfFindPathOfLine, rinfFindTunnelsOfLine, rinfGetBRouterUrls, rinfToCompactPath, rinfGetOpInfo, rinfGetOpInfos, rinfMetadata, Metadata, OpInfo, TunnelInfo, OpType } from "./lib/bundle.js";
+﻿import { Matching, GraphNode, rinfOsmMatchings, rinfOpTypes, rinfFindMoPath, rinfFindPathOfLine, rinfFindTunnelsOfLine, rinfGetBRouterUrls, rinfToCompactPath, rinfGetOpInfo, rinfGetOpInfos, rinfMetadata, Metadata, OpInfo, TunnelInfo, OpType, rinfGetOtherOpInfosWithSameLocation } from "./lib/bundle.js";
 
 interface PathItem {
     fromId: string;
@@ -21,8 +21,38 @@ interface PathResult {
     urls: string[];
 }
 
+interface PossibleMatch {
+    UOPID: string;
+    OsmUrl: string;
+    OsmName: string;
+}
+
+const possibleMatches: PossibleMatch[] = [
+];
+
+const maxRInfOsmDistance = 1.0;
+
+const validMatching = (m: Matching): boolean => {
+    return m.OsmUrl !== undefined && m.Distance !== undefined && m.Distance !== null && m.Distance < maxRInfOsmDistance;
+}
+
+const getPossibleMatch = (id: string): PossibleMatch | undefined => {
+    return possibleMatches.find(m => m.UOPID == id);
+}
+
+const getPossibleDistantMatch = (id: string): PossibleMatch | undefined => {
+    const mOsm = rinfOsmMatchings().find(m => m.UOPID == id && !!m.OsmUrl && !!m.Distance && maxRInfOsmDistance <= m.Distance);
+    if (mOsm && !!mOsm.OsmUrl && !!mOsm.Distance) {
+        return {
+            UOPID: id,
+            OsmUrl: mOsm.OsmUrl,
+            OsmName: 'Node with distance ' + mOsm.Distance + ' km'
+        };
+    } else return undefined;
+}
+
 const findOsmUrl = (op: OpInfo): string | undefined => {
-    return rinfOsmMatchings().find(m => m.UOPID == op.UOPID)?.OsmUrl;
+    return rinfOsmMatchings().find(m => m.UOPID === op.UOPID && validMatching(m))?.OsmUrl;
 }
 
 const findOpType = (op: OpInfo): OpType | undefined => {
@@ -37,9 +67,13 @@ const findPath = (ids: string[], maxExtraCostInProcent: number): PathResult => {
         console.log(x);
         if (!!x.Node && !!x.Edges) {
             cost = cost + x.Edges[0].Cost;
+            const startOpInfo = rinfGetOpInfo(x.Node);
+            const endOpInfo = rinfGetOpInfo(x.Edges[0].Node);
             arr.push({
                 fromId: x.Node, toId: x.Edges[0].Node, line: x.Edges[0].Line,
-                maxSpeed: x.Edges[0].MaxSpeed, startKm: x.Edges[0].StartKm, endKm: x.Edges[0].EndKm, length: x.Edges[0].Length, cost: cost
+                maxSpeed: x.Edges[0].MaxSpeed, startKm: x.Edges[0].StartKm, startLat: startOpInfo?.Latitude, startLon: startOpInfo?.Longitude,
+                endKm: x.Edges[0].EndKm, endLat: endOpInfo?.Latitude, endLon: endOpInfo?.Longitude,
+                length: x.Edges[0].Length, cost: cost
             })
         }
     });
@@ -56,9 +90,21 @@ const findPathOfLine = (line: string, country: string): PathResult => {
     const spath = rinfFindPathOfLine(line, country);
     let arr: PathItem[] = [];
     let cost: number = 0;
+    let lastNode: GraphNode | undefined = undefined;
     spath.forEach(x => {
         console.log(x);
         if (!!x.Node && !!x.Edges) {
+            if (lastNode && lastNode.Edges[0].Node !== x.Node) { // missing sol
+                const startOpInfo = rinfGetOpInfo(lastNode.Edges[0].Node);
+                const endOpInfo = rinfGetOpInfo(x.Node);
+                arr.push({
+                    fromId: lastNode.Edges[0].Node, toId: x.Node, line: x.Edges[0].Line,
+                    maxSpeed: 0, startKm: lastNode.Edges[0].EndKm, startLat: startOpInfo?.Latitude, startLon: startOpInfo?.Longitude,
+                    endKm: x.Edges[0].StartKm, endLat: endOpInfo?.Latitude, endLon: endOpInfo?.Longitude,
+                    length: x.Edges[0].StartKm - lastNode.Edges[0].EndKm, cost: 0
+                })
+            }
+            lastNode = x;
             cost = cost + x.Edges[0].Cost;
             const startOpInfo = rinfGetOpInfo(x.Node);
             const endOpInfo = rinfGetOpInfo(x.Edges[0].Node);
@@ -108,12 +154,15 @@ function removeChilds(element: HTMLElement) {
     }
 }
 
-function createTextEnd(text: string): HTMLElement {
+function createTextEnd(x: string | HTMLElement): HTMLElement {
     var div = document.createElement("div");
     var cls = document.createAttribute("class");
     cls.value = "text-end";
     div.setAttributeNode(cls);
-    div.textContent = text;
+
+    if (typeof x === 'string') div.textContent = x;
+    else if (typeof x === 'object') div.appendChild(x);
+
     return div;
 }
 
@@ -180,13 +229,15 @@ function createUrl(url: string, text?: string, tooltip?: string): HTMLElement {
     return a;
 }
 
-const createElemsInSpan = (items: HTMLElement[]) => {
+const createElemsInSpan = (items: (HTMLElement | undefined)[]) => {
     var span = document.createElement("span");
     items.forEach(item => {
-        const itemAttr = document.createAttribute("style");
-        itemAttr.value = "padding-right: 10px;";
-        item.setAttributeNode(itemAttr);
-        span.appendChild(item);
+        if (!!item) {
+            const itemAttr = document.createAttribute("style");
+            itemAttr.value = "padding-right: 10px;";
+            item.setAttributeNode(itemAttr);
+            span.appendChild(item);
+        }
     });
     return span
 }
@@ -234,11 +285,29 @@ function getCenter(latitudes: number[], longitudes: number[]): number[] {
     return [latitude, longitude];
 }
 
-function getBRouterUrlOfLocations(latitude1: number, longitude1: number, latitude2: number, longitude2: number, info1: string, info2?: string) {
+function getBRouterUrlOfLocations(latitude1: number, longitude1: number, latitude2: number, longitude2: number, length: number, info1: string, info2?: string) {
     const latlon = getCenter([latitude1, latitude2], [longitude1, longitude2])
-    const pois = longitude1 + ',' + latitude1 + ',' + info1 + ';' + longitude2 + ',' + latitude2 + ',' + (info2 ?? info1);
-    return 'https://brouter.de/brouter-web/#map=13/' + latlon[0] + '/' + latlon[1]
-        + '/osm-mapnik-german_style&pois=' + pois;
+    const lonlats = longitude1 + ',' + latitude1 + ';' + longitude2 + ',' + latitude2;
+    let map = 8;
+    if (length < 5) map = 12;
+    else if (length < 20) map = 11;
+    else if (length < 50) map = 10;
+    else if (length < 100) map = 9;
+    return 'https://brouter.de/brouter-web/#map=' + map + '/' + latlon[0] + '/' + latlon[1]
+        + '/osm-mapnik-german_style&pois=' + lonlats + '&profile=rail';
+}
+
+function getBRouterPoisOfLocations(latitude1: number, longitude1: number, latitude2: number, longitude2: number, length: number, info1: string, info2?: string) {
+    const latlon = getCenter([latitude1, latitude2], [longitude1, longitude2])
+    const lonlats = longitude1 + ',' + latitude1 + ',' + info1 + ';' + longitude2 + ',' + latitude2 + ',' + info2;
+    let map = 8;
+    if (length < 1) map = 14;
+    else if (length < 5) map = 12;
+    else if (length < 20) map = 11;
+    else if (length < 50) map = 10;
+    else if (length < 100) map = 9;
+    return 'https://brouter.de/brouter-web/#map=' + map + '/' + latlon[0] + '/' + latlon[1]
+        + '/osm-mapnik-german_style&pois=' + lonlats;
 }
 
 function getOrmUrlOfLocation(latitude: number, longitude: number) {
@@ -271,9 +340,8 @@ function rinfGetKgUrlOfUOPID(uopid: string) {
         + encodeURIComponent('http://data.europa.eu/949/operationalPoint/' + uopid) + '&role=object';
 }
 
-function rinfGetLocationUrlOfUOPID(uopid: string) {
-    const results = rinfGetOpInfos('', uopid);
-    return getBRouterUrlOfOpInfos(results);
+function rinfGetTagInfoUrl(tag: string, value: string) {
+    return 'https://taginfo.openstreetmap.org/tags/' + tag + '=' + value;
 }
 
 function getTooltipOfId(uopid: string): string | undefined {
@@ -325,21 +393,33 @@ export function lookupLocations(inputLocation: string, inputUPID: string) {
     }
 }
 
+const getOtherOpInfoWithSameLocation = (op: OpInfo): HTMLElement | undefined => {
+    const opInfos = rinfGetOtherOpInfosWithSameLocation(op.UOPID, op.Latitude, op.Longitude);
+    if (0 < opInfos.length)
+        return createUrl(rinfGetKgUrlOfUOPID(opInfos[0].UOPID), 'same loc with ' + opInfos[0].UOPID);
+    else
+        return undefined;
+}
+
+function urlOfMatch(m: PossibleMatch | undefined): HTMLElement | undefined {
+    if (!!m) { return createUrl(m.OsmUrl, m.OsmName); } else return undefined;
+}
+
 export function lookupOsmComparison() {
     var tableSummary = document.getElementById("result-summary-osm-comparison");
     var tableOsmTags = document.getElementById("result-usage-osm-tags");
     var tableLocations = document.getElementById("result-locations-osm-comparison");
-    if (tableSummary && tableOsmTags && tableLocations) {
+    if (tableSummary && tableLocations && tableOsmTags) {
         removeChilds(tableSummary);
         removeChilds(tableOsmTags);
         removeChilds(tableLocations);
         const total = rinfOsmMatchings().length;
-        const found = rinfOsmMatchings().filter(m => !!m.OsmUrl).length;
+        const found = rinfOsmMatchings().filter(validMatching).length;
         addRow(tableSummary, ["Total (DE)", createTextEnd(total.toFixed(0))]);
         addRow(tableSummary, ["OSM data found", createTextEnd(found.toFixed(0))]);
         addRow(tableSummary, ["OSM data not found", createTextEnd((total - found).toFixed(0))]);
         const results = rinfOsmMatchings()
-            .filter(m => !m.OsmUrl)
+            .filter(m => !validMatching(m))
             .map(m => {
                 const opInfos = rinfGetOpInfos('', m.UOPID);
                 if (opInfos.length == 1) return opInfos[0]; else return undefined;
@@ -359,19 +439,23 @@ export function lookupOsmComparison() {
             const url3 = createUrl(getOsmUrlOfLocation(x), 'OSM');
             const url4 = createUrl(getOverpassUrlOfLocation(x), 'Overpass');
             const opType = findOpType(x);
+            const match = createElemsInSpan([urlOfMatch(getPossibleMatch(x.UOPID)),
+            urlOfMatch(getPossibleDistantMatch(x.UOPID)),
+            getOtherOpInfoWithSameLocation(x)]);
             if (tableLocations) {
                 addRow(tableLocations, [
                     x.Name,
                     opType ? createSpan(opType.Label, opType.Definition) : createSpan(''),
                     createUrl(rinfGetKgUrlOfUOPID(x.UOPID), x.UOPID),
-                    createElemsInSpan([url1, url2, url3, url4])]);
+                    createElemsInSpan([url1, url2, url3, url4]),
+                    match]);
             }
         });
         const tagUsage = Object.entries(Object.groupBy(rinfOsmMatchings().filter(m => !!m.OsmRailwayTag), m => m.OsmRailwayTag ?? ""));
         tagUsage.sort((a, b) => (b[1] ?? []).length - (a[1] ?? []).length);
         for (const [key, value] of tagUsage) {
             if (tableOsmTags && value) {
-                addRow(tableOsmTags, [key, value.length.toString()]);
+                addRow(tableOsmTags, [createUrl((rinfGetTagInfoUrl('railway', key)), key), createTextEnd(value.length.toString())]);
             }
         }
     }
@@ -391,10 +475,13 @@ export function lookupPath(inputFrom: string, inputTo: string, selectOption: str
             const results = findPath(ids, parseInt(elementSelectOption.value))
             results.path.forEach(x => {
                 if (tablePath) {
-                    addRow(tablePath, [createUrl(rinfGetLocationUrlOfUOPID(x.fromId), x.fromId, getTooltipOfId(x.fromId)),
-                    createUrl(rinfGetLocationUrlOfUOPID(x.toId), x.toId, getTooltipOfId(x.toId)), x.line, createTextEnd(x.maxSpeed.toFixed(0)),
-                    createTextEnd(x.startKm.toFixed(3)), createTextEnd(x.endKm.toFixed(3)), createTextEnd(x.length.toFixed(3)),
-                    createTextEnd(x.cost.toFixed(0))]);
+                    addRow(tablePath, [createUrl(rinfGetKgUrlOfUOPID(x.fromId), x.fromId, getTooltipOfId(x.fromId)),
+                    createUrl(rinfGetKgUrlOfUOPID(x.toId), x.toId, getTooltipOfId(x.toId)), x.line, createTextEnd(x.maxSpeed.toFixed(0)),
+                    (x.startLat && x.startLon && x.endLat && x.endLon)
+                        ? createUrl(getBRouterUrlOfLocations(x.startLat, x.startLon, x.endLat, x.endLon, x.length, x.fromId, x.toId),
+                            x.startKm?.toFixed(3) + ' bis ' + x.endKm?.toFixed(3))
+                        : (x.startKm?.toFixed(3) + ' bis ' + x.endKm?.toFixed(3)),
+                    createTextEnd(x.length.toFixed(3)), createTextEnd(x.cost.toFixed(0))]);
                 }
             });
             if (results.path.length > 0 && tablePath) {
@@ -406,6 +493,12 @@ export function lookupPath(inputFrom: string, inputTo: string, selectOption: str
             }
         }
     }
+}
+
+function urlOfPosition(startLat: number, startLon: number, endLat: number, endLon: number, length: number,
+    fromId: string, toId: string, startKm?: number, endKm?: number): HTMLElement {
+    return createUrl(getBRouterUrlOfLocations(startLat, startLon, endLat, endLon, length, fromId, toId),
+        startKm?.toFixed(3) + ' bis ' + endKm?.toFixed(3));
 }
 
 export function lookupLine(inputLine: string, inputCountry: string) {
@@ -422,19 +515,22 @@ export function lookupLine(inputLine: string, inputCountry: string) {
             const results = findPathOfLine(elementLine.value, elementCountry.value)
             results.path.forEach(x => {
                 if (tablePath) {
-                    addRow(tablePath, [createUrl(rinfGetLocationUrlOfUOPID(x.fromId), x.fromId, getTooltipOfId(x.fromId)),
-                    createUrl(rinfGetLocationUrlOfUOPID(x.toId), x.toId, getTooltipOfId(x.toId)), createTextEnd(x.maxSpeed.toFixed(0)),
-                    (x.startLat && x.startLon && x.endLat && x.endLon)
-                        ? createUrl(getBRouterUrlOfLocations(x.startLat, x.startLon, x.endLat, x.endLon, x.fromId, x.toId),
-                            x.startKm?.toFixed(3) + ' bis ' + x.endKm?.toFixed(3))
-                        : (x.startKm?.toFixed(3) + ' bis ' + x.endKm?.toFixed(3)),
-                    createTextEnd(x.length.toFixed(3)),
-                    createTextEnd(x.cost.toFixed(0))])
+                    addRow(tablePath, [
+                        0 < x.cost ? createUrl(rinfGetKgUrlOfUOPID(x.fromId), x.fromId, getTooltipOfId(x.fromId)) : x.fromId,
+                        0 < x.cost ? createUrl(rinfGetKgUrlOfUOPID(x.toId), x.toId, getTooltipOfId(x.toId)) : x.toId,
+                        createTextEnd(0 < x.cost ? x.maxSpeed.toFixed(0) : 'unkown'),
+                        (x.startLat && x.startLon && x.endLat && x.endLon)
+                            ? urlOfPosition(x.startLat, x.startLon, x.endLat, x.endLon, x.length, x.fromId, x.toId, x.startKm, x.endKm)
+                            : (x.startKm?.toFixed(3) + ' bis ' + x.endKm?.toFixed(3)),
+                        createTextEnd(x.length.toFixed(3)),
+                        createTextEnd(0 < x.cost ? x.cost.toFixed(0) : 'unkown')])
                 }
             });
             results.tunnels.forEach(x => {
                 if (tableTunnels) {
-                    addRow(tableTunnels, [x.Tunnel, createUrl(getBRouterUrlOfLocations(x.StartLat, x.StartLong, x.EndLat, x.EndLong, x.Tunnel), x.StartKm?.toFixed(3) + ' bis ' + x.EndKm?.toFixed(3)),
+                    addRow(tableTunnels, [x.Tunnel, createUrl(rinfGetKgUrlOfUOPID(x.StartOP), x.StartOP, getTooltipOfId(x.StartOP)),
+                    createUrl(rinfGetKgUrlOfUOPID(x.EndOP), x.EndOP, getTooltipOfId(x.EndOP)),
+                    createUrl(getBRouterUrlOfLocations(x.StartLat, x.StartLong, x.EndLat, x.EndLong, x.Length, x.Tunnel), x.StartKm?.toFixed(3) + ' bis ' + x.EndKm?.toFixed(3)),
                     createTextEnd(x.Length.toFixed(3))])
                 }
             });

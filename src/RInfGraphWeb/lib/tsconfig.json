@@ -4,7 +4,8 @@
         "allowSyntheticDefaultImports": true,
         "isolatedModules": false,
         "lib": [
-            "ES2020"
+            "ES2020",
+            "dom"
         ],
         "moduleResolution": "node",
         "strict": true,

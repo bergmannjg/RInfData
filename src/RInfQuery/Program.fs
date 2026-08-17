@@ -58,6 +58,36 @@ let isElectrified (sol: EraKG.SectionOfLine) =
     |> Array.choose (fun t -> t.contactLineSystem)
     |> Array.forall (fun s -> not (s.Contains "not electrified"))
 
+let checkRailwayLocationsOfLine (ops: OperationalPoint array) (lineInfos: LineInfo array) (line: string) =
+    let lineInfos = lineInfos |> Array.filter (fun li -> li.Line = line)
+
+    if 0 < lineInfos.Length then
+        let opsOfRailwayLocations =
+            ops
+            |> Array.filter (fun op -> op.RailwayLocations |> Array.exists (fun rl -> rl.NationalIdentNum = line))
+            |> Array.map (fun op ->
+                match op.RailwayLocations |> Array.tryFind (fun rl -> rl.NationalIdentNum = line) with
+                | Some rl -> Some(op.UOPID, rl)
+                | None -> None)
+            |> Array.choose id
+            |> Array.sortBy (fun (_, rl) -> rl.Kilometer)
+
+        let opIdsOfLineInfos = lineInfos |> Array.map (fun li -> li.UOPIDs) |> Array.concat
+
+        // check opIdsOfLineInfos is subset of opsOfRailwayLocations
+        opIdsOfLineInfos
+        |> Array.filter (fun opid -> opsOfRailwayLocations |> Array.exists (fun (id, _) -> id = opid) |> not)
+        |> Array.iter (fun opid ->
+            fprintfn stderr $"line {line}, opid {opid} of lineInfos not found in railwayLocations")
+
+        // check opsOfRailwayLocations is subset of opIdsOfLineInfos
+        opsOfRailwayLocations
+        |> Array.filter (fun (id, rl) -> opIdsOfLineInfos |> Array.exists (fun opid -> id = opid) |> not)
+        |> Array.iter (fun (id, rl) ->
+            fprintfn stderr $"line {line}, id {id} km %.3f{rl.Kilometer} of railwayLocations not found in lineInfos")
+    else
+        fprintfn stderr $"line {line} not found"
+
 [<EntryPoint>]
 let main argv =
     try
@@ -95,6 +125,19 @@ let main argv =
                       Content = op.UOPID })
                 |> Graph.getBRouterPoIUrl
                 |> printfn "%s"
+
+                return ""
+            }
+        else if argv.[0] = "--checkRailwayLocations" && argv.Length = 2 then
+            async {
+                let ops = readFile<OperationalPoint[]> argv.[1] "OperationalPoints.json"
+                let lineInfos = readFile<LineInfo[]> argv.[1] "LineInfos.json"
+
+                lineInfos
+                |> Array.map (fun li -> li.Line)
+                |> Array.distinct
+                |> Array.sort
+                |> Array.iter (fun line -> checkRailwayLocationsOfLine ops lineInfos line)
 
                 return ""
             }

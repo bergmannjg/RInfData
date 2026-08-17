@@ -43,10 +43,13 @@ let private matchesRailwayRefWithUOPID (railwayRef: string) (uOPID: string) =
     railwayRef.Split [| ';' |]
     |> Array.exists (fun s -> s |> expandSpaces |> toOPID = uOPID)
 
+// set max distance big enough to find wrong matchings
+let maxRInfOsmDistance = 5.0<km>
+
 let private findRInfOsmMatchings
     (operationalPoints: RInfGraph.OpInfo[])
     (osmEntries: Entry[])
-    : (RInfGraph.OpInfo * Entry option)[] =
+    : (RInfGraph.OpInfo * Entry option * float<km> option)[] =
 
     operationalPoints
     |> Array.map (fun op ->
@@ -65,14 +68,22 @@ let private findRInfOsmMatchings
                     else if c.Railway = "stop" then 2
                     else 3)
 
-            op, Some sorted[0]
+            let entry = sorted[0]
+            op, Some entry, Some(``calculate distance`` (op.Latitude, op.Longitude) (entry.Latitude, entry.Longitude))
         else
-            op, None)
+            op, None, None)
 
 type Matching =
     { UOPID: string
       OsmUrl: string option
-      OsmRailwayTag: string option }
+      OsmRailwayTag: string option
+      OsmRailwayTagPrefix: string option
+      Distance: float<km> option
+      Latitude: float<degree> option
+      Longitude: float<degree> option }
+
+let round (v: float<km>, digits: int) =
+    1.0<_> * Math.Round(v / 1.0<km>, digits)
 
 let findMatchings (operationalPoints: RInfGraph.OpInfo[]) (osmEntries: Entry[]) (verbose: bool) : Matching[] =
 
@@ -86,22 +97,26 @@ let findMatchings (operationalPoints: RInfGraph.OpInfo[]) (osmEntries: Entry[]) 
 
     if verbose then
         result
-        |> Array.filter (fun (_, entry) -> entry.IsSome)
-        |> Array.groupBy (fun (op, entry) -> entry.Value.OsmType)
+        |> Array.filter (fun (_, entry, _) -> entry.IsSome)
+        |> Array.groupBy (fun (op, entry, _) -> entry.Value.OsmType)
         |> Array.iter (fun (k, l) ->
             fprintfn stderr $"osmtype {k}, found {l.Length}"
 
             l
-            |> Array.groupBy (fun (op, entry) -> entry.Value.Railway)
+            |> Array.groupBy (fun (op, entry, _) -> entry.Value.Railway)
             |> Array.iter (fun (k, l) -> fprintfn stderr $"  Railway {k}, found {l.Length}"))
 
         result
-        |> Array.choose (fun (op, entry) -> if entry.IsNone then Some op else None)
+        |> Array.choose (fun (op, entry, _) -> if entry.IsNone then Some op else None)
         |> Array.groupBy (fun op -> op.RinfType)
         |> Array.iter (fun (k, l) -> fprintfn stderr $"type {k}, not found {l.Length}")
 
     result
-    |> Array.map (fun (op, entry) ->
+    |> Array.map (fun (op, entry, distance) ->
         { UOPID = op.UOPID
           OsmUrl = Option.map (fun entry -> entry.Url) entry
-          OsmRailwayTag = Option.map (fun entry -> entry.Railway) entry })
+          OsmRailwayTag = Option.map (fun entry -> entry.Railway) entry
+          OsmRailwayTagPrefix = Option.bind (fun entry -> entry.RailwayPrefix) entry
+          Distance = Option.map (fun d -> round (d, 3)) distance
+          Latitude = entry |> Option.map (fun entry -> entry.Latitude)
+          Longitude = entry |> Option.map (fun entry -> entry.Longitude) })

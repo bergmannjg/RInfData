@@ -162,14 +162,7 @@ let getLineInfo
                 { Line = line
                   Country = country
                   Name = name
-                  Length =
-                    nodesOfLine
-                    |> List.sumBy (fun sol ->
-                        if sol.Edges.Length > 0 then
-                            sol.Edges.[0].Length
-                        else
-                            0.0<_>)
-                    |> fun d -> round (d, 1)
+                  Length =  round (endKm - startKm, 3)
                   StartKm = startKm
                   EndKm = endKm
                   UOPIDs = uOPIDs
@@ -184,7 +177,7 @@ let buildLineInfo
     (tunnels: TunnelInfo[])
     (osmRoutes: OSM.Sparql.Entry[])
     (country: string, line: string)
-    : LineInfo[] =
+    : LineInfo option =
     let dictOps: Collections.Generic.Dictionary<string, OperationalPoint> =
         ops
         |> Array.fold
@@ -207,66 +200,24 @@ let buildLineInfo
                     |> Array.filter (fun e -> e.Line = line && e.Country = country && e.StartKm < e.EndKm) })
         |> Array.sortBy (fun n -> n.Edges.[0].StartKm)
 
-    let getFirstNodes (solsOfLine: GraphNode[]) =
-        solsOfLine
-        |> Array.filter (fun solX ->
-            not (
-                solsOfLine
-                |> Array.exists (fun solY -> solY.Edges |> Array.exists (fun edge -> edge.Node = solX.Node))
-            ))
+    if solsOfLine.Length > 0 then
+        let firstOp = findOpByOPID dictOps solsOfLine.[0].Node
 
-    let firstNodes = getFirstNodes solsOfLine
-
-    let rec getNextNodes
-        (fuel: int)
-        (solsOfLine: GraphNode[])
-        (startSol: GraphNode)
-        (nextNodes: GraphNode list)
-        : GraphNode list =
-        let nextNode =
-            solsOfLine
-            |> Array.tryFind (fun sol -> startSol.Edges |> Array.exists (fun edge -> edge.Node = sol.Node))
-
-        if fuel <= 0 then
-            nextNodes
-        else
-            match nextNode with
-            | Some nextNode -> getNextNodes (fuel - 1) solsOfLine nextNode (nextNode :: nextNodes)
-            | None -> nextNodes
-
-    let nextNodesLists =
-        firstNodes
-        |> Array.map (fun firstNode -> getNextNodes 20 solsOfLine firstNode [ firstNode ] |> List.rev)
-
-    if nextNodesLists.Length > 0 then
-        let firstOp = findOpByOPID dictOps nextNodesLists.[0].Head.Node
-
-        let lastElem = nextNodesLists.[nextNodesLists.Length - 1] |> List.toArray
-
-        let lastOp = findOpByOPID dictOps lastElem.[lastElem.Length - 1].Edges.[0].Node
+        let lastOp = findOpByOPID dictOps solsOfLine.[solsOfLine.Length - 1].Edges.[0].Node
 
         match firstOp, lastOp with
         | Some firstOp, Some lastOp ->
-            nextNodesLists
-            |> Array.map (getLineInfo (firstOp.Name + " - " + lastOp.Name) dictOps tunnels osmRoutes country line)
-            |> Array.choose id
-        | _ -> [||]
+            getLineInfo
+                (firstOp.Name + " - " + lastOp.Name)
+                dictOps
+                tunnels
+                osmRoutes
+                country
+                line
+                (Array.toList solsOfLine)
+        | _ -> None
     else
-        [||]
-
-let reduceLineInfos (lineinfos: LineInfo[]) : LineInfo[] =
-    let folder =
-        fun (s: LineInfo[]) ((k, g): string * LineInfo[]) ->
-            match
-                g
-                |> Array.tryFind (fun a ->
-                    g
-                    |> Array.forall (fun b -> a.StartKm < a.EndKm && a.StartKm <= b.StartKm && b.EndKm <= a.EndKm))
-            with
-            | Some span -> Array.concat [ [| span |]; s ]
-            | None -> Array.concat [ g; s ]
-
-    lineinfos |> Array.groupBy (fun li -> li.Line) |> Array.fold folder [||]
+        None
 
 let buildLineInfos
     (ops: OperationalPoint[])
@@ -277,8 +228,7 @@ let buildLineInfos
     nodes
     |> Array.collect (fun sol -> sol.Edges |> Array.map (fun e -> (e.Country, e.Line)))
     |> Array.distinct
-    |> Array.collect (buildLineInfo ops nodes tunnels osmRoutes)
-    |> reduceLineInfos
+    |> Array.choose (buildLineInfo ops nodes tunnels osmRoutes)
     |> Array.sortBy (fun line -> line.Line)
 
 // see http://www.fssnip.net/7P8/title/Calculate-distance-between-two-GPS-latitudelongitude-points

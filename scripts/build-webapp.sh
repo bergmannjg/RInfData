@@ -28,7 +28,6 @@ cd ./src/RInfGraphWeb
 
 pushd ./lib
 rm -rf node_modules/rinf-graph/ package-lock.json dist
-npm install
 
 if [ "$3" = "--version" ]; then
     PACKAGE="../../RInfGraph/target.javascript/rinf-graph-$4.tgz"
@@ -37,11 +36,13 @@ if [ "$3" = "--version" ]; then
         exit 1
     fi
     npm install ${PACKAGE} --save false
+else 
+    npm install
 fi
 
 if [ $1 = "--countries" ] 
   then
-    ./node_modules/rinf-graph/bin/EraKGLoader $2
+    dotnet run --project ../../EraKGLoader/EraKGLoader.fsproj $2
 fi
 
 if [ $1 = "--cache" ] 
@@ -51,6 +52,7 @@ if [ $1 = "--cache" ]
     cp ${DATA_DIR}/Graph.json node_modules/rinf-graph/data/ 
     cp ${DATA_DIR}/LineInfos.json node_modules/rinf-graph/data/ 
     cp ${DATA_DIR}/OpInfos.json node_modules/rinf-graph/data/
+    cp ${DATA_DIR}/SectionsOfLines.json node_modules/rinf-graph/data/
     cp ${DATA_DIR}/TunnelInfos.json node_modules/rinf-graph/data/ 
     cp ${DATA_DIR}/Metadata.json node_modules/rinf-graph/data/ 
 fi

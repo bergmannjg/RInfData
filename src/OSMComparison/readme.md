@@ -6,6 +6,8 @@ Comparison of [ERA](https://www.era.europa.eu/) knowledge graph data and [OSM Ra
 * [SPARQL Endpoint](https://era-web.linkeddata.es/sparql.html) for ERA data,
 * [SPARQL Endpoint](https://qlever.cs.uni-freiburg.de/osm-planet) for OSM data.
 
+See also [On Linking Heterogeneous Railway Knowledge Graphs: Challenges in Integrating ERA and OpenStreetMap Rail Infrastructure Representations](https://ceur-ws.org/Vol-4064/Sem4Tra-paper1.pdf).
+
 ## Data models
 
 Short summary of basic concepts.
@@ -46,7 +48,4 @@ Example for **Berlin Hauptbahnhof - Lehrter Bahnhof**:
 * the OPID is [DE000BL](http://data.europa.eu/949/functionalInfrastructure/operationalPoints/DE000BL)
 * the railway:ref is [BL](https://www.openstreetmap.org/node/2459919675)
 
-To obtain the data, run the following scripts:
-
-* `restore-data-from-kg.sh`
-* `compare-with-osm.sh`
+The results of the comparisons are presented [here](https://bergmannjg.github.io/RInfData/).
