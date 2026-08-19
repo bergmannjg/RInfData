@@ -528,9 +528,7 @@ export function lookupLine(inputLine: string, inputCountry: string) {
             });
             results.tunnels.forEach(x => {
                 if (tableTunnels) {
-                    addRow(tableTunnels, [x.Tunnel, createUrl(rinfGetKgUrlOfUOPID(x.StartOP), x.StartOP, getTooltipOfId(x.StartOP)),
-                    createUrl(rinfGetKgUrlOfUOPID(x.EndOP), x.EndOP, getTooltipOfId(x.EndOP)),
-                    createUrl(getBRouterUrlOfLocations(x.StartLat, x.StartLong, x.EndLat, x.EndLong, x.Length, x.Tunnel), x.StartKm?.toFixed(3) + ' bis ' + x.EndKm?.toFixed(3)),
+                    addRow(tableTunnels, [x.Tunnel, createUrl(getBRouterUrlOfLocations(x.StartLat, x.StartLong, x.EndLat, x.EndLong, x.Length, x.Tunnel), x.StartKm?.toFixed(3) + ' bis ' + x.EndKm?.toFixed(3)),
                     createTextEnd(x.Length.toFixed(3))])
                 }
             });
