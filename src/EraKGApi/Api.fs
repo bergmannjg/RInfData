@@ -128,6 +128,9 @@ module Api =
                     Array.append [| elem |] arr
             | None -> arr
 
+        let logIfNotEqual<'T when 'T: equality> (elem1: 'T) (elem2: 'T) (msg: string) : string =
+            if elem1 <> elem2 then $"{msg} '{elem1}' '{elem2}' " else ""
+
         /// <summary> like
         ///  <see href="https://fsharp.github.io/fsharp-core-docs/reference/fsharp-collections-mapmodule.html#change">Map.change</see>
         /// </summary>
@@ -601,7 +604,19 @@ module Api =
                     fun sol ->
                         match sol with
                         | Some sol ->
-                            fprintfn stderr $"sectionOfLine {id} not unique"
+                            let reason =
+                                Utils.logIfNotEqual sol.StartOP (Properties.toLiteral b.["startUopid"]) "StartOP"
+                                + Utils.logIfNotEqual sol.EndOP (Properties.toLiteral b.["endUopid"]) "EndOP"
+                                + Utils.logIfNotEqual
+                                    sol.LineIdentification
+                                    (Properties.toLiteral b.["lineId"])
+                                    "LineIdentification"
+                                + Utils.logIfNotEqual
+                                    sol.Length
+                                    (1.0<km> * Properties.toFloat b.["length"])
+                                    "Length"
+
+                            fprintfn stderr $"sectionOfLine {id} not unique {reason}"
                             Some sol
                         | None ->
                             if tracks |> List.exists (fun track -> isPassengerLine track.lineCategories) then
